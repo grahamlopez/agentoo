@@ -1,2 +1,6 @@
 # QEMU initially inherits the generic policy. Kernel and graphics choices will
 # be added only when their installation phases can validate those assumptions.
+
+# Use the host's shared memory during installation and the guest's after boot.
+PORTAGE_TMPDIR="/dev/shm"
+PORTAGE_TMPFS="/dev/shm"

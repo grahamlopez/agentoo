@@ -16,7 +16,9 @@ configuration format cannot express a common layer plus a selected host layer,
 document that limitation before introducing generation, copying, or symlinks.
 
 The supported initial host names are `generic`, `qemu`, `thinktop`, and `startop`.
-Startop currently uses universal compilation settings; the installer prints
+Startop matches Thinktop's shared-memory build directory and twelve-job build
+limit, while retaining universal CPU flags until its hardware is identified.
+The installer prints
 its EFI registration command with the full device path required by its firmware.
 `target-host` is intentionally local state rather than a tracked file because
 its value differs between installations. It contains the Portage-compatible

@@ -1,1 +1,6 @@
-# Startop uses the universal settings until hardware-specific tuning is added.
+# Match Thinktop's build capacity policy; retain portable CPU flags until
+# Startop's CPU and graphics hardware are identified.
+
+PORTAGE_TMPDIR="/dev/shm"
+PORTAGE_TMPFS="/dev/shm"
+MAKEOPTS="-j12"
