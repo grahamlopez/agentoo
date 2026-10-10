@@ -29,3 +29,26 @@ Kernel firmware requirements use shell assignment fragments under
 then `90-${GENTOO_TARGET_HOST}` when present. `SOF_FIRMWARE` must be `yes` or
 `no`; the common default is `no`, and `thinktop` enables it for its audio DSP.
 These files describe the target hardware, independent of the installation host.
+
+## First-boot verification and checkpoint
+
+`/root/firstboot-verify-and-checkpoint.sh` is the combined interactive entry point
+after boot. The installer supplies its diagnostic companion,
+`/root/gentoo-firstboot-checks.sh` and sets the
+combined helper's permissions to `0700`. Run it as root on the booted target,
+with package operations and configuration automation idle.
+
+After required verification succeeds, a short plan asks whether to remove
+downloaded distfiles and capture the fresh-install checkpoint. Declining leaves
+installation files unchanged. Each attempt has a unique timestamp; existing
+checkpoints are never overwritten. The helper is specialized for the installer's
+root/home layout and ordinary `/var/cache/distfiles` cache, not a general
+scheduled application-backup tool.
+
+Snapshots and the manifest live in `gentoo-checkpoints/<name>` at the Btrfs top
+level. The gzip-compressed EFI archive (`efi-files.tar.gz`), boot-entry recovery instructions, and
+checksums live in `/boot/checkpoints/<name>`. Both locations must contain
+`COMPLETE` markers before restoration. Failed attempts are retained for review;
+retry creates a new attempt. Capture is live and sequential across subvolumes.
+Restoration must occur through a controlled reboot/recovery procedure, not by
+replacing the active root. Checkpoints share the disk with the original data.
