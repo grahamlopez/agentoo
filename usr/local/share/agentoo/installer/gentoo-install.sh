@@ -1492,7 +1492,7 @@ system_update_chroot() {
   emaint --auto sync
   # news list can return 1 after successfully listing items; read displays titles too.
   eselect news read
-  emerge --oneshot --usepkg=n --getbinpkg=n sys-apps/portage
+  emerge --oneshot --update --usepkg=n --getbinpkg=n sys-apps/portage
 
   flags=$TARGET_CPU_FLAGS
   if [[ -z $flags ]]; then
@@ -1548,7 +1548,7 @@ repositories, and read Gentoo news before approving the initial world update.
 emerge --oneshot --noreplace --usepkg=n --getbinpkg=n dev-vcs/git app-portage/cpuid2cpuflags
 emaint --auto sync
 eselect news read
-emerge --oneshot --usepkg=n --getbinpkg=n sys-apps/portage
+emerge --oneshot --update --usepkg=n --getbinpkg=n sys-apps/portage
 
 Update Portage first so the world update uses the current package manager.
 

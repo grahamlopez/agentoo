@@ -77,7 +77,7 @@ fi
 validate_identity
 getent group "$account" >/dev/null || groupadd --gid "$gid" "$account"
 if ! getent passwd "$account" >/dev/null; then
-  useradd --uid "$uid" --gid "$account" --groups wheel,portage --shell "$shell" --home-dir "$home" --no-create-home -K CREATE_MAIL_SPOOL=no "$account"
+  useradd --uid "$uid" --gid "$account" --groups wheel,portage --shell "$shell" --home-dir "$home" --no-create-home "$account"
   install -d -m 0700 -o "$uid" -g "$gid" "$home"
 else
   # Preserve existing supplementary groups and home contents on subsequent runs.
