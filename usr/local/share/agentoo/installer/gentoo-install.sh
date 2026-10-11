@@ -1259,6 +1259,19 @@ deferred to the system-update phase.
 EOF
 }
 
+# Target-only masks precede package hooks that can create snapshot boundaries.
+# Stage3 tar extraction creates directories, not Btrfs subvolume objects.
+# Checkout supplies tmpfiles overrides; never defer this policy until first boot.
+apply_optional_systemd_policy() {
+  local policy=$MOUNT_ROOT/etc/agentoo/masked-units.conf unit
+  [[ -f $policy && ! -L $policy ]] || die 'checkout lacks optional systemd policy'
+  while IFS= read -r unit || [[ -n $unit ]]; do
+    [[ -z $unit || $unit == \#* ]] && continue
+    [[ $unit =~ ^[a-zA-Z0-9][a-zA-Z0-9@_.-]*\.(service|socket)$ ]] || die "invalid masked unit: $unit"
+    run_privileged systemctl --root="$MOUNT_ROOT" mask "$unit"
+  done < "$policy"
+}
+
 install_portage_foundation() {
   local command source config_git_dir config_revision signature_status planned_profile
 
@@ -1400,6 +1413,7 @@ EOF
   [[ -f $MOUNT_ROOT/usr/local/bin/agentoo-permissions && ! -L $MOUNT_ROOT/usr/local/bin/agentoo-permissions ]] \
     || die 'configuration checkout lacks agentoo-permissions'
   run_privileged python3 "$MOUNT_ROOT/usr/local/bin/agentoo-permissions" --root "$MOUNT_ROOT" --fix
+  apply_optional_systemd_policy
   # Enable only after first checkout: hooks use the target's absolute live paths.
   run_privileged git --git-dir="$config_git_dir" config core.hooksPath /usr/local/share/agentoo/git-hooks
 

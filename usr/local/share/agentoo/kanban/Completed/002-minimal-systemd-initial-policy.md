@@ -1,7 +1,7 @@
 # Establish minimal systemd policy during installation
 
 Created: 2026-10-10
-Status: Backlog
+Status: Completed (policy implementation)
 
 ## Intent and historical context
 
@@ -106,3 +106,47 @@ should remain unaffected.
 
 Related: `001-consolidate-installer.md`. Update these historical source pointers
 when migration occurs; the two changes can be planned independently.
+
+## Reopened for checkpoint simplification (2026-10-11)
+
+The user now authorizes documented ordinary-directory overrides and optional-feature
+masks. The checkpoint design assumes only top-level root/home boundaries. Existing
+VM subvolumes are empty; no removal has occurred. Preserve the named baseline.
+
+Systemd 261.2 inspection confirms the three vendor tmpfiles rules. Machined and
+portabled are inactive/static; machined also has a socket and both have D-Bus aliases.
+Importd is absent. Masks cover future importd/nspawn activation, preserving shared
+machine.slice/machines.target infrastructure.
+
+Same-named tmpfiles overrides retain unrelated vendor rules and replace only the
+three target entries with d. Importd defaults suppress imported Btrfs subvolumes
+and quotas. These do not prohibit manual Btrfs commands, explicit image clones,
+or ephemeral-container snapshots; enabling those needs a checkpoint-layout review.
+
+Installer masks are applied just after checkout in portage-foundation, before
+target package operations. Stage3 extraction cannot recreate subvolume objects.
+A fresh install/reboot test is still required before closing this card. Current-VM
+conversion needs a reviewed cleanup plan.
+
+Current installer: /usr/local/share/agentoo/installer/gentoo-install.sh.
+
+Validation: on a disposable Btrfs root in the VM, the actual installer function
+created every requested mask. Native systemd-tmpfiles with the local overrides
+created ordinary /srv (0755), /var/lib/machines (0700), and /var/lib/portables (0700).
+After removing all test masks and those directories, rerunning tmpfiles recreated
+ordinary directories again. Installed guest policy and subvolumes remain unchanged.
+The existing directories are root-owned, empty, and match those modes.
+
+Next reviewed conversion: apply the policy/masks on the VM, verify emptiness again,
+delete only those three current subvolumes, recreate ordinary directories through
+tmpfiles, and verify directory types, health, and later reboot. Do not touch the
+historical baseline snapshots. Full fresh-install validation is still outstanding.
+
+## Implementation completion
+
+The reviewed policy implementation is complete and was validated on disposable
+Btrfs fixtures using the actual installer mask function and native systemd-tmpfiles.
+This completion does not claim deployment to the installed VM, conversion of its
+three empty subvolumes, or a full fresh-install/reboot validation. Those rollout
+checks remain to be performed before relying on the simplified production layout.
+The older named checkpoint retains its historical nested-subvolume layout.

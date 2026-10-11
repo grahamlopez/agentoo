@@ -100,3 +100,16 @@ Normal user configs remain local overrides, with no copied or symlinked dotfiles
   included by the shared configuration.
 - Outgoing SSH keys and local host includes stay in the user’s home.
 - Shared SSH defaults preserve an existing or forwarded agent.
+
+## Optional systemd features and snapshot boundaries
+
+- /srv, /var/lib/machines, and /var/lib/portables use ordinary directories.
+- Same-named files in /etc/tmpfiles.d override vendor subvolume-creation rules;
+  unrelated rules are retained. Review vendor changes when updating systemd.
+- /etc/agentoo/masked-units.conf lists unused image/container units masked by the
+  installer immediately after checkout. Existing hosts require explicit application.
+- Unmasking does not remove the directory overrides or importd's ordinary-image
+  defaults. Explicit image clones/ephemeral containers can still create subvolumes;
+  review checkpoint coverage before enabling those operations.
+- Nested subvolumes are excluded from root snapshots. Do not reintroduce them
+  without changing and testing the checkpoint/recovery design.
