@@ -1,0 +1,3 @@
+# Graham authenticates with his own account password.
+Defaults:graham authenticate, !rootpw, !targetpw, !runaspw
+graham ALL=(ALL:ALL) PASSWD: ALL

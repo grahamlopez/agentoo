@@ -34,7 +34,7 @@ These files describe the target hardware, independent of the installation host.
 
 ## First-boot verification and checkpoint
 
-`/root/firstboot-verify-and-checkpoint.sh` is the combined interactive entry point
+`/root/001-firstboot-verify-and-checkpoint.sh` is the combined interactive entry point
 after boot. It is tracked in agentoo; the installer sets its permissions to
 `0700`. Run it as root on the booted target, with package operations and
 configuration automation idle. Use `--verify-only` for diagnostics without
@@ -55,3 +55,27 @@ checksums live in `/boot/checkpoints/<name>`. Both locations must contain
 retry creates a new attempt. Capture is live and sequential across subvolumes.
 Restoration must occur through a controlled reboot/recovery procedure, not by
 replacing the active root. Checkpoints share the disk with the original data.
+
+## User setup
+
+After verifying/checkpointing, run `/root/002-agentoo-setup-user.sh` interactively.
+It installs Zsh, sudo, and OpenSSH, creates or validates `graham` with UID/GID 1000, a private
+primary group and supplementary `wheel,portage`, and prompts for an account
+password and optional SSH public key. Conflicting identities stop setup; existing
+home contents and supplementary groups are preserved. No skeleton dotfiles are copied.
+
+The managed sudo policy requires Graham’s password. SSH keys remain local in
+`/home/graham/.ssh/authorized_keys`, labeled `agentoo:graham:ssh-login` plus any
+original source comment. Skipping a key does not enable password SSH login.
+A Graham-specific SSH drop-in disables password and keyboard-interactive login.
+The helper validates this policy and reloads SSH if already running; it does not start it. Verify a new
+Graham login and `sudo -k; sudo -i` before closing the root console.
+
+## Git updates
+
+The installer configures `pull.rebase=true` locally in the live Git database, so
+`agentoo-git pull` rebases local commits by default. For an existing installation:
+`agentoo-git git config --local pull.rebase true`. This setting persists in
+`/var/lib/agentoo/repository.git/config`; it is separate from development-clone
+settings. Commit or reconcile live edits before pulling; updates immediately
+change system files, and Git hooks restore managed permissions.

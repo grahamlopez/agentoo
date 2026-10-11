@@ -256,13 +256,13 @@ serial console available for disk unlocking and SSH setup.
 After logging in as root, run:
 
 ```bash
-/root/firstboot-verify-and-checkpoint.sh
+/root/001-firstboot-verify-and-checkpoint.sh
 ```
 
 For diagnostics without creating or offering another checkpoint, run:
 
 ```bash
-/root/firstboot-verify-and-checkpoint.sh --verify-only
+/root/001-firstboot-verify-and-checkpoint.sh --verify-only
 ```
 
 Keep package operations and configuration automation idle throughout capture.
@@ -271,6 +271,9 @@ No shutdown or installer-host involvement is needed for checkpoint creation.
 QEMU firmware-file backup is optional and outside this guest helper. A restore
 requires a controlled reboot/recovery procedure; do not replace the running root.
 There is no automatic scheduled checkpointing or automatic restore command.
+
+After verification/checkpointing, run `/root/002-agentoo-setup-user.sh` to create
+Graham’s account with password-required sudo and an optional SSH login key.
 
 Run these commands in the guest root console:
 

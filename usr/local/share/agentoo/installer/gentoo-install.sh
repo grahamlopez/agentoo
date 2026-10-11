@@ -1281,6 +1281,10 @@ git clone --bare --single-branch --branch main https://github.com/grahamlopez/ag
 git --git-dir=/var/lib/agentoo/repository.git config core.bare false
 git --git-dir=/var/lib/agentoo/repository.git config core.worktree /
 git --git-dir=/var/lib/agentoo/repository.git config status.showUntrackedFiles no
+git --git-dir=/var/lib/agentoo/repository.git config pull.rebase true
+git --git-dir=/var/lib/agentoo/repository.git config remote.origin.fetch +refs/heads/main:refs/remotes/origin/main
+git --git-dir=/var/lib/agentoo/repository.git config branch.main.remote origin
+git --git-dir=/var/lib/agentoo/repository.git config branch.main.merge refs/heads/main
 git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ checkout --force main
 printf '%s\n' 'GENTOO_TARGET_HOST="qemu"' >/etc/agentoo/target-host
 
@@ -1387,6 +1391,10 @@ EOF
   run_privileged git --git-dir="$config_git_dir" config core.bare false
   run_privileged git --git-dir="$config_git_dir" config core.worktree /
   run_privileged git --git-dir="$config_git_dir" config status.showUntrackedFiles no
+  run_privileged git --git-dir="$config_git_dir" config pull.rebase true
+  run_privileged git --git-dir="$config_git_dir" config remote.origin.fetch "+refs/heads/$CONFIG_BRANCH:refs/remotes/origin/$CONFIG_BRANCH"
+  run_privileged git --git-dir="$config_git_dir" config "branch.$CONFIG_BRANCH.remote" origin
+  run_privileged git --git-dir="$config_git_dir" config "branch.$CONFIG_BRANCH.merge" "refs/heads/$CONFIG_BRANCH"
   run_privileged git --git-dir="$config_git_dir" --work-tree="$MOUNT_ROOT" checkout --force "$CONFIG_BRANCH"
   config_revision=$(run_privileged git --git-dir="$config_git_dir" rev-parse "$CONFIG_BRANCH^{commit}")
   [[ -f $MOUNT_ROOT/usr/local/bin/agentoo-permissions && ! -L $MOUNT_ROOT/usr/local/bin/agentoo-permissions ]] \
@@ -2352,9 +2360,12 @@ firstboot_offline() {
   grep -Fq "root=UUID=$root_uuid " "$root/etc/kernel/gentoo-dist.cmdline" || die 'kernel root UUID differs'
 
   # Run package operations inside the target, but never start services there.
-  [[ -f $root/root/firstboot-verify-and-checkpoint.sh && ! -L $root/root/firstboot-verify-and-checkpoint.sh ]] \
-    || die 'configuration checkout lacks /root/firstboot-verify-and-checkpoint.sh; update agentoo before first-boot-foundation'
-  run_privileged chmod 700 "$root/root/firstboot-verify-and-checkpoint.sh"
+  [[ -f $root/root/001-firstboot-verify-and-checkpoint.sh && ! -L $root/root/001-firstboot-verify-and-checkpoint.sh ]] \
+    || die 'configuration checkout lacks /root/001-firstboot-verify-and-checkpoint.sh; update agentoo before first-boot-foundation'
+  run_privileged chmod 700 "$root/root/001-firstboot-verify-and-checkpoint.sh"
+  [[ -f $root/root/002-agentoo-setup-user.sh && ! -L $root/root/002-agentoo-setup-user.sh ]] \
+    || die 'configuration checkout lacks /root/002-agentoo-setup-user.sh; update agentoo before first-boot-foundation'
+  run_privileged chmod 700 "$root/root/002-agentoo-setup-user.sh"
   local -a packages=(net-misc/dhcpcd)
   [[ $TARGET_HOST == qemu ]] || packages+=(net-wireless/wpa_supplicant)
   chroot "$root" /usr/bin/emerge --pretend --verbose --update --newuse --usepkg=n --getbinpkg=n "${packages[@]}"
@@ -2591,7 +2602,8 @@ PYTHON
   awk -F: '$1 == "root" { if ($2 == "" || $2 ~ /^[!*]/) exit 1; found=1 } END { if (!found) exit 1 }' "$root/etc/shadow" \
     || die 'root has no usable password; set it in the target and retry'
   printf '\nFirst-boot foundation complete for %s. Runtime services have not been started.\n' "$hostname"
-  printf 'After boot, run /root/firstboot-verify-and-checkpoint.sh to verify the system and optionally create its fresh-install checkpoint.\n'
+  printf 'After boot, run /root/001-firstboot-verify-and-checkpoint.sh to verify the system and optionally create its fresh-install checkpoint.\n'
+  printf 'Then run /root/002-agentoo-setup-user.sh to configure Graham’s account and access.\n'
   printf 'Physical targets still require their EFI entry registered on the destination motherboard.\n'
 }
 
@@ -2799,7 +2811,8 @@ print_qemu_handoff_commands() {
   fi
 fi
 COMMANDS
-  printf '\nIn the VM: unlock LUKS, log in as root, then run:\n/root/firstboot-verify-and-checkpoint.sh\n'
+  printf '\nIn the VM: unlock LUKS, log in as root, then run:\n/root/001-firstboot-verify-and-checkpoint.sh\n'
+  printf 'After verification/checkpointing: /root/002-agentoo-setup-user.sh\n'
   printf 'Ctrl-a c switches between the serial console and QEMU monitor.\n'
   printf 'Reference: usr/local/share/agentoo/installer/QEMU-NBD-INSTALL.md\n'
 }

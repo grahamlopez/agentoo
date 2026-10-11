@@ -1,6 +1,6 @@
 #!/bin/bash
 # First-boot verification and optional fresh-install checkpoint.
-# Run on the booted target: /root/firstboot-verify-and-checkpoint.sh
+# Run on the booted target: /root/001-firstboot-verify-and-checkpoint.sh
 # Use --verify-only for diagnostics without checkpoint preflight or creation.
 # The helper runs the existing first-boot checks, validates boot and filesystem
 # identities, and offers a compact checkpoint plan only after verification passes.

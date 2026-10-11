@@ -17,8 +17,8 @@ editing a tracked file changes the live configuration and appears in Git.
 │   └── …                             # Application system defaults (as added)
 ├── home/<user>/.config/               # Real user configs / local overrides (TBD)
 ├── root/
-│   └── firstboot-verify-and-checkpoint.sh
-│                                     # Verify first boot and optionally checkpoint
+│   ├── 001-firstboot-verify-and-checkpoint.sh # Verify and optionally checkpoint
+│   └── 002-agentoo-setup-user.sh       # Create Graham’s account and access
 ├── usr/local/
 │   ├── bin/
 │   │   ├── agentoo-git                # Manage the live configuration work tree
