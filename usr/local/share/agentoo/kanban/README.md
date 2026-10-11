@@ -9,6 +9,3 @@ therefore lives under `/usr/local/share/agentoo/kanban` as
 passive development documentation, outside configuration fragments and executable
 paths. No installer or configuration tool should consume cards as instructions
 or apply them automatically. Tracking a card does not authorize its implementation.
-
-Created on 2026-10-10. The immediate project focus is a Btrfs reset baseline for
-the working QEMU install; the two initial cards are deliberately deferred work.
