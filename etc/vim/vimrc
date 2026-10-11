@@ -1,3 +1,4 @@
+" Vim is the fallback editor; preserve its familiar backslash leader.
 " Agentoo Vim fallback defaults, adapted from dots/.vimrc.
 " -----------------------------------------------------------------------------
 "
@@ -25,8 +26,10 @@ set nocompatible
 " miscellaneous key (re)mappings                                            {{{
 " -----------------------------------------------------------------------------
 
-" proposed removal: Legacy escape-key handling disables insert-mode function keys.
-" set noek " but this means Fn keys cannot be used in insert mode
+" Preserve the ESC workaround; insert-mode function keys are disabled.
+if exists("+esckeys")
+  set noek
+endif
 " clear search highligthing (but not disabled)
 nnoremap <esc> :noh<return><esc>
 

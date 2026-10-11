@@ -1,4 +1,4 @@
-# Core shell/editor environment; install with emerge --ask --noreplace @comfy_env.
+# Core shell/editor environment; install with emerge --ask --noreplace @terminal-env.
 app-shells/zsh
 dev-vcs/git
 net-misc/openssh

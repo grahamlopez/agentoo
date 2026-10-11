@@ -1,3 +1,5 @@
+-- Requires Neovim 0.11 or newer and Markdown Tree-sitter parsers.
+-- Undo, caches, and history use writable per-user storage.
 -- Agentoo Neovim defaults, adapted from dots/.config/nvim/init.lua.
 -- TODO: list {{{
 --  better highlighting/colors for listchars
@@ -15,7 +17,7 @@
 --     - :help [keys] for built-in keymappings
 --     - :map [keys] for user-defined keymappings (with file:line location of defn)
 
--- Set <space> as the leader key
+-- Preserve Space as the familiar Neovim leader; Vim retains backslash.
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
@@ -26,7 +28,14 @@ vim.keymap.set("n", "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = tr
 vim.keymap.set("n", "]q", ":cnext<cr>zv", {})
 vim.keymap.set("n", "[q", ":cprev<cr>zv", {})
 vim.keymap.set("n", "zh", "zM zv", { desc = "fold everywhere but here" })
-vim.keymap.set({ "n" }, "<leader>R", "<cmd>restart<cr>", { silent = true })
+-- :restart is available only in newer Neovim releases.
+vim.keymap.set("n", "<leader>R", function()
+  if vim.fn.exists(":restart") == 2 then
+    vim.cmd.restart()
+  else
+    vim.notify("Save your files, quit, and reopen Neovim to restart.", vim.log.levels.INFO)
+  end
+end, { silent = true, desc = "Restart Neovim" })
 vim.keymap.set({ "n" }, "<C-b>", ":buffers<CR>:b<Space>", { silent = true })
 
 vim.cmd("cabbrev vh vert help")
@@ -77,8 +86,7 @@ vim.opt.autoread = true
 vim.opt.autowrite = true                              -- Auto-write before running commands
 -- vim.opt.backup = false -- No backup files
 vim.opt.breakindent = true                            -- Maintain indent when wrapping
--- proposed removal: Clipboard provider policy waits for GUI/SSH integration.
--- vim.opt.clipboard:append { "unnamed", "unnamedplus" } -- requires wl-clipboard
+vim.opt.clipboard:append { "unnamed", "unnamedplus" } -- requires wl-clipboard
 -- vim.opt.cmdheight = 0 -- docs say "experimental" - causes hit_enter events e.g. with :Todos
 vim.opt.colorcolumn = ""
 vim.cmd.colorscheme('default')
@@ -87,12 +95,10 @@ vim.opt.cursorlineopt = "number"
 vim.opt.completeopt = { "fuzzy", "menu", "menuone", "noselect", "noinsert" }
 vim.opt.diffopt:append("linematch:60") -- Better diffs
 vim.opt.expandtab = true
--- proposed removal: Parser-based folding waits for installed parsers; retain ordinary manual folding.
--- vim.opt.foldmethod = "expr"
--- vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
--- vim.opt.foldlevel = 99
--- vim.opt.foldenable = true
-vim.opt.foldmethod = "manual"
+vim.opt.foldmethod = "expr"
+vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+vim.opt.foldlevel = 99
+vim.opt.foldenable = true
 vim.opt.foldcolumn = "0" -- "1" shows the fold gutter (click to open/close folds)
 vim.opt.fillchars:append({ fold = " " })
 vim.opt.hidden = true
@@ -122,8 +128,10 @@ vim.opt.smartindent = true
 vim.opt.softtabstop = 2
 vim.opt.spell = false
 vim.opt.spelllang = { "en_us" }
--- proposed removal: Spell additions are writable user data, not system configuration.
--- vim.opt.spellfile = vim.fn.stdpath("config") .. "/spell/en.utf-8.add"
+-- Shared policy; each account owns its spell additions (zg/zw).
+local spell_dir = vim.fn.stdpath("data") .. "/site/spell"
+vim.fn.mkdir(spell_dir, "p")
+vim.opt.spellfile = spell_dir .. "/en.utf-8.add"
 vim.opt.splitbelow = true
 vim.opt.splitright = true
 -- vim.opt.swapfile = false
@@ -215,45 +223,44 @@ vim.opt.wrap = true -- visually wrap lines when needed
 -- -- }}}
 -- 
 -- Utilities (lightweight plugins) {{{
--- proposed removal: Custom recursive file finder is deferred; use built-in file navigation initially.
--- -- fuzzy-file-picker and TODO: live-grep {{{
--- local filescache = {} -- Files cache (per-process)
--- -- Helper to (re)build the cache from the current directory
--- local function build_files_cache()
---   local files = vim.fn.globpath('.', '**', true, true) -- globpath('.', '**', 1, 1)
---   -- filter out directories: !isdirectory(v:val)
---   files = vim.tbl_filter(function(path)
---     return vim.fn.isdirectory(path) == 0
---   end, files)
---   -- fnamemodify(v:val, ':.') to make paths relative to cwd
---   files = vim.tbl_map(function(path)
---     return vim.fn.fnamemodify(path, ':.')
---   end, files)
---   filescache = files
--- end
--- -- This is the function used by 'findfunc'
--- local function Find(arg, _)
---   if #filescache == 0 then
---     build_files_cache()
---   end
---   if arg == '' then
---     return filescache
---   end
---   return vim.fn.matchfuzzy(filescache, arg)
--- end
--- -- Expose it under a global name so 'findfunc' can see it
--- _G.Find = Find
--- -- Tell :find to use this function
--- vim.o.findfunc = 'v:lua.Find'
--- -- Clear cache on CmdlineEnter :
--- vim.api.nvim_create_autocmd('CmdlineEnter', {
---   pattern = ':',
---   callback = function()
---     filescache = {}
---   end,
--- })
--- -- }}}
--- 
+-- fuzzy-file-picker and TODO: live-grep {{{
+local filescache = {} -- Files cache (per-process)
+-- Helper to (re)build the cache from the current directory
+local function build_files_cache()
+  local files = vim.fn.globpath('.', '**', true, true) -- globpath('.', '**', 1, 1)
+  -- filter out directories: !isdirectory(v:val)
+  files = vim.tbl_filter(function(path)
+    return vim.fn.isdirectory(path) == 0
+  end, files)
+  -- fnamemodify(v:val, ':.') to make paths relative to cwd
+  files = vim.tbl_map(function(path)
+    return vim.fn.fnamemodify(path, ':.')
+  end, files)
+  filescache = files
+end
+-- This is the function used by 'findfunc'
+local function Find(arg, _)
+  if #filescache == 0 then
+    build_files_cache()
+  end
+  if arg == '' then
+    return filescache
+  end
+  return vim.fn.matchfuzzy(filescache, arg)
+end
+-- Expose it under a global name so 'findfunc' can see it
+_G.Find = Find
+-- Tell :find to use this function
+vim.o.findfunc = 'v:lua.Find'
+-- Clear cache on CmdlineEnter :
+vim.api.nvim_create_autocmd('CmdlineEnter', {
+  pattern = ':',
+  callback = function()
+    filescache = {}
+  end,
+})
+-- }}}
+
 -- TODO and friends {{{
 -- grep todo keywords and add to quickfix
 -- == 1 is required: executable() returns 0/1, and 0 is truthy in Lua
@@ -271,7 +278,12 @@ vim.api.nvim_create_autocmd({ "ColorScheme", "OptionSet", "VimEnter", "WinNew", 
   callback = function()
     vim.api.nvim_set_hl(0, "darkTodoPattern", { fg = "#ffaf00", bold = true })
     vim.api.nvim_set_hl(0, "lightTodoPattern", { fg = "#cd4848", bold = true })
-    vim.fn.clearmatches()
+    -- Refresh only our keyword matches; preserve user/plugin matches.
+    for _, match in ipairs(vim.fn.getmatches()) do
+      if match.group == "darkTodoPattern" or match.group == "lightTodoPattern" then
+        vim.fn.matchdelete(match.id)
+      end
+    end
     if vim.o.background == "dark" then
       vim.fn.matchadd("darkTodoPattern", "\\(TODO\\|FIXME\\|IDEA\\|TRACK\\):")
     else
@@ -312,69 +324,68 @@ vim.api.nvim_create_autocmd("QuickFixCmdPost", {
 })
 -- }}}
 
--- proposed removal: Desktop transparency behavior is deferred.
--- -- background transparency {{{
--- local transparent_enabled = true  -- startup default
--- local saved_hls = {}
--- local groups = {
---   'Normal',
---   'NormalNC',
---   'NormalFloat',
---   'FloatBorder',
---   'SignColumn',
---   'WinSeparator',
---   -- 'Folded',
---   -- 'FoldColumn',
--- }
--- local function save_current_hls()
---   for _, name in ipairs(groups) do
---     -- get current definition from global namespace
---     saved_hls[name] = vim.api.nvim_get_hl(0, { name = name, link = false })
---   end
--- end
--- local function apply_saved_hls()
---   for _, name in ipairs(groups) do
---     local def = saved_hls[name]
---     if def then
---       vim.api.nvim_set_hl(0, name, def)
---     end
---   end
--- end
--- local function apply_transparent()
---   for _, name in ipairs(groups) do
---     vim.api.nvim_set_hl(0, name, { bg = 'none' })
---   end
--- end
--- function _G.ToggleTransparent()
---   if transparent_enabled then
---     apply_saved_hls()
---     transparent_enabled = false
---   else
---     -- on first enable, capture scheme defaults
---     if next(saved_hls) == nil then
---       save_current_hls()
---     end
---     apply_transparent()
---     transparent_enabled = true
---   end
--- end
--- 
--- vim.api.nvim_create_autocmd({'VimEnter', 'ColorScheme'}, {
---   pattern = '*',
---   callback = function()
---     saved_hls = {} -- clear cache; next toggle will re-save
---     if transparent_enabled then
---       save_current_hls()
---       apply_transparent()
---     end
---   end,
--- })
--- vim.api.nvim_create_user_command("TransparentToggle", function()
---   ToggleTransparent()
--- end, { desc = "Toggle background transparency", nargs = 0 })
--- vim.keymap.set('n', '<leader>ut', ToggleTransparent, { desc = 'Toggle transparent background' })
--- -- }}}
--- 
+-- background transparency {{{
+local transparent_enabled = true  -- startup default
+local saved_hls = {}
+local groups = {
+  'Normal',
+  'NormalNC',
+  'NormalFloat',
+  'FloatBorder',
+  'SignColumn',
+  'WinSeparator',
+  -- 'Folded',
+  -- 'FoldColumn',
+}
+local function save_current_hls()
+  for _, name in ipairs(groups) do
+    -- get current definition from global namespace
+    saved_hls[name] = vim.api.nvim_get_hl(0, { name = name, link = false })
+  end
+end
+local function apply_saved_hls()
+  for _, name in ipairs(groups) do
+    local def = saved_hls[name]
+    if def then
+      vim.api.nvim_set_hl(0, name, def)
+    end
+  end
+end
+local function apply_transparent()
+  for _, name in ipairs(groups) do
+    vim.api.nvim_set_hl(0, name, { bg = 'none' })
+  end
+end
+function _G.ToggleTransparent()
+  if transparent_enabled then
+    apply_saved_hls()
+    transparent_enabled = false
+  else
+    -- on first enable, capture scheme defaults
+    if next(saved_hls) == nil then
+      save_current_hls()
+    end
+    apply_transparent()
+    transparent_enabled = true
+  end
+end
+
+vim.api.nvim_create_autocmd({'VimEnter', 'ColorScheme'}, {
+  pattern = '*',
+  callback = function()
+    saved_hls = {} -- clear cache; next toggle will re-save
+    if transparent_enabled then
+      save_current_hls()
+      apply_transparent()
+    end
+  end,
+})
+vim.api.nvim_create_user_command("TransparentToggle", function()
+  ToggleTransparent()
+end, { desc = "Toggle background transparency", nargs = 0 })
+vim.keymap.set('n', '<leader>ut', ToggleTransparent, { desc = 'Toggle transparent background' })
+-- }}}
+
 -- listchars display {{{
 -- Show listchars
 -- single definition (glyphs kept from the former duplicate up in Options)
@@ -416,44 +427,26 @@ vim.api.nvim_create_autocmd({ "ColorScheme", "OptionSet", "VimEnter", "WinNew", 
 -- -- }}}
 -- -- }}}
 -- 
--- proposed removal: Lua indentation workaround and special config-file folding need separate validation.
--- -- Filetype specifics {{{
--- -- This autocmd is to fix the problem of '--' indentation being right-shifted by
--- -- two spaces only after lines with foldmarkers like '\{\{\{'
--- -- these stay here; timing is wrong if these are moved to 'after/ftplugin/lua.lua'
--- vim.api.nvim_create_autocmd("FileType", {
---   pattern = "lua",
---   callback = function()
---     vim.opt_local.indentexpr = "v:lua.lua_indent(v:lnum)"
---   end,
--- })
--- -- This autocmd defines the function to fix the '--' indentation problem
--- -- addressed by the previous autocmd
--- vim.api.nvim_create_autocmd("VimEnter", {
---   callback = function()
---     _G.lua_indent = function(lnum)
---       local line = vim.fn.getline(lnum)
---       if line:match("^%s*--%s*") then -- On comment lines/spaces after --, match prev comment indent
---         local prev = vim.fn.prevnonblank(lnum - 1)
---         if prev > 0 then
---           return vim.fn.indent(prev)
---         end
---       end
---       return vim.fn.eval("GetLuaIndent(" .. lnum .. ")") -- Fallback to Lua indent
---     end
---   end,
--- })
--- vim.api.nvim_create_autocmd("BufReadPost", {
---   pattern = "init.lua",
---   callback = function()
---     -- opt_local: global here would clobber treesitter folding everywhere else
---     vim.opt_local.foldmethod = "marker"
---     vim.opt_local.foldmarker = "{{{,}}}"
---     vim.opt_local.foldlevel = 0
---   end,
--- })
--- -- }}}
--- 
+-- Filetype specifics {{{
+-- Preserve comment indentation after fold markers; use the built-in indenter
+-- for other lines. A native expression keeps v:lnum in its evaluation context.
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "lua",
+  callback = function()
+    vim.opt_local.indentexpr = [[getline(v:lnum) =~ '^\s*--' && prevnonblank(v:lnum - 1) > 0 ? indent(prevnonblank(v:lnum - 1)) : GetLuaIndent()]]
+  end,
+})
+vim.api.nvim_create_autocmd("BufReadPost", {
+  pattern = { "init.lua", "agentoo.lua" },
+  callback = function()
+    -- opt_local: global here would clobber treesitter folding everywhere else
+    vim.opt_local.foldmethod = "marker"
+    vim.opt_local.foldmarker = "{{{,}}}"
+    vim.opt_local.foldlevel = 0
+  end,
+})
+-- }}}
+
 -- big markdown ideas list {{{
 --
 --    - https://github.com/iwe-org/iwe

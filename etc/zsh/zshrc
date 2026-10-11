@@ -24,6 +24,7 @@ unsetopt BEEP
 
 export HISTSIZE=10000
 export SAVEHIST=$HISTSIZE
+# History stays in each account’s writable home.
 export HISTFILE="$HOME/.zsh.history"
 setopt EXTENDED_HISTORY          # Write the history file in the ":start:elapsed;command" format.
 setopt SHARE_HISTORY             # Share history between all sessions.
@@ -263,15 +264,18 @@ function term_push {
     infocmp -x -- $term | ssh $host 'mkdir -p ~/.terminfo && tic -x -o ~/.terminfo -'
 }
 
-# # bit-perfect compare two directories
-# function bit_diff_dirs {
-#     src=$1
-#     dst=$2
-#     (cd ${src}  && find . -type f -print0 | xargs -0 sha256sum | sort -k2 > /tmp/src.sha256)
-#     (cd ${dst}  && find . -type f -print0 | xargs -0 sha256sum | sort -k2 > /tmp/dst.sha256)
-#     diff --color /tmp/src.sha256 /tmp/dst.sha256
-# }
-# 
+# Compare regular-file contents by relative path with isolated temporary manifests.
+bit_diff_dirs() (
+    [[ $# == 2 && -d $1 && -d $2 ]] || { print -u2 'usage: bit_diff_dirs SOURCE TARGET'; return 2; }
+    setopt pipefail
+    local work
+    work=$(mktemp -d) || return
+    trap 'rm -rf -- "$work"' EXIT
+    (cd -- "$1" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) > "$work/source" || return
+    (cd -- "$2" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) > "$work/target" || return
+    diff --color -- "$work/source" "$work/target"
+)
+
 # proposed removal: Only one container-specific abbreviation currently uses this custom space-key widget.
 # # abbreviations and magic expansion
 # # obtained from stackoverflow (but the link now redirects incorrectly)

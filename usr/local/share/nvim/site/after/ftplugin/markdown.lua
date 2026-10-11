@@ -30,85 +30,81 @@ vim.opt_local.wrap = true        -- Wrap long lines visually
 vim.opt_local.linebreak = true   -- Break at word boundaries if wrap enabled
 vim.opt_local.textwidth = 0      -- No hard wrapping in prose
 vim.opt_local.foldlevel = 1
--- proposed removal: Tree-sitter folding needs installed Markdown parsers.
--- vim.opt_local.foldmethod = "expr"
--- vim.opt_local.foldexpr = "v:lua.vim.treesitter.foldexpr()"
--- vim.opt_local.foldenable = true
+vim.opt_local.foldmethod = "expr"
+vim.opt_local.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+vim.opt_local.foldenable = true
 vim.opt_local.conceallevel = 2
 -- vim.opt_local.concealcursor = "nc"
--- proposed removal: Parser startup and clipboard-link mappings are deferred.
--- vim.treesitter.start(vim.api.nvim_get_current_buf(), "markdown") -- Force reload TS parser
--- 
--- vim.keymap.set("n", "<leader>P", 'a<C-o>:set paste<cr>[<C-r>+](<C-r>+)<C-o>:set nopaste<cr>', { desc = "url paste" })
--- vim.keymap.set("n", "<leader>p", 'a<C-o>:set paste<cr>[](<C-r>+)<C-o>:set nopaste<cr><C-o>F]', { desc = "url paste w/desc" })
--- 
--- vim.api.nvim_create_user_command("ToMarkdownLink", function()
---   vim.cmd.normal({ 'Ea)', bang = true })
---   vim.cmd.normal({ 'Bi(', bang = true })
---   vim.cmd.normal({ 'i[]', bang = true })
---   vim.cmd.startinsert()
--- end, { desc = "convert raw url to title markdown link", nargs = 0 })
--- 
--- proposed removal: Custom Markdown gf navigation needs correctness testing.
--- -- Enhance 'gf' to follow Markdown link from label/brackets/parentheses
--- vim.keymap.set("n", "gf", function()
---   local line = vim.api.nvim_get_current_line()
---   local col  = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1‑based
---   -- Find the nearest "(" after any "[" on the line
---   local open_paren = line:find("%b[]%b()", 1) and line:find("%(", col) or nil
---   if not open_paren then
---     -- fallback: just try <cfile> under cursor (e.g. bare paths)
---     local file = vim.fn.expand("<cfile>")
---     if file ~= "" then
---       vim.cmd.edit(file)
---     end
---     return
---   end
---   -- Move cursor to just after "(" and use gf logic there
---   vim.api.nvim_win_set_cursor(0, { vim.api.nvim_win_get_cursor(0)[1], open_paren })
---   vim.cmd.normal({ args = { "gf" }, bang = false })
--- end, { buffer = true })
--- 
--- proposed removal: Experimental Markdown list-item mapping.
--- -- Strawman keymapping for markdown list items
--- local function in_markdown_list_item()
---   local ts = vim.treesitter
---   local bufnr = vim.api.nvim_get_current_buf()
---   local lang = ts.language.get_lang(vim.bo[bufnr].filetype)
---   if not lang then
---     return false
---   end
--- 
---   local parser = ts.get_parser(bufnr, lang)
---   if not parser then
---     return false
---   end
--- 
---   local tree = parser:parse()[1]
---   if not tree then
---     return false
---   end
--- 
---   local root = tree:root()
---   local row, col = unpack(vim.api.nvim_win_get_cursor(0))
---   row = row - 1
--- 
---   local node = root:named_descendant_for_range(row, col, row, col)
---   while node do
---     local t = node:type()
---     if t == "list_item" or t == "tight_list_item" then
---       return true
---     end
---     node = node:parent()
---   end
--- 
---   return false
--- end
--- vim.keymap.set("n", "<leader>t", function() -- strawman
---   if in_markdown_list_item() then
---     return "o- "
---   else
---     print("keybind false")
---     return "o"
---   end
--- end, { expr = true, silent = true, buffer = true })
+vim.treesitter.start(vim.api.nvim_get_current_buf(), "markdown") -- Force reload TS parser
+
+vim.keymap.set("n", "<leader>P", 'a<C-o>:set paste<cr>[<C-r>+](<C-r>+)<C-o>:set nopaste<cr>', { desc = "url paste", buffer = true })
+vim.keymap.set("n", "<leader>p", 'a<C-o>:set paste<cr>[](<C-r>+)<C-o>:set nopaste<cr><C-o>F]', { desc = "url paste w/desc", buffer = true })
+
+vim.api.nvim_create_user_command("ToMarkdownLink", function()
+  vim.cmd.normal({ 'Ea)', bang = true })
+  vim.cmd.normal({ 'Bi(', bang = true })
+  vim.cmd.normal({ 'i[]', bang = true })
+  vim.cmd.startinsert()
+end, { desc = "convert raw url to title markdown link", nargs = 0 })
+
+-- Enhance 'gf' to follow Markdown link from label/brackets/parentheses
+vim.keymap.set("n", "gf", function()
+  local line = vim.api.nvim_get_current_line()
+  local col  = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1‑based
+  -- Find the nearest "(" after any "[" on the line
+  local open_paren = line:find("%b[]%b()", 1) and line:find("%(", col) or nil
+  if not open_paren then
+    -- fallback: just try <cfile> under cursor (e.g. bare paths)
+    local file = vim.fn.expand("<cfile>")
+    if file ~= "" then
+      vim.cmd.edit(file)
+    end
+    return
+  end
+  -- Move cursor to just after "(" and use gf logic there
+  vim.api.nvim_win_set_cursor(0, { vim.api.nvim_win_get_cursor(0)[1], open_paren })
+  vim.cmd.normal({ args = { "gf" }, bang = false })
+end, { buffer = true })
+
+-- Strawman keymapping for markdown list items
+local function in_markdown_list_item()
+  local ts = vim.treesitter
+  local bufnr = vim.api.nvim_get_current_buf()
+  local lang = ts.language.get_lang(vim.bo[bufnr].filetype)
+  if not lang then
+    return false
+  end
+
+  local parser = ts.get_parser(bufnr, lang)
+  if not parser then
+    return false
+  end
+
+  local tree = parser:parse()[1]
+  if not tree then
+    return false
+  end
+
+  local root = tree:root()
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  row = row - 1
+
+  local node = root:named_descendant_for_range(row, col, row, col)
+  while node do
+    local t = node:type()
+    if t == "list_item" or t == "tight_list_item" then
+      return true
+    end
+    node = node:parent()
+  end
+
+  return false
+end
+vim.keymap.set("n", "<leader>t", function() -- strawman
+  if in_markdown_list_item() then
+    return "o- "
+  else
+    print("keybind false")
+    return "o"
+  end
+end, { expr = true, silent = true, buffer = true })

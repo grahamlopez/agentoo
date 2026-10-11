@@ -82,20 +82,21 @@ change system files, and Git hooks restore managed permissions.
 
 ## Shell and editor environment
 
-Shared defaults live in `/etc/zsh/{zprofile,zshrc}`, `/etc/gitconfig`,
-`/etc/vim/vimrc`, `/etc/tmux.conf`, `/etc/xdg/nvim/`, and the SSH client drop-in
-`/etc/ssh/ssh_config.d/50-agentoo.conf`. Install tools with
-`emerge --ask --noreplace @comfy_env`. Package config protection may produce
-`._cfg*` files; review these before replacing the Git-managed defaults.
+Shared defaults:
+
+- Shell: `/etc/zsh/{zprofile,zshrc}`
+- Git: `/etc/gitconfig`
+- Vim: `/etc/vim/vimrc`
+- Neovim: `/etc/xdg/nvim/`
+- Tmux: `/etc/tmux.conf`
+- SSH client: `/etc/ssh/ssh_config.d/50-agentoo.conf`
+
+Install tools with `emerge --ask --noreplace @terminal-env`. Package config
+protection may produce `._cfg*` files; review these before replacing managed defaults.
 
 Normal user configs remain local overrides, with no copied or symlinked dotfiles.
-Set Graham’s author identity once with `git config --global user.name` and
-`git config --global user.email`; outgoing SSH keys and local host includes stay
-in his home. Shared SSH defaults preserve an existing/forwarded agent.
 
-Deferred legacy sections are commented with `proposed removal` for review.
-The Markdown query archive stays outside runtime query paths. GUI startup,
-agent tooling, language managers, and automatic root tmux sessions are deferred.
-Neovim requires version 0.11 or newer. Vim is a small fallback configuration;
-Neovim retains Space as leader while Vim retains its default backslash leader.
-User history, caches, undo, and spell additions stay in writable user storage.
+- Personal Git identity belongs in user-owned `~/.gitconfig-local`, already
+  included by the shared configuration.
+- Outgoing SSH keys and local host includes stay in the user’s home.
+- Shared SSH defaults preserve an existing or forwarded agent.

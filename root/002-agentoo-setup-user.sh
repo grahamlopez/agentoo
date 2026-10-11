@@ -43,12 +43,12 @@ validate_identity() {
 }
 validate_identity
 printf '\n┌─ User setup ─────────────────────────────────────┐\n'
-printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Packages      Zsh, sudo, OpenSSH\n└──────────────────────────────────────────────────┘\n'
+printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup for a new account\n│ Packages      Zsh, sudo, OpenSSH, Git\n└──────────────────────────────────────────────────┘\n'
 read -r -p 'Proceed with user setup? [y/N] ' answer
 [[ $answer == y || $answer == Y || $answer == yes ]] || { echo 'User setup declined; no account or package changes made.'; exit 0; }
 printf '\nPaste one SSH public key (empty to skip). Label: agentoo:graham:ssh-login\n'
 read -r -p 'SSH public key: ' public_key
-packages=(app-shells/zsh app-admin/sudo net-misc/openssh)
+packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git)
 # Show Portage's dependency/build plan and obtain its own confirmation.
 emerge --ask --noreplace "${packages[@]}"
 shell=$(command -v zsh) || die 'Zsh is unavailable.'
@@ -76,7 +76,9 @@ if [[ -n $public_key ]]; then
 fi
 validate_identity
 getent group "$account" >/dev/null || groupadd --gid "$gid" "$account"
+created_account=false
 if ! getent passwd "$account" >/dev/null; then
+  created_account=true
   useradd --uid "$uid" --gid "$account" --groups wheel,portage --shell "$shell" --home-dir "$home" --no-create-home "$account"
   install -d -m 0700 -o "$uid" -g "$gid" "$home"
 else
@@ -86,6 +88,28 @@ else
 fi
 printf '\nSet Graham’s account password (also used by sudo):\n'
 passwd "$account"
+# Identity is local account state. Reruns never change it or repeat this prompt.
+if $created_account; then
+  git_name="graham (@$(hostname))"
+  git_email='m477@duck.com'
+  printf '\n┌─ Personal Git identity ──────────────────────────┐\n'
+  printf '│ Author name   %s\n│ Author email  %s\n│ Storage       ~/.gitconfig-local (Graham only)\n└──────────────────────────────────────────────────┘\n' "$git_name" "$git_email"
+  read -r -p 'Configure Git identity? [y/N] ' answer
+  if [[ $answer == y || $answer == Y || $answer == yes ]]; then
+    read -r -p "Author name [$git_name]: " value
+    git_name=${value:-$git_name}
+    read -r -p "Author email [$git_email]: " value
+    git_email=${value:-$git_email}
+    identity_file=$home/.gitconfig-local
+    [[ ! -e $identity_file && ! -L $identity_file ]] || die 'Git identity file already exists; configure it manually.'
+    runuser -u "$account" -- git config --file "$identity_file" user.name "$git_name"
+    runuser -u "$account" -- git config --file "$identity_file" user.email "$git_email"
+  else
+    printf '\nGit identity skipped. Later, run these as Graham (edit the values as needed):\n'
+    printf '  git config --file "$HOME/.gitconfig-local" user.name %q\n' "$git_name"
+    printf '  git config --file "$HOME/.gitconfig-local" user.email %q\n' "$git_email"
+  fi
+fi
 # Apply Graham’s key-only policy to an already-running server; do not start it.
 if systemctl is-active --quiet sshd.service; then systemctl reload sshd.service; fi
 ssh_status='No key added; password authentication disabled'
