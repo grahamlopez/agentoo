@@ -1,7 +1,7 @@
 # Consolidate the installer into agentoo
 
 Created: 2026-10-10
-Status: Open
+Status: Completed
 
 ## Intent and historical context
 
@@ -74,5 +74,35 @@ Validation: shell syntax, help output, documentation paths, and whitespace.
 No disk operations or VM rebuild were performed. The qemu-nbd skill and its
 namespace-recovery reference now live under `docs/skills/qemu-nbd/`, with a
 verified link to the maintained runbook. Agents use it explicitly; discovery
-integration is deferred. The card remains Open for production-path validation
-when next testing an install and review of any remaining supporting references.
+integration is deferred. Production-path validation was subsequently completed as recorded below.
+
+## Completion — 2026-10-11
+
+A full fresh installation from agentoo succeeded on a 100 GiB QEMU disk. The
+guest booted kernel `6.18.54-gentoo-dist-bin`, using installed revision
+`e290fc2`; agentoo paths, Git remote, and permission hooks were present. All 36
+managed files passed the permission check, with no failed systemd services.
+
+Checkpoint `fresh-install-20261011T153130.822524Z` passed verification of both
+completion markers, matching manifests and filesystem identities, five read-only
+snapshots, backup checksums, and archived EFI contents. It was restored directly
+on the powered-off VM: root/home and all nested subvolumes were recreated as
+writable snapshots, EFI hashes matched, and the baseline remained read-only.
+The post-checkpoint SSH key and service enablement disappeared as intended.
+
+The restored guest booted successfully. Diagnostics reported zero failed checks
+and zero permission mismatches; networking and persistent journal history worked.
+Time synchronization observed shortly after boot is tracked separately in
+`003-investigate-time-synchronization.md`. Physical-target validation of the
+renamed layout was not performed.
+
+The legacy repositories remain unchanged. Review found useful older tools,
+but the user chose a clean slate: only permission management was adapted.
+Agentoo documentation identifies it as authoritative; no supporting legacy
+resource remains required for the installer or explicit QEMU/NBD skill.
+
+Follow-up validation: the combined tracked helper passed live QEMU diagnostics
+with `--verify-only`, and default mode reached the checkpoint plan and accepted
+a decline. The obsolete generated helper and temporary pre-restore subvolumes
+were removed. All original five read-only checkpoint snapshots remained intact;
+permissions still passed.

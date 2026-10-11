@@ -1,6 +1,7 @@
 #!/bin/bash
 # First-boot verification and optional fresh-install checkpoint.
 # Run on the booted target: /root/firstboot-verify-and-checkpoint.sh
+# Use --verify-only for diagnostics without checkpoint preflight or creation.
 # The helper runs the existing first-boot checks, validates boot and filesystem
 # identities, and offers a compact checkpoint plan only after verification passes.
 # Accepting removes downloaded distfiles, captures read-only snapshots of root,
@@ -24,11 +25,66 @@
 # - Restoration uses writable copies while target subvolumes are unmounted,
 #   followed by a reboot. This helper does not perform restoration or scheduling.
 set -Eeuo pipefail
+verify_only=0
+if (( $# > 1 )); then echo 'Expected at most one option: --verify-only or --help.' >&2; exit 2; fi
+case ${1:-} in
+  --verify-only) verify_only=1 ;;
+  --help|-h)
+    printf 'Usage: %s [--verify-only]\n' "$0"
+    printf 'Default: diagnose, check checkpoint readiness, and offer a checkpoint.\n'
+    printf '%s\n' '--verify-only: diagnostics only; no cleanup, snapshots, or checkpoint prompt.'
+    exit 0 ;;
+  '') ;;
+  *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+esac
+
+run_diagnostics() {
+local failures=0 device interface
+check() {
+    printf '\n==> %s\n' "$1"
+    shift
+    "$@" || { printf 'CHECK FAILED (continuing)\n'; failures=$((failures + 1)); }
+}
+check 'Root filesystem' findmnt --mountpoint /
+check 'Home filesystem' findmnt --mountpoint /home
+check 'EFI filesystem' findmnt --mountpoint /boot
+check 'Failed services' systemctl --failed --no-pager
+check 'System health' systemctl is-system-running
+check 'Network interfaces' ip -brief address
+check 'Routes' ip route
+check 'DHCP service' systemctl is-active dhcpcd.service
+for device in /sys/class/net/*; do
+    [[ -d $device/phy80211 ]] || continue
+    interface=${device##*/}
+    check "Wi-Fi authentication on $interface" systemctl is-active "wpa_supplicant@$interface.service"
+    check "Wi-Fi service diagnostics on $interface" systemctl status --no-pager "wpa_supplicant@$interface.service"
+done
+check 'DNS resolution' timeout 15 getent hosts gentoo.org
+if command -v curl >/dev/null; then
+    check 'HTTPS connectivity' curl --head --fail --max-time 20 https://www.gentoo.org/
+else
+    check 'IP connectivity (ICMP may be filtered)' ping -c 3 -W 3 1.1.1.1
+fi
+check 'Time service' systemctl is-active systemd-timesyncd.service
+check 'Time configuration' timedatectl status
+check 'Time synchronization' timedatectl timesync-status
+check 'Journal boot history' journalctl --list-boots --no-pager
+check 'Persistent journal directory' test -d /var/log/journal
+check 'Scrub timer enabled' systemctl is-enabled gentoo-btrfs-scrub.timer
+check 'Scrub timer active' systemctl is-active gentoo-btrfs-scrub.timer
+check 'Scrub schedule' systemctl list-timers gentoo-btrfs-scrub.timer --no-pager
+printf '\n%s checks failed. Review the output above.\n' "$failures"
+printf 'Optional integrity check: systemctl start gentoo-btrfs-scrub.service; btrfs scrub status /\n'
+printf 'After a later reboot, verify that journalctl --list-boots includes the previous boot.\n'
+(( failures == 0 ))
+}
+
 (( EUID == 0 )) || { echo 'Run this script as root on the booted Gentoo target.'; exit 1; }
 [[ -d /run/systemd/system && -r /etc/gentoo-release ]] || { echo 'Run on the booted target, not in a chroot.'; exit 1; }
+if ! run_diagnostics; then exit 1; fi
+(( verify_only == 0 )) || exit 0
 exec 9>/run/firstboot-verify-and-checkpoint.lock
 flock -n 9 || { echo 'Another first-boot checkpoint is running.'; exit 1; }
-/root/gentoo-firstboot-checks.sh
 python3 - <<'PY'
 import datetime, hashlib, json, os, pathlib, re, shutil, subprocess, tempfile
 

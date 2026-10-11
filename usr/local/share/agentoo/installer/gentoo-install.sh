@@ -2409,49 +2409,6 @@ write('/etc/systemd/system/gentoo-btrfs-scrub.timer', '[Unit]\nDescription=Month
       '[Timer]\nOnCalendar=monthly\nPersistent=true\nRandomizedDelaySec=1d\n'
       '[Install]\nWantedBy=timers.target\n')
 # Only scrub: no automatic balance, defragmentation, or encrypted discard policy.
-write('/root/gentoo-firstboot-checks.sh', '#!/bin/bash\n' + marker + r'''
-# Run after boot: /root/gentoo-firstboot-checks.sh
-# Read-only diagnostics: no service restarts, scrub, or reboot is performed.
-set -uo pipefail
-failures=0
-check() {
-    printf '\n==> %s\n' "$1"
-    shift
-    "$@" || { printf 'CHECK FAILED (continuing)\n'; failures=$((failures + 1)); }
-}
-check 'Root filesystem' findmnt --mountpoint /
-check 'Home filesystem' findmnt --mountpoint /home
-check 'EFI filesystem' findmnt --mountpoint /boot
-check 'Failed services' systemctl --failed --no-pager
-check 'System health' systemctl is-system-running
-check 'Network interfaces' ip -brief address
-check 'Routes' ip route
-check 'DHCP service' systemctl is-active dhcpcd.service
-for device in /sys/class/net/*; do
-    [[ -d $device/phy80211 ]] || continue
-    interface=${device##*/}
-    check "Wi-Fi authentication on $interface" systemctl is-active "wpa_supplicant@$interface.service"
-    check "Wi-Fi service diagnostics on $interface" systemctl status --no-pager "wpa_supplicant@$interface.service"
-done
-check 'DNS resolution' timeout 15 getent hosts gentoo.org
-if command -v curl >/dev/null; then
-    check 'HTTPS connectivity' curl --head --fail --max-time 20 https://www.gentoo.org/
-else
-    check 'IP connectivity (ICMP may be filtered)' ping -c 3 -W 3 1.1.1.1
-fi
-check 'Time service' systemctl is-active systemd-timesyncd.service
-check 'Time configuration' timedatectl status
-check 'Time synchronization' timedatectl timesync-status
-check 'Journal boot history' journalctl --list-boots --no-pager
-check 'Persistent journal directory' test -d /var/log/journal
-check 'Scrub timer enabled' systemctl is-enabled gentoo-btrfs-scrub.timer
-check 'Scrub timer active' systemctl is-active gentoo-btrfs-scrub.timer
-check 'Scrub schedule' systemctl list-timers gentoo-btrfs-scrub.timer --no-pager
-printf '\n%s checks failed. Review the output above.\n' "$failures"
-printf 'Optional integrity check: systemctl start gentoo-btrfs-scrub.service; btrfs scrub status /\n'
-printf 'After a later reboot, verify that journalctl --list-boots includes the previous boot.\n'
-(( failures == 0 ))
-''', 0o700, marked=False)
 if target == 'qemu':
     print('QEMU: DHCP on virtual Ethernet; no Wi-Fi credentials imported.')
 else:
@@ -2779,6 +2736,74 @@ cryptsetup close "$luks_name"
 NAMESPACE_RECOVERY
 }
 
+# Capture the connected image before releasing the target. Never guess a VM path.
+qemu_handoff_image() {
+  run_privileged python3 - "$TARGET_DISK" <<'PYTHON'
+from pathlib import Path
+import sys
+try:
+    device = Path(sys.argv[1]).name
+    if not device.startswith('nbd') or not device[3:].isdigit():
+        raise ValueError('target is not an NBD device')
+    pid = int(Path('/sys/block', device, 'pid').read_text().strip())
+    args = Path('/proc', str(pid), 'cmdline').read_bytes().rstrip(b'\0').split(b'\0')
+    args = [arg.decode() for arg in args]
+    if Path(args[0]).name != 'qemu-nbd' or '--image-opts' in args:
+        raise ValueError('cannot identify a regular qemu-nbd image path')
+    image = Path(args[-1])
+    if not image.is_absolute():
+        image = Path('/proc', str(pid), 'cwd').resolve() / image
+    image = image.resolve(strict=True)
+    if not image.is_file() or '\n' in str(image):
+        raise ValueError('invalid image path')
+    print(image)
+except (OSError, ValueError, IndexError, UnicodeError) as error:
+    print(f'Could not identify attached QEMU image: {error}', file=sys.stderr)
+    sys.exit(1)
+PYTHON
+}
+
+print_qemu_handoff_commands() {
+  local image=$1 code=${QEMU_VARS_TEMPLATE/OVMF_VARS/OVMF_CODE}
+  local pid_file=/sys/block/${TARGET_DISK##*/}/pid
+  printf '\nQEMU boot cheat sheet\n---------------------\n'
+  printf 'Target filesystems are unmounted and LUKS is closed. No reattachment is needed.\n'
+  printf 'The boot entry was prepared during kernel setup; do not run host efibootmgr.\n'
+  if [[ -z $image ]]; then
+    image=/path/to/attached-target.qcow2
+    printf 'Replace VM_IMAGE below with the qcow2 image attached to %s.\n' "$TARGET_DISK"
+  fi
+  if [[ -z $QEMU_VARS ]]; then
+    printf 'Replace VM_VARS below with the firmware file prepared during kernel setup.\n'
+  fi
+  if [[ $code == "$QEMU_VARS_TEMPLATE" || ! -f $code ]]; then
+    code=/path/to/matching/OVMF_CODE.fd
+    printf 'Replace OVMF_CODE below with the CODE image matching your VARS template.\n'
+  fi
+  printf '\nVM_IMAGE=%q\nVM_VARS=%q\nOVMF_CODE=%q\n' "$image" "${QEMU_VARS:-/path/to/prepared/OVMF_VARS.fd}" "$code"
+  printf 'if sudo qemu-nbd --disconnect %q; then\n' "$TARGET_DISK"
+  printf '  for attempt in {1..50}; do\n'
+  printf '    [[ ! -e %q ]] && qemu-img info "$VM_IMAGE" >/dev/null 2>&1 && break\n' "$pid_file"
+  printf '    sleep 0.1\n  done\n'
+  printf '  if [[ ! -e %q ]] && qemu-img info "$VM_IMAGE" >/dev/null 2>&1; then\n' "$pid_file"
+  cat <<'COMMANDS'
+    qemu-system-x86_64 \
+      -enable-kvm -machine q35 -cpu host -m 4096 -smp 4 \
+      -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:2222-:22 \
+      -display none -serial mon:stdio \
+      -drive "if=pflash,format=raw,readonly=on,file=${OVMF_CODE//,/,,}" \
+      -drive "if=pflash,format=raw,file=${VM_VARS//,/,,}" \
+      -drive "if=virtio,format=qcow2,file=${VM_IMAGE//,/,,}"
+  else
+    printf 'NBD/image is still busy; inspect before starting QEMU.\n' >&2
+  fi
+fi
+COMMANDS
+  printf '\nIn the VM: unlock LUKS, log in as root, then run:\n/root/firstboot-verify-and-checkpoint.sh\n'
+  printf 'Ctrl-a c switches between the serial console and QEMU monitor.\n'
+  printf 'Reference: usr/local/share/agentoo/installer/QEMU-NBD-INSTALL.md\n'
+}
+
 handoff() {
   log 'Phase: handoff'
   cat <<PLAN
@@ -2803,7 +2828,7 @@ PLAN
   esac
   verify_disk_setup || die 'handoff requires verified target mounts'
   run_privileged test -s "$MOUNT_ROOT/etc/fstab" || die 'first-boot fstab is missing'
-  local version cmdline esp_uuid source
+  local version cmdline esp_uuid source qemu_image=
   version=$(run_privileged tail -n 1 "$MOUNT_ROOT/etc/kernel/gentoo-dist.version")
   [[ $version =~ ^[A-Za-z0-9._+-]+-gentoo-dist(-bin)?$ ]] || die 'invalid recorded kernel version'
   cmdline=$(run_privileged cat "$MOUNT_ROOT/etc/kernel/gentoo-dist.cmdline")
@@ -2813,6 +2838,9 @@ PLAN
   if [[ $TARGET_HOST != qemu ]]; then
     printf '\nEFI commands for use after target cleanup completes:\n'
     print_physical_kernel_boot_commands "$version" "$cmdline" "$esp_uuid"
+  fi
+  if [[ $TARGET_HOST == qemu ]]; then
+    qemu_image=$(qemu_handoff_image) || qemu_image=
   fi
   confirm_phase 'handoff'
   for source in run dev sys proc; do
@@ -2830,8 +2858,7 @@ PLAN
   fi
   log 'Handoff complete: target unmounted and LUKS closed'
   if [[ $TARGET_HOST == qemu ]]; then
-    printf 'Disconnect the NBD attachment before starting QEMU. Use the prepared OVMF store: %s\n' "$QEMU_VARS"
-    printf 'Follow usr/local/share/agentoo/installer/QEMU-NBD-INSTALL.md for the VM boot command.\n'
+    print_qemu_handoff_commands "$qemu_image"
   else
     print_physical_kernel_boot_commands "$version" "$cmdline" "$esp_uuid"
   fi

@@ -259,6 +259,12 @@ After logging in as root, run:
 /root/firstboot-verify-and-checkpoint.sh
 ```
 
+For diagnostics without creating or offering another checkpoint, run:
+
+```bash
+/root/firstboot-verify-and-checkpoint.sh --verify-only
+```
+
 Keep package operations and configuration automation idle throughout capture.
 Snapshots are taken live and sequentially, not atomically across subvolumes.
 No shutdown or installer-host involvement is needed for checkpoint creation.

@@ -35,10 +35,11 @@ These files describe the target hardware, independent of the installation host.
 ## First-boot verification and checkpoint
 
 `/root/firstboot-verify-and-checkpoint.sh` is the combined interactive entry point
-after boot. The installer supplies its diagnostic companion,
-`/root/gentoo-firstboot-checks.sh` and sets the
-combined helper's permissions to `0700`. Run it as root on the booted target,
-with package operations and configuration automation idle.
+after boot. It is tracked in agentoo; the installer sets its permissions to
+`0700`. Run it as root on the booted target, with package operations and
+configuration automation idle. Use `--verify-only` for diagnostics without
+cleanup, checkpoint preflight, or a checkpoint prompt. Diagnostics report time
+state; checkpoint preflight additionally requires synchronized time.
 
 After required verification succeeds, a short plan asks whether to remove
 downloaded distfiles and capture the fresh-install checkpoint. Declining leaves
