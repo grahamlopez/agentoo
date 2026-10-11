@@ -1,0 +1,81 @@
+# Agentoo shared Git defaults; ~/.gitconfig and repository settings override these.
+# proposed removal: Personal author identity belongs in user-local Git configuration.
+# [user]
+#     name = graham
+#     email = m477@duck.com
+# 
+[color]
+    ui = true
+[color "decorate"]
+    remoteBranch = green
+[color "branch"]
+    current = red
+    local = yellow
+    remote = green
+    upstream = bold cyan
+[color "diff"]
+    meta = yellow bold
+    frag = magenta bold
+    old = red bold
+    new = green bold
+    whitespace = red reverse
+[color "status"]
+    added = yellow
+    changed = green
+    untracked = cyan
+
+[core]
+    whitespace=fix,-indent-with-non-tab,trailing-space,cr-at-eol
+    # -X keeps less off the alternate screen, so log/diff output stays in the
+    # scrollback after quitting instead of being wiped. Intentional - not cruft.
+    pager = less -RMFX
+# proposed removal: The shared excludes file now has a system location.
+#    excludesFile = ~/.gitignore
+    excludesFile = /etc/agentoo/gitignore
+
+[alias]
+    please = push --force-with-lease
+    s = status -s
+    st = status
+    ci = commit
+    br = branch
+    co = checkout
+    ls = ls-files
+    sh = remote show origin
+    rollback = checkout --
+    cp = cherry-pick
+
+    # Git appends any extra arguments to an alias, so these two cover the
+    # old lo/loo/lot/loot/lt/lg1/lg2 set:
+    #   git l --all          git l --date-order          git lg --all
+    l = log --graph --decorate --oneline
+    ll = log --graph --decorate --oneline --all
+    lg = log --graph --all --abbrev-commit --decorate --date=relative --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)'
+    lognames = log --name-status
+    logdiff = log -p --stat
+
+[merge]
+    tool = nvimdiff
+    conflictstyle = zdiff3
+[mergetool]
+    prompt = false
+
+[fetch]
+    prune = true
+[pull]
+# proposed removal: Fast-forward-only rejects divergence instead of using the chosen rebase policy.
+#    ff = only
+    rebase = true
+[diff]
+    algorithm = histogram
+[rerere]
+    enabled = true
+[branch]
+    sort = -committerdate
+[column]
+    ui = auto
+
+[include]
+    path = ~/.gitconfig-local
+[init]
+    defaultBranch = main

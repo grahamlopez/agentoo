@@ -1,0 +1,8 @@
+# Global excludes (git core.excludesFile).
+# Also guards the $HOME-as-work-tree dotfile repos (dgit/ggit/agit) against
+# accidentally committing secrets via `add -A`.
+
+# ssh: track only the shared config; never keys or machine-local includes
+.ssh/*
+!.ssh/config
+.ssh/config.d/

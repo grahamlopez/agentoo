@@ -79,3 +79,23 @@ The installer configures `pull.rebase=true` locally in the live Git database, so
 `/var/lib/agentoo/repository.git/config`; it is separate from development-clone
 settings. Commit or reconcile live edits before pulling; updates immediately
 change system files, and Git hooks restore managed permissions.
+
+## Shell and editor environment
+
+Shared defaults live in `/etc/zsh/{zprofile,zshrc}`, `/etc/gitconfig`,
+`/etc/vim/vimrc`, `/etc/tmux.conf`, `/etc/xdg/nvim/`, and the SSH client drop-in
+`/etc/ssh/ssh_config.d/50-agentoo.conf`. Install tools with
+`emerge --ask --noreplace @comfy_env`. Package config protection may produce
+`._cfg*` files; review these before replacing the Git-managed defaults.
+
+Normal user configs remain local overrides, with no copied or symlinked dotfiles.
+Set Graham’s author identity once with `git config --global user.name` and
+`git config --global user.email`; outgoing SSH keys and local host includes stay
+in his home. Shared SSH defaults preserve an existing/forwarded agent.
+
+Deferred legacy sections are commented with `proposed removal` for review.
+The Markdown query archive stays outside runtime query paths. GUI startup,
+agent tooling, language managers, and automatic root tmux sessions are deferred.
+Neovim requires version 0.11 or newer. Vim is a small fallback configuration;
+Neovim retains Space as leader while Vim retains its default backslash leader.
+User history, caches, undo, and spell additions stay in writable user storage.

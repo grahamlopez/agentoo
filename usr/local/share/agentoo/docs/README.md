@@ -13,7 +13,10 @@ editing a tracked file changes the live configuration and appears in Git.
 /
 ├── etc/
 │   ├── agentoo/                      # Host identity, policy, and permissions manifest
-│   ├── portage/                      # Portage configuration
+│   ├── portage/                      # Portage configuration and package sets
+│   ├── zsh/, vim/, xdg/nvim/          # Shared shell and editor defaults
+│   ├── gitconfig, tmux.conf           # Shared Git and tmux defaults
+│   ├── ssh/                          # Client defaults and account access policy
 │   └── …                             # Application system defaults (as added)
 ├── home/<user>/.config/               # Real user configs / local overrides (TBD)
 ├── root/

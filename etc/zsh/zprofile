@@ -1,0 +1,21 @@
+# Gentoo login environment; keep package-provided environment integration.
+if [[ -e /etc/profile.env ]]; then . /etc/profile.env; fi
+export EDITOR=${EDITOR:-/bin/nano}
+export PAGER=${PAGER:-/usr/bin/less}
+unset ROOTPATH
+shopts=$-
+setopt nullglob
+for sh in /etc/profile.d/*.sh; do [[ -r "$sh" ]] && . "$sh"; done
+unsetopt nullglob
+set -$shopts
+unset sh shopts
+
+# proposed removal: Configure personal Git identity explicitly, not at every login;
+# GUI autostart belongs to later host/session configuration.
+# host=$(hostname)
+# printf '[user]\n    name = graham (@%s)\n    email = m477@duck.com\n' "$host" > ~/.gitconfig-local
+# 
+# if [ "$(tty)" = "/dev/tty1" ]; then
+#     sleep 1
+#     start-hyprland
+# fi

@@ -1,0 +1,9 @@
+# Core shell/editor environment; install with emerge --ask --noreplace @comfy_env.
+app-shells/zsh
+dev-vcs/git
+net-misc/openssh
+app-editors/vim
+>=app-editors/neovim-0.11
+app-misc/tmux
+sys-apps/ripgrep
+sys-apps/less
