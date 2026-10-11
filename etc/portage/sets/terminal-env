@@ -7,3 +7,18 @@ app-editors/vim
 app-misc/tmux
 sys-apps/ripgrep
 sys-apps/less
+
+# Gentoo package and repository administration
+app-portage/esearch
+app-portage/genlop
+app-portage/gentoolkit
+app-eselect/eselect-repository
+
+# Terminal navigation and discovery
+app-shells/fzf
+sys-apps/fd
+app-text/tree
+
+# Gentoo command completions for both administration shells
+app-shells/gentoo-bashcomp
+app-shells/gentoo-zsh-completions
