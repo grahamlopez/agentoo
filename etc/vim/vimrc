@@ -1,3 +1,8 @@
+" Load upstream defaults first, then apply Agentoo preferences.
+" Prevent Vim from loading them again afterward when no user vimrc exists.
+runtime defaults.vim
+let g:skip_defaults_vim = 1
+
 " Vim is the fallback editor; preserve its familiar backslash leader.
 " Agentoo Vim fallback defaults, adapted from dots/.vimrc.
 " -----------------------------------------------------------------------------
@@ -375,3 +380,9 @@ let g:markdown_folding=1
 " -----------------------------------------------------------------------------
 " }}}
 " -----------------------------------------------------------------------------
+
+" Preserve crontab inode/ownership when the editor writes its temporary file.
+augroup agentoo_crontab
+  autocmd!
+  autocmd FileType crontab setlocal backupcopy=yes
+augroup END
