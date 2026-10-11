@@ -7,13 +7,15 @@ synchronization step.
 
 Universal policy belongs in native common fragments. Host-specific policy
 belongs in a native fragment named for the host and is selected through
-`/etc/gentoo-config/target-host`. Do not copy a complete common file into a host
+`/etc/agentoo/target-host`. Do not copy a complete common file into a host
 variant, and do not make a common file silently depend on the machine where it
 was edited.
 
 Prefer native fragment, include, matching, and drop-in mechanisms. If a future
 configuration format cannot express a common layer plus a selected host layer,
-document that limitation before introducing generation, copying, or symlinks.
+document that limitation and choose an explicit configuration ownership model.
+User dotfiles must be real tracked files or local overrides, never deployed
+copies or symlinks. See `/usr/local/share/agentoo/docs/README.md` for the configuration philosophy.
 
 The supported initial host names are `generic`, `qemu`, `thinktop`, and `startop`.
 Startop matches Thinktop's shared-memory build directory and twelve-job build
@@ -25,7 +27,7 @@ its value differs between installations. It contains the Portage-compatible
 assignment `GENTOO_TARGET_HOST="name"` so `make.conf` can source it directly.
 
 Kernel firmware requirements use shell assignment fragments under
-`/etc/gentoo-config/kernel-firmware.d/`: the installer reads `00-common` first,
+`/etc/agentoo/kernel-firmware.d/`: the installer reads `00-common` first,
 then `90-${GENTOO_TARGET_HOST}` when present. `SOF_FIRMWARE` must be `yes` or
 `no`; the common default is `no`, and `thinktop` enables it for its audio DSP.
 These files describe the target hardware, independent of the installation host.

@@ -54,8 +54,8 @@ services are enabled or running; service state was not audited.
    support where applicable, but do not treat this list as a verified mask set.
    Machine management may integrate with other virtualization tools; assess that
    before disabling it universally.
-2. Store the policy in gentoo-configs, using native common/host fragments and
-   overrides consistent with `etc/gentoo-config/README.md`. Decide explicitly
+2. Store the policy in agentoo, using native common/host fragments and
+   overrides consistent with `etc/agentoo/README.md`. Decide explicitly
    whether all target hosts should share it.
 3. Use masks where the intent is to prevent activation. Merely disabling a unit
    does not prevent on-demand activation. Retain packaged software initially;
