@@ -1,4 +1,5 @@
-app-editors/vim -X -alsa
+# Keep fallback Vim from pulling in the audio stack for sound playback.
+app-editors/vim -X -alsa -sound
 sys-apps/systemd cryptsetup
 sys-kernel/linux-firmware savedconfig
 media-video/pipewire pipewire-alsa sound-server
