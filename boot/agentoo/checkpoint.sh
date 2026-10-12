@@ -14,7 +14,8 @@ Usage: agentoo-checkpoint create LABEL [component flags] [--[no-]clean-distfiles
 
 Positive --system --home --efi flags select exactly those components.
 Negative-only --no-system --no-home --no-efi flags subtract from defaults.
-Create: system + home + EFI; clean distfiles when system is selected.
+Create: system + home + EFI; clean distfiles and binary packages with system capture.
+--[no-]clean-distfiles controls both package caches.
 Restore: system + EFI; preserve home. Selected current state is discarded.
 Creation is online-only. Restore requires recovery media and unmounted targets.
 EOF
@@ -49,7 +50,7 @@ while [ $# -gt 0 ]; do
             case "$FLAG" in no-*) FLAG=${FLAG#no-}; VALUE=0;; esac
             set_flag "$FLAG" "$VALUE";;
         --clean-distfiles|--no-clean-distfiles)
-            [ "$ACTION" = create ] || die 'distfile cleanup applies only to create'
+            [ "$ACTION" = create ] || die 'package cache cleanup applies only to create'
             VALUE=1; [ "$1" != --no-clean-distfiles ] || VALUE=0
             [ -z "$CLEAN" ] || [ "$CLEAN" = "$VALUE" ] || die 'conflicting cleanup flags'
             CLEAN=$VALUE;;
@@ -154,7 +155,7 @@ plan() {
     printf '│ Btrfs UUID: %s\n' "$FS_UUID"
     if [ "$E" = 1 ]; then printf '│ EFI: %s (UUID %s); firmware entries unchanged\n' "$ESP" "$ESP_UUID"; fi
     if [ "$ACTION" = create ]; then
-        WORD=keep; [ "$CLEAN" != 1 ] || WORD='DELETE downloaded distfiles'
+        WORD='keep distfiles and binary packages'; [ "$CLEAN" != 1 ] || WORD='DELETE distfiles and binary packages'
         printf '│ Cleanup: %s\n└─ Keep other writers idle; capture is sequential.\n' "$WORD"
     else
         printf '└─ No implicit backups. Named checkpoint retained; temporary copies discarded.\n'
@@ -236,14 +237,20 @@ if [ "$ACTION" = create ]; then
     idle; mount_top rw
     [ "$(df -Pk "$TOP" | awk 'NR==2 {print $4}')" -gt 1048576 ] || die 'free at least 1 GiB on Btrfs first'
     for KIND in system home; do if enabled "$KIND"; then flat "$TOP/$(rootname "$KIND")"; fi; done
-    DIST=$TOP/@/var/cache/distfiles
     if [ "$CLEAN" = 1 ]; then
-        for DIR in "$TOP/@" "$TOP/@/var" "$TOP/@/var/cache" "$DIST"; do
-            [ -d "$DIR" ] && [ ! -L "$DIR" ] || die 'unsafe distfiles path'
+        for DIR in "$TOP/@" "$TOP/@/var" "$TOP/@/var/cache"; do
+            [ -d "$DIR" ] && [ ! -L "$DIR" ] || die 'unsafe package cache path'
         done
         [ "$(portageq envvar DISTDIR)" = /var/cache/distfiles ] || die 'custom distfile layout requires --no-clean-distfiles'
-        [ -d "$DIST" ] && [ ! -L "$DIST" ] || die 'unsafe distfiles directory'
-        findmnt -rn -o TARGET | awk '$0=="/var/cache/distfiles" || index($0,"/var/cache/distfiles/")==1 {bad=1} END {exit bad}' || die 'distfiles contains a mount'
+        [ "$(portageq envvar PKGDIR)" = /var/cache/binpkgs ] || die 'custom binary package layout requires --no-clean-distfiles'
+        for CACHE in /var/cache/distfiles /var/cache/binpkgs; do
+            DIR=$TOP/@$CACHE
+            [ ! -L "$DIR" ] || die "unsafe package cache symlink: $CACHE"
+            if [ -e "$DIR" ]; then
+                [ -d "$DIR" ] || die "unsafe package cache directory: $CACHE"
+            fi
+            findmnt -rn -o TARGET | awk -v cache="$CACHE" '$0==cache || index($0,cache"/")==1 {bad=1} END {exit bad}' || die "package cache contains a mount: $CACHE"
+        done
     fi
     if [ "$E" = 1 ]; then
         [ -d "$ESP/EFI" ] && [ ! -L "$ESP/EFI" ] || die 'missing ordinary EFI directory'
@@ -258,7 +265,12 @@ if [ "$ACTION" = create ]; then
     plan; idle
     mkdir -p "$STORE"; CP=$STORE/$NAME; mkdir "$CP"
     printf 'Capture incomplete\n' > "$CP/INCOMPLETE"
-    if [ "$CLEAN" = 1 ]; then find "$DIST" -mindepth 1 -maxdepth 1 -exec rm -rf -- '{}' +; fi
+    if [ "$CLEAN" = 1 ]; then
+        for CACHE in /var/cache/distfiles /var/cache/binpkgs; do
+            DIR=$TOP/@$CACHE
+            [ ! -d "$DIR" ] || find "$DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- '{}' +
+        done
+    fi
     if [ "$E" = 1 ]; then
         [ ! -L "$ESP/checkpoints" ] || die 'EFI checkpoint storage is a symlink'
         mkdir -p "$ESP/checkpoints"; BOOT=$ESP/checkpoints/$NAME; mkdir "$BOOT"

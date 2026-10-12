@@ -15,18 +15,25 @@ Create and restore print a compact plan and require confirmation.
 | System | Capture | Replace current system |
 | Home | Capture | Preserve current home |
 | EFI | Capture boot files | Overlay saved boot files |
-| Distfiles | Clean with system capture | Not applicable |
+| Distfiles and binary packages | Clean with system capture | Not applicable |
 
 - Positive flags select exactly the specified components: `--system`, `--home`, `--efi`.
 - Negative-only flags subtract from defaults: `--no-system`, `--no-home`, `--no-efi`.
 - Home-only capture: `agentoo-checkpoint create personal-work --home`.
-- `--[no-]clean-distfiles` applies only to create. Explicit cleaning requires system capture.
+- `--[no-]clean-distfiles` controls both distfile and binary package cleanup and
+  applies only to create. Explicit cleaning requires system capture.
 - Conflicting flags and empty selections are rejected.
 
 The supported layout is `@` for root and `@home` for home on one Btrfs filesystem,
 with ordinary directories inside them. Nested subvolumes are refused because a
 root snapshot does not include their contents. Agentoo's documented systemd
 directory policy prevents the optional storage services from introducing these.
+
+Cleanup empties `/var/cache/distfiles` and `/var/cache/binpkgs`, including the
+configured `gentoobinhost` download cache inside the latter. Missing caches are
+skipped. Custom `DISTDIR` or `PKGDIR` paths require `--no-clean-distfiles`;
+symlinked cache paths and mounts inside either cache are refused before deletion.
+Keep any additional binhost caches inside `/var/cache/binpkgs` to include them.
 
 Snapshots live at Btrfs top level `gentoo-checkpoints/<name>`. EFI archives live
 at `/boot/checkpoints/<name>`. Completion markers, filesystem identities,
