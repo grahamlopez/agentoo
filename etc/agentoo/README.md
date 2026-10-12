@@ -95,6 +95,10 @@ Shared defaults:
 - Tmux: `/etc/tmux.conf`
 - SSH client: `/etc/ssh/ssh_config.d/50-agentoo.conf`
 
+The installer's first-boot foundation installs Zsh and selects it as root's login
+shell. Root uses these same shared shell defaults, with a red hostname in the
+prompt instead of green. Account-local shell files can override the defaults.
+
 Install tools with `emerge --ask --noreplace @terminal-env`. Package config
 protection may produce `._cfg*` files; review these before replacing managed defaults.
 

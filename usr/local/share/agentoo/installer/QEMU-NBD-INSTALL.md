@@ -187,7 +187,9 @@ prepared target, resume it separately:
 
 Enter your host administrator password if sudo asks for it. When the installer
 asks you to create the Gentoo root login password, enter your chosen new guest
-password twice. If you resumed first-boot configuration separately, run handoff
+password twice. This phase also installs Zsh and makes it root's login shell,
+using Agentoo's shared configuration with a red hostname in root's prompt.
+If you resumed first-boot configuration separately, run handoff
 before detachment:
 
 ```bash

@@ -2452,12 +2452,19 @@ firstboot_offline() {
   [[ -f $root/root/002-agentoo-setup-user.sh && ! -L $root/root/002-agentoo-setup-user.sh ]] \
     || die 'configuration checkout lacks /root/002-agentoo-setup-user.sh; update agentoo before first-boot-foundation'
   run_privileged chmod 700 "$root/root/002-agentoo-setup-user.sh"
-  local -a packages=(net-misc/dhcpcd)
+  local -a packages=(net-misc/dhcpcd app-shells/zsh)
   [[ $TARGET_HOST == qemu ]] || packages+=(net-wireless/wpa_supplicant)
   prepare_install_binpkgs "$root"
   chroot "$root" /usr/bin/emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
   confirm_phase 'first-boot networking packages (review the plan above)'
   chroot "$root" /usr/bin/emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
+
+  # Root uses the same system Zsh defaults as ordinary users, without home copies.
+  local root_shell
+  root_shell=$(chroot "$root" /bin/sh -c 'command -v zsh') || die 'target Zsh is unavailable'
+  [[ $root_shell == /* && -x $root$root_shell ]] || die 'target Zsh path is invalid'
+  grep -Fxq "$root_shell" "$root/etc/shells" || die 'target Zsh is not listed in /etc/shells'
+  chroot "$root" /usr/sbin/usermod --shell "$root_shell" root
 
   # Python writes persistent files atomically and rejects unowned conflicts.
   # Imported credentials are never printed, passed in argv, or tracked in Git.

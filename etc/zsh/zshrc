@@ -424,7 +424,9 @@ _git_ps1() {
 }
 
 PROMPT='$GREEN%m$CYAN:$CYAN%3~$YELLOW$(_git_ps1 "(%s)")$CYAN-| $NOCOLOR'
-# PROMPT='$RED%m$CYAN:$CYAN%3~$YELLOW$(_git_ps1 "(%s)")$CYAN-| $NOCOLOR' # root
+if (( EUID == 0 )); then
+  PROMPT='$RED%m$CYAN:$CYAN%3~$YELLOW$(_git_ps1 "(%s)")$CYAN-| $NOCOLOR'
+fi
 
 RPROMPT='$RED%(?..[%?]) $CYAN|$WHITE%*$NOCOLOR'
 
