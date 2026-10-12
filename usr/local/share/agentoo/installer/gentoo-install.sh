@@ -2580,11 +2580,12 @@ else:
             if block: networks.append(block)
         if not networks:
             print('Enterprise profiles, external certificate paths and unavailable secrets are not imported.')
-            with open('/dev/tty', 'r+') as tty:
-                tty.write('No supported saved Wi-Fi credentials. SSID (blank to defer Wi-Fi): '); tty.flush()
-                ssid = tty.readline().rstrip('\n')
+            # Buffered read/write mode requires seeking, which terminals cannot do.
+            with open('/dev/tty', 'r') as tty_input, open('/dev/tty', 'w') as tty_output:
+                tty_output.write('No supported saved Wi-Fi credentials. SSID (blank to defer Wi-Fi): '); tty_output.flush()
+                ssid = tty_input.readline().rstrip('\n')
                 if ssid:
-                    password = getpass.getpass('Wi-Fi password (blank for an open network): ', stream=tty)
+                    password = getpass.getpass('Wi-Fi password (blank for an open network): ', stream=tty_output)
                     block = network(ssid, password, 'WPA-PSK' if password else 'NONE')
                     if not block: raise SystemExit('Invalid SSID or WPA password')
                     networks.append(block)
@@ -2602,15 +2603,12 @@ else:
             template = base / 'lib/systemd/system/wpa_supplicant@.service'
         if not template.is_file() or 'wpa_supplicant-%I.conf' not in template.read_text():
             raise SystemExit('Packaged wpa_supplicant@.service is missing or uses an unexpected configuration path')
-        detected = sorted(p.name for p in pathlib.Path('/sys/class/net').glob('*') if (p / 'phy80211').exists())
-        with open('/dev/tty', 'r+') as tty:
-            tty.write('Target Wi-Fi interface names (space separated; Enter accepts detected names: '
-                      + (' '.join(detected) or 'none') + '): '); tty.flush()
-            answer = tty.readline()
-            if not answer: raise SystemExit('Could not read target Wi-Fi interface names')
-        interfaces = answer.strip().split() or detected
-        if not interfaces:
-            raise SystemExit('Wi-Fi credentials exist but no target interface was specified')
+        interfaces = sorted(p.name for p in pathlib.Path('/sys/class/net').glob('*')
+                            if (p / 'phy80211').exists())
+        if interfaces:
+            print('Using detected Wi-Fi interfaces: ' + ' '.join(interfaces))
+        else:
+            print('No Wi-Fi interface detected; saved credentials retained, Wi-Fi deferred. Ethernet DHCP is configured.')
         for interface in dict.fromkeys(interfaces):
             if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}', interface):
                 raise SystemExit('Invalid target Wi-Fi interface name')
@@ -2640,8 +2638,7 @@ PYTHON
   # initializes it; firstboot may regard an existing entry as already configured.
   if ! awk -F: '$1 == "root" { if ($2 == "" || $2 ~ /^[!*]/) exit 1; found=1 } END { if (!found) exit 1 }' "$root/etc/shadow"; then
     printf '\nSet the Gentoo root login password for %s.\n' "$hostname"
-    printf 'The next "Enter new password" prompts create this target login password.\n'
-    printf 'Enter the same new password twice; it is used to log in as root after boot.\n'
+    printf 'The next "Enter new password" prompts create this target install.\n'
     printf 'This does not change the disk encryption passphrase or any host password.\n\n'
     chroot "$root" /usr/bin/passwd root
   else
@@ -2719,8 +2716,8 @@ No live systemctl, timedatectl, hostnamectl, or daemon-reload is used.
 
 Wi-Fi credentials remain local root-only state, excluded from agentoo Git tracking.
 Physical targets use the packaged wpa_supplicant@INTERFACE.service with
-root-only per-interface configuration files and explicitly selected target
-interface names. No custom Wi-Fi unit or udev startup rule is installed.
+root-only per-interface configuration files and automatically detected
+Wi-Fi interface names from the installation host. No custom Wi-Fi unit or udev startup rule is installed.
 They import self-contained wpa_supplicant network blocks and saved
 NetworkManager personal WPA-PSK/SAE/open profiles. Enterprise profiles, external
 certificates and unavailable secrets require separate provisioning. If no
