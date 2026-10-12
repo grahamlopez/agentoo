@@ -82,6 +82,10 @@ change system files, and Git hooks restore managed permissions.
 
 ## Shell and editor environment
 
+The console uses `/etc/vconsole.conf` to select the tracked US keymap at
+`/usr/share/keymaps/i386/qwerty/us-caps.map.gz`, where Caps Lock acts as Control.
+This takes effect when systemd sets up the console on boot.
+
 Shared defaults:
 
 - Shell: `/etc/zsh/{zprofile,zshrc}`
