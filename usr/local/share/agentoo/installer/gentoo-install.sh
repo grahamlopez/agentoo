@@ -760,31 +760,44 @@ EOF
   # findmnt can identify a plain partition, a /dev/mapper LUKS device, or an
   # LVM logical volume.  lsblk --inverse walks that source back to physical
   # disks, which catches a live root hidden below a device-mapper layer.
+  local backing_disks mountpoints swap_sources
   for mountpoint in / /boot /efi /boot/efi; do
-    source=$(findmnt --noheadings --output SOURCE --target "$mountpoint" 2>/dev/null || true)
+    if ! source=$(findmnt --noheadings --output SOURCE --target "$mountpoint" 2>/dev/null); then
+      [[ $mountpoint != / ]] || die 'could not inspect the running root filesystem'
+      continue
+    fi
+    # The Btrfs [/subvolume] suffix is mount metadata, not a device name.
+    source=${source%%\[*}
     [[ -b $source ]] || continue
+    backing_disks=$(lsblk --inverse --noheadings --paths --output PATH,TYPE "$source" \
+      | awk '$2 == "disk" { print $1 }' | sort -u) \
+      || die "could not inspect the disks backing $mountpoint: $source"
     while IFS= read -r backing_disk; do
       [[ $backing_disk != "$TARGET_DISK" ]] || die "refusing target that backs the running root, boot, or EFI filesystem: $TARGET_DISK"
-    done < <(lsblk --inverse --noheadings --paths --output PATH,TYPE "$source" 2>/dev/null \
-      | awk '$2 == "disk" { print $1 }' | sort -u)
+    done <<< "$backing_disks"
   done
 
   # A parent disk usually has no mountpoint even when a child partition does.
   # Swap is not mounted at all, so it needs its own reverse-dependency check.
-  if lsblk --raw --noheadings --output MOUNTPOINTS "$TARGET_DISK" 2>/dev/null \
-    | awk 'NF { found = 1 } END { exit !found }'; then
+  mountpoints=$(lsblk --raw --noheadings --output MOUNTPOINTS "$TARGET_DISK") \
+    || die "could not inspect target mounts: $TARGET_DISK"
+  if [[ -n ${mountpoints//[[:space:]]/} ]]; then
     die "refusing target with mounted filesystems: $TARGET_DISK"
   fi
   if command -v swapon >/dev/null 2>&1; then
+    swap_sources=$(swapon --show --noheadings --raw --output NAME) \
+      || die 'could not inspect active swap'
     while IFS= read -r source; do
       [[ -n $source ]] || continue
       [[ $source != "$TARGET_DISK" ]] || die "refusing target that backs active swap: $TARGET_DISK"
       [[ -b $source ]] || continue
+      backing_disks=$(lsblk --inverse --noheadings --paths --output PATH,TYPE "$source" \
+        | awk '$2 == "disk" { print $1 }' | sort -u) \
+        || die "could not inspect disks backing active swap: $source"
       while IFS= read -r backing_disk; do
         [[ $backing_disk != "$TARGET_DISK" ]] || die "refusing target that backs active swap: $TARGET_DISK"
-      done < <(lsblk --inverse --noheadings --paths --output PATH,TYPE "$source" 2>/dev/null \
-        | awk '$2 == "disk" { print $1 }' | sort -u)
-    done < <(swapon --noheadings --raw --output NAME 2>/dev/null || true)
+      done <<< "$backing_disks"
+    done <<< "$swap_sources"
   fi
 
   [[ ! -e /dev/mapper/$LUKS_NAME ]] || die "LUKS mapper already exists: /dev/mapper/$LUKS_NAME"
@@ -1269,6 +1282,14 @@ deferred to the system-update phase.
 EOF
 }
 
+# Git creates parent directories using its umask. File permission repair cannot
+# make private parents readable, so shared system configuration needs 0755 dirs.
+# Existing private directories (notably /root and the FAT-masked ESP) stay private.
+checkout_configuration() {
+  run_privileged /bin/bash -c 'umask 022; exec git "$@"' "$PROGRAM-checkout" \
+    --git-dir="$1" --work-tree="$2" checkout --force "$CONFIG_BRANCH"
+}
+
 # Target-only masks precede package hooks that can create snapshot boundaries.
 # Stage3 tar extraction creates directories, not Btrfs subvolume objects.
 # Checkout supplies tmpfiles overrides; never defer this policy until first boot.
@@ -1418,7 +1439,7 @@ EOF
   run_privileged git --git-dir="$config_git_dir" config remote.origin.fetch "+refs/heads/$CONFIG_BRANCH:refs/remotes/origin/$CONFIG_BRANCH"
   run_privileged git --git-dir="$config_git_dir" config "branch.$CONFIG_BRANCH.remote" origin
   run_privileged git --git-dir="$config_git_dir" config "branch.$CONFIG_BRANCH.merge" "refs/heads/$CONFIG_BRANCH"
-  run_privileged git --git-dir="$config_git_dir" --work-tree="$MOUNT_ROOT" checkout --force "$CONFIG_BRANCH"
+  checkout_configuration "$config_git_dir" "$MOUNT_ROOT"
   config_revision=$(run_privileged git --git-dir="$config_git_dir" rev-parse "$CONFIG_BRANCH^{commit}")
   [[ -f $MOUNT_ROOT/usr/local/bin/agentoo-permissions && ! -L $MOUNT_ROOT/usr/local/bin/agentoo-permissions ]] \
     || die 'configuration checkout lacks agentoo-permissions'
@@ -1752,6 +1773,18 @@ kernel_target_data() {
 }
 
 # Check host-side offline firmware prerequisites before installing packages.
+# fuser returns 1 for both an unused file and some inspection failures. Keep its
+# diagnostics: missing files or failed authorization must not mean "safe to edit".
+require_idle_qemu_vars() {
+  local output status=0
+  output=$(run_privileged fuser "$1" 2>&1) || status=$?
+  case $status in
+    0) die 'QEMU variable store is in use; stop the VM before offline registration' ;;
+    1) [[ -z $output ]] || die "could not inspect QEMU variable-store use: $output" ;;
+    *) die "could not inspect QEMU variable-store use (status $status): $output" ;;
+  esac
+}
+
 # Require an explicit VM store and a stopped VM; a new store needs a matching
 # raw OVMF template, while existing stores retain their firmware state.
 check_qemu_firmware() {
@@ -1769,9 +1802,7 @@ check_qemu_firmware() {
   require_command fuser
   if [[ -e $QEMU_VARS ]]; then
     [[ -f $QEMU_VARS ]] || die 'QEMU variable store must be a regular raw OVMF file'
-    if run_privileged fuser -s "$QEMU_VARS"; then
-      die 'QEMU variable store is in use; stop the VM before offline registration'
-    fi
+    require_idle_qemu_vars "$QEMU_VARS"
   else
     [[ -f $QEMU_VARS_TEMPLATE && -r $QEMU_VARS_TEMPLATE ]] \
       || die "matching OVMF template is unavailable: $QEMU_VARS_TEMPLATE"
@@ -1859,7 +1890,7 @@ register_qemu_distribution_kernel() (
       exit 0
     fi
     # Recheck immediately before publishing; the VM must stay stopped throughout.
-    ! run_privileged fuser -s "$vars" || { printf 'Stop QEMU before updating its firmware store.\n' >&2; exit 1; }
+    require_idle_qemu_vars "$vars"
     backup=$(run_privileged mktemp "${vars}.backup-XXXXXX")
     run_privileged cp --preserve=all -- "$vars" "$backup"
     printf 'Previous QEMU firmware store: %s\n' "$backup"
@@ -2924,6 +2955,9 @@ main() {
   validate_arguments
   # Resolve host firmware prerequisites before any earlier destructive phase.
   if is_selected kernel-foundation && [[ $MODE != dry-run ]]; then
+    if [[ $TARGET_HOST == qemu ]]; then
+      printf '\nChecking QEMU firmware before any disk changes. Administrator authorization\nis needed to verify that the variable store is readable and not in use.\n'
+    fi
     check_qemu_firmware
   fi
   if is_selected disk-setup; then

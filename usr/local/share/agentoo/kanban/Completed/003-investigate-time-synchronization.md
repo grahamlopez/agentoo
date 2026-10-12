@@ -1,7 +1,7 @@
 # Clarify time readiness in early-boot diagnostics
 
 Created: 2026-10-11
-Status: Backlog
+Status: Completed
 
 After restoring the QEMU fresh-install checkpoint, the guest booted successfully
 and its diagnostic helper reported zero failed checks. At approximately 31
@@ -36,3 +36,35 @@ Remaining scope: decide whether verify-only output should explicitly distinguish
 successful diagnostic commands from synchronized time, rather than suggesting
 checkpoint readiness through its zero-failed-checks summary. Investigate NTP
 configuration or reachability only if a persistent failure is observed again.
+
+## Fresh-install evidence and output refinement — 2026-10-11
+
+On the fresh installation's first boot, diagnostic commands completed with zero
+failed checks, but checkpoint preflight found `NTPSynchronized=no` and raised an
+uncaught `RuntimeError`. No checkpoint was created. This reproduces the readiness
+difference without restoration; it does not establish a persistent NTP failure.
+
+- Successful diagnostics now distinguish checkpoint preflight from verify-only
+  mode, where synchronized time is not required.
+- Expected preflight failures print `Checkpoint not created:` and exit nonzero
+  without a traceback. Unsynchronized time advises waiting and rerunning.
+- Unexpected errors retain their tracebacks. No wait loop or retry machinery was
+  added, and the synchronized-time requirement remains unchanged.
+
+Validation: isolated execution of the actual Python preflight covers synchronized
+and unsynchronized time, another expected prerequisite failure, and an unexpected
+error. Shell diagnostic summaries are checked in both modes.
+
+## Fresh-guest verification — 2026-10-11
+
+- The user reran firstboot successfully after synchronization and created a
+  checkpoint; no persistent NTP failure was observed.
+- After real default restoration on the fresh guest, `NTPSynchronized=yes` and
+  normal firstboot diagnostics passed.
+- The revised script ran from disposable `/run` files: verify-only printed its
+  readiness distinction, and the real checkpoint preflight passed.
+- Repeating that preflight with only the time query forced to `no` exited nonzero
+  with the concise wait-and-rerun message and no traceback. No capture ran.
+
+The startup delay and diagnostic/readiness distinction are now explained and
+verified. Reopen investigation only if synchronization persistently fails.

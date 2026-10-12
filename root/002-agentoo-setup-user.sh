@@ -102,8 +102,9 @@ if $created_account; then
     git_email=${value:-$git_email}
     identity_file=$home/.gitconfig-local
     [[ ! -e $identity_file && ! -L $identity_file ]] || die 'Git identity file already exists; configure it manually.'
-    runuser -u "$account" -- git config --file "$identity_file" user.name "$git_name"
-    runuser -u "$account" -- git config --file "$identity_file" user.email "$git_email"
+    # runuser retains root's working directory; Git must start in Graham's home.
+    runuser -u "$account" -- git -C "$home" config --file "$identity_file" user.name "$git_name"
+    runuser -u "$account" -- git -C "$home" config --file "$identity_file" user.email "$git_email"
   else
     printf '\nGit identity skipped. Later, run these as Graham (edit the values as needed):\n'
     printf '  git config --file "$HOME/.gitconfig-local" user.name %q\n' "$git_name"

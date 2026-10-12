@@ -206,3 +206,27 @@ All passed. Permission-policy coverage includes all 63 planned tracked files.
 Recovery prerequisites now explicitly include procps/pgrep. The fresh-install
 runbook uses the agreed 100 GiB image. A full fresh install remains the user's next
 validation step; this closeout does not claim that it has run.
+
+## Fresh-install and default-restore validation — 2026-10-11
+
+The user completed a new installation, handoff, firstboot, and Graham's account
+setup, then created `user-created-20261012T025431Z-55395` and disposable root/home
+markers. The fresh target uses separate top-level `@` and `@home` subvolumes.
+
+- The real EFI-hosted command restored system and EFI from that checkpoint while
+  the selected targets were unmounted in a temporary recovery initramfs.
+- The root marker disappeared; the home marker's SHA-256 stayed unchanged. EFI
+  files matched the saved archive, machine identity stayed unchanged, and the
+  named system/home snapshots remained read-only. No nested subvolumes appeared.
+- Boot continued normally from the restored root. Firstboot diagnostics passed,
+  time synchronized, previous journal history remained, and all 63 managed file
+  permissions matched. Btrfs scrub completed over 4.24 GiB with no errors.
+- Temporary recovery image, firmware entry, root SSH test key, temporary SSH
+  enablement, and remaining live marker were removed. Normal boot order stayed
+  unchanged; both complete named checkpoints remain available.
+- The pending Git-identity fix wrote both values as Graham from root's private
+  working directory using a disposable configuration file on the fresh guest.
+
+Recovery preparation exposed two test-helper defects (relative sshd execution
+and initramfs account initialization); both were corrected before restoration.
+These helpers are not part of the shipped checkpoint utility.
