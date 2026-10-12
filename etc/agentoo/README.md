@@ -102,6 +102,12 @@ prompt instead of green. Account-local shell files can override the defaults.
 Install tools with `emerge --ask --noreplace @terminal-env`. Package config
 protection may produce `._cfg*` files; review these before replacing managed defaults.
 
+For Zsh's packaged `zprofile`, the shared version retains Gentoo's environment
+setup, profile scripts, and Nano editor fallback, then prefers Neovim or Vim
+when installed. When the pending package file contains only that base setup,
+keep the managed version (`z` in `dispatch-conf`, zap the new file). Review any
+future package changes before discarding them.
+
 Normal user configs remain local overrides, with no copied or symlinked dotfiles.
 
 - Personal Git identity belongs in user-owned `~/.gitconfig-local`, already

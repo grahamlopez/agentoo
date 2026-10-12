@@ -1,5 +1,6 @@
 # Gentoo login environment; keep package-provided environment integration.
 if [[ -e /etc/profile.env ]]; then . /etc/profile.env; fi
+export EDITOR=${EDITOR:-/bin/nano}
 export PAGER=${PAGER:-/usr/bin/less}
 unset ROOTPATH
 shopts=$-
