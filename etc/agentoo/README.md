@@ -79,6 +79,12 @@ Graham login and `sudo -k; sudo -i` before closing the root console.
 equivalents. `setup-hooks` and `enable-write` remain Agentoo helper commands;
 the older `agentoo-git git ...` form is also supported.
 
+Git aliases in `/etc/gitconfig` are shared by root and ordinary users. They work
+with both `git` and `agentoo-git`; no root-local copy is needed. To verify the
+effective aliases and their source, run
+`git config --show-origin --get-regexp '^alias\.'`. Account-local and repository
+settings can override the shared defaults.
+
 The installer configures `pull.rebase=true` locally in the live Git database, so
 `agentoo-git pull` rebases local commits by default. For an existing installation:
 `agentoo-git git config --local pull.rebase true`. This setting persists in
