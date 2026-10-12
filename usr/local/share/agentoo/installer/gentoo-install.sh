@@ -936,27 +936,35 @@ cleanup_stage3_bootstrap_failure() {
 }
 
 confirm_expected_bootstrap_target_state() {
-  local entry
+  local entry entries
   local -a unexpected=()
 
-  # disk-setup leaves only the empty @home mount and the ESP's empty EFI
-  # directory below the root mount.  A normal full rerun recreates this state.
+  # Inspect as root: the ESP uses umask=0077 during installation and normal boot.
+  # Capture find output with its exit status; process substitutions hide failures
+  # and could misreport an unreadable target as empty or missing.
+  entries=$(run_privileged find "$MOUNT_ROOT" -mindepth 1 -maxdepth 1 -print) \
+    || die "could not inspect bootstrap target: $MOUNT_ROOT"
   while IFS= read -r entry; do
+    [[ -n $entry ]] || continue
     case ${entry##*/} in
       home|boot) ;;
       *) unexpected+=("$entry") ;;
     esac
-  done < <(find "$MOUNT_ROOT" -mindepth 1 -maxdepth 1 -print)
-  while IFS= read -r entry; do unexpected+=("$entry"); done \
-    < <(find "$MOUNT_ROOT/home" -mindepth 1 -maxdepth 1 -print)
+  done <<< "$entries"
+  entries=$(run_privileged find "$MOUNT_ROOT/home" -mindepth 1 -maxdepth 1 -print) \
+    || die "could not inspect bootstrap home: $MOUNT_ROOT/home"
+  while IFS= read -r entry; do [[ -z $entry ]] || unexpected+=("$entry"); done <<< "$entries"
+  entries=$(run_privileged find "$MOUNT_ROOT/boot" -mindepth 1 -maxdepth 1 -print) \
+    || die "could not inspect bootstrap EFI mount: $MOUNT_ROOT/boot"
   while IFS= read -r entry; do
-    [[ ${entry##*/} == EFI ]] || unexpected+=("$entry")
-  done < <(find "$MOUNT_ROOT/boot" -mindepth 1 -maxdepth 1 -print)
-  if [[ ! -d $MOUNT_ROOT/boot/EFI ]]; then
+    [[ -z $entry || ${entry##*/} == EFI ]] || unexpected+=("$entry")
+  done <<< "$entries"
+  if ! run_privileged test -d "$MOUNT_ROOT/boot/EFI"; then
     unexpected+=("missing directory: $MOUNT_ROOT/boot/EFI")
   else
-    while IFS= read -r entry; do unexpected+=("$entry"); done \
-      < <(find "$MOUNT_ROOT/boot/EFI" -mindepth 1 -maxdepth 1 -print)
+    entries=$(run_privileged find "$MOUNT_ROOT/boot/EFI" -mindepth 1 -maxdepth 1 -print) \
+      || die "could not inspect bootstrap EFI directory: $MOUNT_ROOT/boot/EFI"
+    while IFS= read -r entry; do [[ -z $entry ]] || unexpected+=("$entry"); done <<< "$entries"
   fi
 
   ((${#unexpected[@]})) || return 0
