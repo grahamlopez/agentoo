@@ -28,21 +28,15 @@ case ${1:-} in
     git_config remote set-url origin "$SSH_REMOTE"
     printf 'origin now uses SSH for fetch and push: %s\n' "$SSH_REMOTE"
     ;;
-  status|diff|add|commit|push|pull|fetch|log|show)
-    command=$1
-    shift
-    git_config "$command" "$@"
-    ;;
   git)
     shift
     git_config "$@"
     ;;
   '')
-    printf 'usage: agentoo-git {status|diff|add|commit|push|pull|fetch|log|show|git|enable-write|setup-hooks} [arguments...]\n' >&2
+    printf 'usage: agentoo-git [git options] <git command or alias> [arguments...]\n       agentoo-git {enable-write|setup-hooks}\n' >&2
     exit 2
     ;;
   *)
-    printf 'error: unknown agentoo-git command: %s\n' "$1" >&2
-    exit 2
+    git_config "$@"
     ;;
 esac

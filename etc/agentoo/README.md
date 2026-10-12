@@ -73,6 +73,12 @@ Graham login and `sudo -k; sudo -i` before closing the root console.
 
 ## Git updates
 
+`agentoo-git` accepts Git subcommands, aliases, and options directly, using
+`/var/lib/agentoo/repository.git` with `/` as the work tree. For example,
+`agentoo-git br` and `agentoo-git --no-pager log -5` work like their Git
+equivalents. `setup-hooks` and `enable-write` remain Agentoo helper commands;
+the older `agentoo-git git ...` form is also supported.
+
 The installer configures `pull.rebase=true` locally in the live Git database, so
 `agentoo-git pull` rebases local commits by default. For an existing installation:
 `agentoo-git git config --local pull.rebase true`. This setting persists in
