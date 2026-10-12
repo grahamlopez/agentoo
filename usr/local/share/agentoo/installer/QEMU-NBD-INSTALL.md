@@ -86,7 +86,7 @@ attach_target() {
 
 ```bash
 mkdir -p "$INSTALL_DIR"
-qemu-img create -f qcow2 "$IMAGE" 32G
+qemu-img create -f qcow2 "$IMAGE" 100G
 sudo modprobe nbd nbds_max=8 max_part=16
 attach_target
 ```
@@ -197,7 +197,7 @@ if [[ -e "$INSTALL_DIR/OVMF_VARS.4m.fd" ]]; then
   mv "$INSTALL_DIR/OVMF_VARS.4m.fd" "$INSTALL_DIR/OVMF_VARS.4m.fd.previous-$(date +%Y%m%d-%H%M%S)"
 fi
 rm -f "$IMAGE"
-qemu-img create -f qcow2 "$IMAGE" 32G
+qemu-img create -f qcow2 "$IMAGE" 100G
 attach_target
 ```
 
@@ -270,7 +270,8 @@ Snapshots are taken live and sequentially, not atomically across subvolumes.
 No shutdown or installer-host involvement is needed for checkpoint creation.
 QEMU firmware-file backup is optional and outside this guest helper. A restore
 requires a controlled reboot/recovery procedure; do not replace the running root.
-There is no automatic scheduled checkpointing or automatic restore command.
+For on-demand capture and offline recovery, see
+/usr/local/share/agentoo/docs/checkpoints.md. There is no scheduled checkpointing.
 
 After verification/checkpointing, run `/root/002-agentoo-setup-user.sh` to create
 Graham’s account with password-required sudo and an optional SSH login key.

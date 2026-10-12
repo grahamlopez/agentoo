@@ -18,6 +18,7 @@ editing a tracked file changes the live configuration and appears in Git.
 │   ├── gitconfig, tmux.conf           # Shared Git and tmux defaults
 │   ├── ssh/                          # Client defaults and account access policy
 │   └── …                             # Application system defaults (as added)
+├── boot/agentoo/checkpoint.sh         # Standalone recovery-capable shell tool
 ├── home/<user>/.config/               # Real user configs / local overrides (TBD)
 ├── root/
 │   ├── 001-firstboot-verify-and-checkpoint.sh # Verify and optionally checkpoint
@@ -25,6 +26,7 @@ editing a tracked file changes the live configuration and appears in Git.
 ├── usr/local/
 │   ├── bin/
 │   │   ├── agentoo-git                # Manage the live configuration work tree
+│   │   ├── agentoo-checkpoint         # Launcher for the EFI checkpoint tool
 │   │   └── agentoo-permissions        # Check or restore managed file permissions
 │   └── share/agentoo/
 │       ├── docs/                     # Project documentation

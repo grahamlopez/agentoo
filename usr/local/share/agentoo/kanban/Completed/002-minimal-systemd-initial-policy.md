@@ -111,7 +111,7 @@ when migration occurs; the two changes can be planned independently.
 
 The user now authorizes documented ordinary-directory overrides and optional-feature
 masks. The checkpoint design assumes only top-level root/home boundaries. Existing
-VM subvolumes are empty; no removal has occurred. Preserve the named baseline.
+At policy review, the VM subvolumes were empty and had not been removed. Preserve the named baseline.
 
 Systemd 261.2 inspection confirms the three vendor tmpfiles rules. Machined and
 portabled are inactive/static; machined also has a socket and both have D-Bus aliases.
@@ -126,7 +126,7 @@ or ephemeral-container snapshots; enabling those needs a checkpoint-layout revie
 Installer masks are applied just after checkout in portage-foundation, before
 target package operations. Stage3 extraction cannot recreate subvolume objects.
 A fresh install/reboot test is still required before closing this card. Current-VM
-conversion needs a reviewed cleanup plan.
+conversion was scheduled separately; rollout results are recorded below.
 
 Current installer: /usr/local/share/agentoo/installer/gentoo-install.sh.
 
@@ -134,10 +134,10 @@ Validation: on a disposable Btrfs root in the VM, the actual installer function
 created every requested mask. Native systemd-tmpfiles with the local overrides
 created ordinary /srv (0755), /var/lib/machines (0700), and /var/lib/portables (0700).
 After removing all test masks and those directories, rerunning tmpfiles recreated
-ordinary directories again. Installed guest policy and subvolumes remain unchanged.
-The existing directories are root-owned, empty, and match those modes.
+ordinary directories again. That fixture test did not change the installed guest.
+Its existing directories were root-owned, empty, and matched those modes.
 
-Next reviewed conversion: apply the policy/masks on the VM, verify emptiness again,
+Reviewed conversion plan: apply the policy/masks on the VM, verify emptiness again,
 delete only those three current subvolumes, recreate ordinary directories through
 tmpfiles, and verify directory types, health, and later reboot. Do not touch the
 historical baseline snapshots. Full fresh-install validation is still outstanding.
@@ -146,7 +146,63 @@ historical baseline snapshots. Full fresh-install validation is still outstandin
 
 The reviewed policy implementation is complete and was validated on disposable
 Btrfs fixtures using the actual installer mask function and native systemd-tmpfiles.
-This completion does not claim deployment to the installed VM, conversion of its
-three empty subvolumes, or a full fresh-install/reboot validation. Those rollout
-checks remain to be performed before relying on the simplified production layout.
+Full fresh-install validation remains outstanding. The installed-VM rollout below
+validates conversion and reboot/restore behavior, without claiming a fresh install.
 The older named checkpoint retains its historical nested-subvolume layout.
+
+## Installed-VM rollout and checkpoint validation — 2026-10-11
+
+- Updated the guest to the committed systemd policy through a local Git bundle;
+  no authenticated remote operation was performed.
+- Rechecked that all three subvolumes were empty and root-owned. Applied masks,
+  stopped the optional storage managers, deleted only those current subvolumes,
+  and recreated ordinary directories using the native tmpfiles overrides.
+- Verified /srv remains 0755 and machines/portables remain 0700, all root-owned.
+  No nested subvolumes remained below root or home. Normal reboot retained this.
+- Created the complete system/home/EFI checkpoint
+  `vm-restore-test-20261012T002851Z-13713` with the new EFI-hosted shell command.
+  Distfiles cleanup used the default policy. The historical fresh-install and
+  development home-only checkpoints were retained.
+- Changed system, home and EFI canaries, added a system file and a later EFI file,
+  then booted a temporary recovery initramfs with target root/home unmounted.
+  Recovery SSH used the public authorization key and a host key generated in RAM;
+  no installed password hashes or private host keys were included in that image.
+- Default restore reverted system and saved EFI files, removed the later system
+  file, preserved changed home, and preserved the later EFI file.
+- Explicit system/home/EFI restore reverted home too. Repeated system/EFI restore
+  succeeded. Both checkpoint snapshots remained read-only with matching UUIDs;
+  archive checksums and manifests verified. No temporary restore copies remained.
+- Normal boot mounted the replacement subvolumes by name. First-boot diagnostics
+  reported zero failures; boot-identity preflight succeeded and its capture prompt
+  was declined. Time synchronized, networking/HTTPS worked, persistent journal
+  history was present, the scrub timer was active, and all 63 managed permissions
+  matched. Optional storage units remained masked; no nested subvolumes returned.
+- Btrfs scrub completed over 4.92 GiB with no errors; no failed services remained.
+- Removed the temporary recovery firmware entry/image and live canary files.
+  Normal firmware boot order was unchanged. The complete named checkpoint remains
+  available for later recovery, including its saved test canaries.
+
+## Final closeout review and failure tests — 2026-10-11
+
+Disposable Btrfs/FAT images in the VM verified the remaining failure boundaries:
+
+- Checksum entries must name exactly the three required files; a renamed archive
+  entry was rejected even when that alternate file had a matching checksum.
+- Wrong EFI UUID, read-only EFI, incomplete markers, and a mismatched completion
+  marker refused restoration before changing the selected current data. Listing
+  now reports a mismatched marker as incomplete.
+- Real low-space conditions on Btrfs and EFI refused capture before deleting
+  distfiles. Low EFI space also refused restoration before replacing subvolumes.
+- An injected partial EFI copy failed after writing a broken test file. Retrying
+  the same command restored saved files and preserved later EFI additions.
+- The documented mount-and-run path worked with the stock implementation reached
+  from the mounted EFI partition, with target root/home unmounted. No Python or
+  target-root executables were needed for recovery.
+
+The suite also rechecked component selection, conflicting options, declined plans,
+archive corruption, nested/mounted target refusal, abandoned staging cleanup,
+interruption after deleting current root, and repeated successful restoration.
+All passed. Permission-policy coverage includes all 63 planned tracked files.
+Recovery prerequisites now explicitly include procps/pgrep. The fresh-install
+runbook uses the agreed 100 GiB image. A full fresh install remains the user's next
+validation step; this closeout does not claim that it has run.

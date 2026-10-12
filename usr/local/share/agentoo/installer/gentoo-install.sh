@@ -862,7 +862,9 @@ EOF
   run_privileged mkdir -p "$MOUNT_ROOT/home" "$MOUNT_ROOT/boot"
   run_privileged mount -o "subvol=$HOME_SUBVOL,noatime,compress=zstd:1" "/dev/mapper/$LUKS_NAME" "$MOUNT_ROOT/home"
   MOUNTED_HOME=1
-  run_privileged mount "$EFI_PARTITION" "$MOUNT_ROOT/boot"
+  # Match the boot-time FAT mask: permissions are mount-wide on EFI, including
+  # the root-only recovery tool checked out there by config-foundation.
+  run_privileged mount -o umask=0077 "$EFI_PARTITION" "$MOUNT_ROOT/boot"
   MOUNTED_EFI=1
   run_privileged mkdir -p "$MOUNT_ROOT/boot/EFI"
 

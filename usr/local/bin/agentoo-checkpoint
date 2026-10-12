@@ -1,0 +1,8 @@
+#!/bin/sh
+# Recovery media can invoke the EFI implementation directly with sh.
+set -eu
+tool=/boot/agentoo/checkpoint.sh
+[ "$(findmnt -rn --uniq -o TARGET --target /boot)" = /boot ] &&
+[ "$(findmnt -rn --uniq -o FSTYPE --target /boot)" = vfat ] &&
+[ -f "$tool" ] || { echo 'Mount the Agentoo EFI partition at /boot first.' >&2; exit 1; }
+exec sh "$tool" "$@"
