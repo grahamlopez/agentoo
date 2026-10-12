@@ -8,6 +8,19 @@ running these instructions is the production path.
 
 # QEMU NBD Gentoo install
 
+## Optional binary packages during installation
+
+Add `--install-binpkgs` to installer invocations to prefer signed binary
+packages from Gentoo's official binhost. USE flags are respected throughout;
+packages without matching binaries compile normally. When running individual
+phases, repeat the option on system-update, kernel-foundation, and
+first-boot-foundation. The option is not remembered between invocations.
+
+The configuration repository leaves the binhost configured for later explicit
+`emerge --getbinpkg` use, but does not enable binary packages in `FEATURES` or
+`EMERGE_DEFAULT_OPTS`. Ordinary post-install package operations build from source.
+The existing prebuilt distribution kernel is used in either installation mode.
+
 ## Host tools
 
 ```bash

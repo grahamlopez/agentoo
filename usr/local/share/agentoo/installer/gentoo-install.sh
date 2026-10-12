@@ -63,6 +63,9 @@ TARGET_TIMEZONE=${TARGET_TIMEZONE:-$DEFAULT_TIMEZONE}
 TARGET_LOCALE=${TARGET_LOCALE:-$DEFAULT_LOCALE}
 MODE=apply
 ASSUME_YES=0
+INSTALL_BINPKGS=0
+PACKAGE_OPTIONS=(--usepkg=n --getbinpkg=n)
+BINARY_INSTALL_OPTIONS=()
 SELECTED_PHASES=(disk-setup stage3-bootstrap portage-foundation system-update kernel-foundation first-boot-foundation handoff)
 VERBOSE=0
 INTERNAL_PORTAGE_CHROOT=0
@@ -102,6 +105,9 @@ Options:
   --yes                      Automatically continue through ordinary phase and
                               destructive-action confirmations.  This never
                               supplies, skips, or infers secret input.
+  --install-binpkgs          Prefer signed official binaries during installation,
+                              respecting USE flags; compile unmatched packages.
+                              Source builds remain the post-install default.
   --verbose                  Print technical notes and detailed phase output.
                               It does not affect execution or confirmations.
   --phase NAME               Run a named phase (currently: disk-setup,
@@ -233,6 +239,7 @@ parse_args() {
       --disk=*) TARGET_DISK=${1#*=} ;;
       --dry-run) MODE=dry-run ;;
       --yes) ASSUME_YES=1 ;;
+      --install-binpkgs) INSTALL_BINPKGS=1 ;;
       --verbose) VERBOSE=1 ;;
       --phase)
         (($# >= 2)) || die '--phase requires a phase name'
@@ -1212,6 +1219,19 @@ cleanup_portage_foundation_failure() {
   exit "$exit_code"
 }
 
+# The repository supplies binrepos.conf without enabling binary consumption.
+# Only installer commands opt in; use Gentoo's normal signing trust helper.
+prepare_install_binpkgs() {
+  local root=${1:-/} profile
+  (( INSTALL_BINPKGS )) || return 0
+  [[ -r ${root%/}/etc/portage/binrepos.conf/gentoobinhost.conf ]] \
+    || die 'binary installation requires the current agentoo binhost configuration; update the target configuration first'
+  profile=$(readlink "${root%/}/etc/portage/make.profile")
+  [[ $profile == */23.0/desktop/systemd ]] \
+    || die 'official install binhost requires the AMD64 23.0 desktop/systemd profile'
+  chroot "$root" /usr/bin/getuto
+}
+
 portage_foundation_chroot() {
   local profile locale_choice normalized_locale available_locale
 
@@ -1352,6 +1372,11 @@ printf '%s UTF-8\n' en_US.UTF-8 >/etc/locale.gen
 locale-gen
 eselect locale set en_US.utf8
 env-update
+
+The configuration repository supplies the official AMD64 23.0 x86-64 binhost
+in /etc/portage/binrepos.conf/gentoobinhost.conf, with signature verification.
+It is available for explicit emerge --getbinpkg use but is not enabled by
+default. --install-binpkgs opts in only for installer package operations.
 
 This phase validates the effective Portage configuration and repository but
 does not update @world. That update belongs after all common and host-specific
@@ -1532,12 +1557,13 @@ system_update_chroot() {
     [[ $TARGET_CPU_FLAGS =~ ^[a-z0-9_]+([[:blank:]][a-z0-9_]+)*$ ]] || die 'invalid CPU flag list'
   fi
   portageq envvar COMMON_FLAGS >/dev/null
-  # Explicitly disable binary consumption even if inherited configuration enables it.
-  emerge --oneshot --noreplace --usepkg=n --getbinpkg=n dev-vcs/git app-portage/cpuid2cpuflags
+  prepare_install_binpkgs
+  # The choice applies only to installer commands; no persistent opt-in.
+  emerge --oneshot --noreplace "${PACKAGE_OPTIONS[@]}" dev-vcs/git app-portage/cpuid2cpuflags
   emaint --auto sync
   # news list can return 1 after successfully listing items; read displays titles too.
   eselect news read
-  emerge --oneshot --update --usepkg=n --getbinpkg=n sys-apps/portage
+  emerge --oneshot --update "${PACKAGE_OPTIONS[@]}" sys-apps/portage
 
   flags=$TARGET_CPU_FLAGS
   if [[ -z $flags ]]; then
@@ -1549,9 +1575,9 @@ system_update_chroot() {
   install -d /etc/portage/package.use
   printf '*/* cpu_flags_x86: %s\n' "$flags" >/etc/portage/package.use/00cpu-flags
   printf 'Target CPU flags: %s\n' "$flags"
-  emerge --pretend --verbose --update --deep --newuse --usepkg=n --getbinpkg=n @world
+  emerge --pretend --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
   confirm_phase 'initial world update (review relevant news above)'
-  emerge --verbose --update --deep --newuse --usepkg=n --getbinpkg=n @world
+  emerge --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
 
   pending=$(pending_config_updates)
   if [[ -n $pending ]]; then
@@ -1567,7 +1593,7 @@ system_update_chroot() {
     pending=$(pending_config_updates)
     [[ -z $pending ]] || die "configuration updates remain unresolved: $pending"
   fi
-  emerge --verbose --usepkg=n --getbinpkg=n @preserved-rebuild
+  emerge --verbose "${PACKAGE_OPTIONS[@]}" @preserved-rebuild
   pending=$(pending_config_updates)
   [[ -z $pending ]] || die "rebuilds left configuration updates requiring review: $pending"
   git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ --no-pager diff --stat
@@ -1587,13 +1613,17 @@ System update: reconcile the base system with target policy
 Install tools and synchronize repositories
 ------------------------------------------
 
-Install target-side Git and CPU detection tools from source, synchronize
-repositories, and read Gentoo news before approving the initial world update.
+Install target-side Git and CPU detection tools using the selected package
+policy, synchronize repositories, and read Gentoo news before approving the
+initial world update. PACKAGE_OPTIONS disables binaries by default; with
+--install-binpkgs it enables downloads and requires matching USE flags and
+unchanged dependencies. Packages without suitable binaries build from source.
+Gentoo getuto prepares signing trust before binary-enabled package operations.
 
-emerge --oneshot --noreplace --usepkg=n --getbinpkg=n dev-vcs/git app-portage/cpuid2cpuflags
+emerge --oneshot --noreplace "${PACKAGE_OPTIONS[@]}" dev-vcs/git app-portage/cpuid2cpuflags
 emaint --auto sync
 eselect news read
-emerge --oneshot --update --usepkg=n --getbinpkg=n sys-apps/portage
+emerge --oneshot --update "${PACKAGE_OPTIONS[@]}" sys-apps/portage
 
 Update Portage first so the world update uses the current package manager.
 
@@ -1614,8 +1644,8 @@ Review and update the base system
 
 Show the proposed package changes and ask before proceeding with the update.
 
-emerge --pretend --verbose --update --deep --newuse --usepkg=n --getbinpkg=n @world
-emerge --verbose --update --deep --newuse --usepkg=n --getbinpkg=n @world
+emerge --pretend --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
+emerge --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
 
 Review configuration and rebuild consumers
 ------------------------------------------
@@ -1627,7 +1657,7 @@ Then rebuild preserved-library consumers and show tracked configuration changes.
 
 install -d -m 700 "$archive_dir"
 dispatch-conf
-emerge --verbose --usepkg=n --getbinpkg=n @preserved-rebuild
+emerge --verbose "${PACKAGE_OPTIONS[@]}" @preserved-rebuild
 git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ --no-pager diff --stat
 agentoo-git diff
 
@@ -1644,7 +1674,7 @@ CPU flags:            ${TARGET_CPU_FLAGS:-detect from the running machine}
 
   * install Git and CPU detection tools, synchronize repositories, and read news;
   * save target CPU flags and review the proposed @world update;
-  * ask before updating packages with the existing compilation settings;
+  * ask before updating packages with the selected installer package policy;
   * review pending configuration updates interactively with dispatch-conf; and
   * rebuild preserved-library consumers and show configuration changes.
 EOF
@@ -1670,7 +1700,7 @@ EOF
   confirm_phase 'system update'
   # Preserve the mounted target on failure so builds and merges can be resumed.
   local internal_script=/run/$PROGRAM.update.$$
-  local -a update_options=()
+  local -a update_options=("${BINARY_INSTALL_OPTIONS[@]}")
   (( ASSUME_YES == 0 )) || update_options+=(--yes)
   run_privileged install -m 700 "$0" "$MOUNT_ROOT$internal_script"
   # Keep cleanup in the same root process: sudo credentials may expire during
@@ -2101,19 +2131,20 @@ POLICY
   # (firmware -> virtual/dist-kernel) from selecting the source provider.
   # Explicit packages, rather than @early_install (which also contains sources
   # and Genkernel). kernel-bin is an ebuild containing a prebuilt kernel; this
-  # works even with the installer's policy of disabling Portage binpkg use.
-  emerge --pretend --verbose --update --newuse --usepkg=n --getbinpkg=n "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
+  # works in both source-only and binary-preferred installation modes.
+  prepare_install_binpkgs
+  emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
   confirm_phase 'distribution kernel packages (review the plan above)'
   # Dracut modules require target-side tools before the kernel postinst runs.
   # This transaction has no firmware -> virtual/dist-kernel dependency.
-  emerge --verbose --update --newuse --usepkg=n --getbinpkg=n "${tools[@]}"
+  emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}"
   # Fail closed if local overrides re-enable firmware-writing plugins.
   local hook
   for hook in /usr/lib/kernel/install.d/*efistub* /etc/kernel/install.d/*efistub*; do
     [[ ! -e $hook ]] || die "unexpected firmware registration hook: $hook"
   done
-  emerge --verbose --update --newuse --usepkg=n --getbinpkg=n "${packages[@]}" sys-kernel/gentoo-kernel-bin
-  emerge --oneshot --verbose --usepkg=n --getbinpkg=n @module-rebuild
+  emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
+  emerge --oneshot --verbose "${PACKAGE_OPTIONS[@]}" @module-rebuild
   atom=$(portageq best_version / sys-kernel/gentoo-kernel-bin)
   [[ -n $atom ]] || die 'binary distribution kernel was not installed'
   # pkg_config regenerates the initramfs after external modules are ready,
@@ -2348,7 +2379,7 @@ PLAN
   check_qemu_firmware
   confirm_phase 'distribution kernel foundation'
   local helper=/run/$PROGRAM.kernel.$$
-  local -a options=()
+  local -a options=("${BINARY_INSTALL_OPTIONS[@]}")
   (( ASSUME_YES == 0 )) || options+=(--yes)
   run_privileged install -m 700 "$0" "$MOUNT_ROOT$helper"
   run_privileged /bin/bash -c '
@@ -2423,9 +2454,10 @@ firstboot_offline() {
   run_privileged chmod 700 "$root/root/002-agentoo-setup-user.sh"
   local -a packages=(net-misc/dhcpcd)
   [[ $TARGET_HOST == qemu ]] || packages+=(net-wireless/wpa_supplicant)
-  chroot "$root" /usr/bin/emerge --pretend --verbose --update --newuse --usepkg=n --getbinpkg=n "${packages[@]}"
+  prepare_install_binpkgs "$root"
+  chroot "$root" /usr/bin/emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
   confirm_phase 'first-boot networking packages (review the plan above)'
-  chroot "$root" /usr/bin/emerge --verbose --update --newuse --usepkg=n --getbinpkg=n "${packages[@]}"
+  chroot "$root" /usr/bin/emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
 
   # Python writes persistent files atomically and rejects unowned conflicts.
   # Imported credentials are never printed, passed in argv, or tracked in Git.
@@ -2717,7 +2749,7 @@ NOTES
   local source
   for source in proc sys dev run; do mountpoint -q "$MOUNT_ROOT/$source" || die "missing chroot mount: $source"; done
   confirm_phase 'first-boot foundation'
-  local -a options=()
+  local -a options=("${BINARY_INSTALL_OPTIONS[@]}")
   (( ASSUME_YES == 0 )) || options+=(--yes)
   run_privileged /bin/bash "$0" --internal-firstboot-offline --disk "$TARGET_DISK" \
     --mount-root "$MOUNT_ROOT" --target-host "$TARGET_HOST" --hostname "$TARGET_HOSTNAME" \
@@ -2935,6 +2967,10 @@ PLAN
 
 main() {
   parse_args "$@"
+  if (( INSTALL_BINPKGS )); then
+    PACKAGE_OPTIONS=(--usepkg=y --getbinpkg=y --binpkg-respect-use=y --binpkg-changed-deps=y)
+    BINARY_INSTALL_OPTIONS=(--install-binpkgs)
+  fi
   if (( INTERNAL_FIRSTBOOT_OFFLINE )); then
     case ${TARGET_DISK##*/} in *[0-9]) EFI_PARTITION=${TARGET_DISK}p1 ;; *) EFI_PARTITION=${TARGET_DISK}1 ;; esac
     firstboot_offline
@@ -2953,6 +2989,11 @@ main() {
     return
   fi
   validate_arguments
+  if (( INSTALL_BINPKGS )); then
+    log 'Package policy: prefer signed binaries with matching USE flags; otherwise build from source'
+  else
+    log 'Package policy: build from source'
+  fi
   # Resolve host firmware prerequisites before any earlier destructive phase.
   if is_selected kernel-foundation && [[ $MODE != dry-run ]]; then
     if [[ $TARGET_HOST == qemu ]]; then
