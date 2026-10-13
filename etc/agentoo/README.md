@@ -158,6 +158,11 @@ host-visible `/dev/shm` by default; `--no-ram-builds` selects `/var/tmp` for an 
 including its child chroot phases. QEMU's booted guest uses normal disk-backed
 build storage.
 
+Handoff verifies the installation and prints cleanup/boot guidance. It leaves
+target mounts and LUKS open; teardown is manual. QEMU images must be unmounted,
+closed, and detached from NBD before starting the guest. Automatic teardown was
+removed after repeated namespace-holder failures made its complexity excessive.
+
 Kernel policy is tracked in `/etc/portage/package.use/kernel`,
 `/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
 The stable binary distribution kernel remains the fallback; the future custom

@@ -25,7 +25,7 @@
 #   broad initramfs, then validate EFI files and register QEMU firmware offline.
 #   first-boot-foundation: configure mounts, identity, root login, minimal
 #   networking, packaged journal defaults, time synchronization and Btrfs scrubbing.
-#   handoff: verify and unmount the target, close LUKS, and print boot guidance.
+#   handoff: verify the mounted target and print manual cleanup and boot guidance.
 #
 # It executes selected phases by default.  Use --dry-run to print plans without
 # making changes.  Disk setup also requires confirmation of the exact target.
@@ -2566,7 +2566,7 @@ NOTES
     --luks-name "$LUKS_NAME" "${options[@]}"
 }
 
-# Capture the connected image before releasing the target. Never guess a VM path.
+# Identify the connected image for manual cleanup/boot guidance. Never guess a VM path.
 qemu_handoff_image() {
   run_privileged /bin/bash -s -- "$TARGET_DISK" <<'IMAGE'
 set -euo pipefail
@@ -2589,7 +2589,8 @@ print_qemu_handoff_commands() {
   local image=$1 code=${QEMU_VARS_TEMPLATE/OVMF_VARS/OVMF_CODE}
   local pid_file=/sys/block/${TARGET_DISK##*/}/pid
   printf '\nQEMU boot cheat sheet\n---------------------\n'
-  printf 'Target filesystems are unmounted and LUKS is closed. No reattachment is needed.\n'
+  printf 'The target remains mounted and LUKS is open. Clean up and detach before starting QEMU.\n'
+  printf 'Leave any chroot and change to a directory outside the target before cleanup.\n'
   printf 'The boot entry was prepared during kernel setup; do not run host efibootmgr.\n'
   if [[ -z $image ]]; then
     image=/path/to/attached-target.qcow2
@@ -2603,7 +2604,8 @@ print_qemu_handoff_commands() {
     printf 'Replace OVMF_CODE below with the CODE image matching your VARS template.\n'
   fi
   printf '\nVM_IMAGE=%q\nVM_VARS=%q\nOVMF_CODE=%q\n' "$image" "${QEMU_VARS:-/path/to/prepared/OVMF_VARS.fd}" "$code"
-  printf 'if sudo qemu-nbd --disconnect %q; then\n' "$TARGET_DISK"
+  printf 'if sudo umount --recursive %q && sudo cryptsetup close %q && sudo qemu-nbd --disconnect %q; then\n' \
+    "$MOUNT_ROOT" "$LUKS_NAME" "$TARGET_DISK"
   printf '  for attempt in {1..50}; do\n'
   printf '    [[ ! -e %q ]] && qemu-img info "$VM_IMAGE" >/dev/null 2>&1 && break\n' "$pid_file"
   printf '    sleep 0.1\n  done\n'
@@ -2627,20 +2629,24 @@ COMMANDS
   printf 'Reference: usr/local/share/agentoo/installer/QEMU-NBD-INSTALL.md\n'
 }
 
+# Handoff deliberately leaves teardown to the user. Automatic unmount/LUKS close
+# repeatedly hit busy mappings, including mount copies in other namespaces during
+# QEMU testing and a failed physical handoff. The error handling and host-specific
+# edge cases outweighed the benefit.
+# Before proposing automation again, justify that complexity against this small,
+# explicit manual procedure; do not grow another namespace-recovery subsystem here.
+# Failed disk-setup attempts still clean up the resources they created.
 handoff() {
   log 'Phase: handoff'
   cat <<PLAN
 Handoff plan
 Target root: $MOUNT_ROOT
   * verify the target disk layout and first-boot configuration;
-  * unmount chroot filesystems, the ESP, home, and root;
-  * report busy mappings for explicit documented recovery;
-  * close /dev/mapper/$LUKS_NAME; and
-  * leave the target powered off and print the remaining boot steps.
+  * leave target mounts and /dev/mapper/$LUKS_NAME open; and
+  * print manual cleanup and remaining boot steps.
 PLAN
   if (( VERBOSE )); then
-    printf '\nOrdinary unmounts stop on busy filesystems. No forced or lazy unmounts are used.\n'
-    printf 'NBD attachment and destination firmware selection remain manual.\n'
+    printf '\nHandoff verifies and reports only. Cleanup and destination boot selection are manual.\n'
   fi
   [[ $MODE != dry-run ]] || { printf '\nDry run: no mounts or encrypted mappings changed.\n'; return; }
   [[ -n $TARGET_DISK ]] || die 'handoff requires --disk'
@@ -2648,37 +2654,23 @@ PLAN
   resolve_target_partitions
   verify_disk_setup || die 'handoff requires verified target mounts'
   run_privileged test -s "$MOUNT_ROOT/etc/fstab" || die 'first-boot fstab is missing'
-  local version cmdline esp_uuid source qemu_image=
+  local version cmdline esp_uuid qemu_image=
   version=$(run_privileged tail -n 1 "$MOUNT_ROOT/etc/kernel/gentoo-dist.version")
   [[ $version =~ ^[A-Za-z0-9._+-]+-gentoo-dist(-bin)?$ ]] || die 'invalid recorded kernel version'
   cmdline=$(run_privileged cat "$MOUNT_ROOT/etc/kernel/cmdline")
   esp_uuid=$(run_privileged cat "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid")
-  # Print saved registration parameters before cleanup can fail. Repeat after
-  # success so they are also available when the installer's terminal is free.
-  if [[ $TARGET_HOST != qemu ]]; then
-    printf '\nEFI commands for use after target cleanup completes:\n'
-    print_physical_kernel_boot_commands "$version" "$cmdline" "$esp_uuid"
-  fi
   if [[ $TARGET_HOST == qemu ]]; then
     qemu_image=$(qemu_handoff_image) || qemu_image=
   fi
-  confirm_phase 'handoff'
-  for source in run dev sys proc; do
-    if mountpoint -q "$MOUNT_ROOT/$source"; then
-      run_privileged umount --recursive "$MOUNT_ROOT/$source" || die "could not unmount $source; stop processes using the target and retry"
-    fi
-  done
-  for source in "$MOUNT_ROOT/boot" "$MOUNT_ROOT/home" "$MOUNT_ROOT"; do
-    run_privileged umount "$source" || die "could not unmount $source; remaining mounts and LUKS mapping are preserved"
-  done
-  run_privileged cryptsetup close "$LUKS_NAME" ||
-    die 'mapping is busy; inspect holders and follow the documented namespace-recovery procedure'
-  log 'Handoff complete: target unmounted and LUKS closed'
+  log 'Handoff complete: installation verified; target remains mounted and LUKS open'
   if [[ $TARGET_HOST == qemu ]]; then
     print_qemu_handoff_commands "$qemu_image"
   else
     print_physical_kernel_boot_commands "$version" "$cmdline" "$esp_uuid"
+    printf '\nManual cleanup before booting (leave any chroot and change to a directory outside the target first):\n'
+    printf 'sudo umount --recursive %q && sudo cryptsetup close %q\n' "$MOUNT_ROOT" "$LUKS_NAME"
   fi
+  printf '\nIf cleanup reports a busy filesystem or mapping, stop and inspect holders; see the documented namespace-recovery procedure.\n'
   printf 'Unlock LUKS, log in with the target root password, and verify mounts, networking and failed services.\n'
 }
 

@@ -519,3 +519,32 @@ Remaining work:
   wrapper argument/status preservation and unprivileged usage, and whitespace.
   The user will reconcile the unpublished physical-host commit and pull the
   shared changes for further execution validation.
+
+### 2026-10-13 Make handoff verification and guidance only
+
+- User approved removing automatic final unmount/LUKS closure after physical
+  handoff reached a busy mapping despite visible unmounts succeeding. Earlier
+  QEMU testing had identified mount copies in service namespaces; the physical
+  failure's exact holder was not inspected. Ordinary installation completion
+  should not be reported as failed because teardown needs host-specific recovery.
+- Handoff now validates the mounted target, reads its saved boot data, and prints
+  manual cleanup and boot instructions. Mounts and LUKS remain open; removed the
+  unnecessary confirmation for this reporting phase. Failed disk-setup attempts
+  retain their cleanup of resources created by that attempt. Offline QEMU firmware
+  registration remains unchanged.
+- At the user's request, added a prominent installer comment recording that
+  automatic teardown's error handling and edge cases outweighed its convenience.
+  Future automation proposals should justify reintroducing that complexity rather
+  than growing another namespace-recovery subsystem in the installer.
+- Retained the user-invoked runbook detach helper, adding explicit returns on
+  unmount/LUKS-close/NBD-disconnect failures. Printed QEMU launch instructions
+  condition detachment on successful unmount and LUKS closure, then retain the
+  connection/image-lock checks. Guidance explains leaving chroots and moving the
+  shell outside the target before cleanup. Updated README and runbook semantics.
+- Bash syntax and whitespace checks pass. Focused physical/QEMU handoff fixtures
+  allow only privileged reads, reject confirmation/mutation, preserve target files,
+  and validate generated shell syntax. Failure fixtures verify both the printed
+  QEMU command chain and manual detach helper stop before NBD disconnect when
+  unmount or LUKS closure fails. No live target or mounts were changed; a fresh
+  installation with the revised reporting phase has not been run. Changes remain
+  local/uncommitted.

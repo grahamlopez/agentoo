@@ -52,18 +52,18 @@ detach_target() {
   local nbd_pid
   local attempt
 
-  if mountpoint -q /mnt/gentoo/run; then sudo umount --recursive /mnt/gentoo/run; fi
-  if mountpoint -q /mnt/gentoo/dev; then sudo umount --recursive /mnt/gentoo/dev; fi
-  if mountpoint -q /mnt/gentoo/sys; then sudo umount --recursive /mnt/gentoo/sys; fi
-  if mountpoint -q /mnt/gentoo/proc; then sudo umount --recursive /mnt/gentoo/proc; fi
-  if mountpoint -q /mnt/gentoo/boot; then sudo umount /mnt/gentoo/boot; fi
-  if mountpoint -q /mnt/gentoo/home; then sudo umount /mnt/gentoo/home; fi
-  if mountpoint -q /mnt/gentoo; then sudo umount /mnt/gentoo; fi
-  if sudo cryptsetup status cryptroot >/dev/null 2>&1; then sudo cryptsetup close cryptroot; fi
+  if mountpoint -q /mnt/gentoo/run; then sudo umount --recursive /mnt/gentoo/run || return; fi
+  if mountpoint -q /mnt/gentoo/dev; then sudo umount --recursive /mnt/gentoo/dev || return; fi
+  if mountpoint -q /mnt/gentoo/sys; then sudo umount --recursive /mnt/gentoo/sys || return; fi
+  if mountpoint -q /mnt/gentoo/proc; then sudo umount --recursive /mnt/gentoo/proc || return; fi
+  if mountpoint -q /mnt/gentoo/boot; then sudo umount /mnt/gentoo/boot || return; fi
+  if mountpoint -q /mnt/gentoo/home; then sudo umount /mnt/gentoo/home || return; fi
+  if mountpoint -q /mnt/gentoo; then sudo umount /mnt/gentoo || return; fi
+  if sudo cryptsetup status cryptroot >/dev/null 2>&1; then sudo cryptsetup close cryptroot || return; fi
   if [[ -r $nbd_pid_file ]]; then
     nbd_pid=$(<"$nbd_pid_file")
     if [[ -n $nbd_pid && $nbd_pid != 0 ]]; then
-      sudo qemu-nbd --disconnect "$NBD_DEVICE"
+      sudo qemu-nbd --disconnect "$NBD_DEVICE" || return
       for attempt in {1..50}; do
         [[ ! -r $nbd_pid_file ]] && break
         nbd_pid=$(<"$nbd_pid_file")
@@ -135,10 +135,10 @@ cd /home/graham/Projects/agentoo
 
 ```
 
-The default run finishes with `handoff`: it unmounts the target and closes LUKS.
-After successful completion, proceed to detachment and boot testing below.
-The phase-resume instructions below apply when installation stopped before
-handoff and the target is still mounted.
+The default run finishes with `handoff`: it verifies the target and prints manual
+cleanup and boot instructions. Target filesystems remain mounted and LUKS stays
+open. After successful completion, run `detach_target` below before starting QEMU.
+The phase-resume instructions below also reuse the mounted target.
 
 The default installer now also runs `system-update`. CPU detection occurs on
 the installation host; the VM boot command below uses `-cpu host` to expose
@@ -199,7 +199,7 @@ asks you to create the Gentoo root login password, enter your chosen new guest
 password twice. This phase also installs Zsh and makes it root's login shell,
 using Agentoo's shared configuration with a red hostname in root's prompt.
 If you resumed first-boot configuration separately, run handoff
-before detachment:
+to verify the mounted target and print guidance, then detach manually:
 
 ```bash
 ./usr/local/share/agentoo/installer/gentoo-install.sh --disk "$NBD_DEVICE" \
@@ -207,6 +207,10 @@ before detachment:
 ```
 
 ## Detach and preserve the target for later work
+
+Leave any chroot and change to a directory outside `/mnt/gentoo` first. The
+helper stops on failed unmounts or LUKS closure; resolve those before disconnecting
+NBD or starting QEMU.
 
 ```bash
 detach_target
@@ -408,9 +412,11 @@ If first-boot packages leave protected configuration updates, the installer
 reports them and continues. Review them after boot with `sudo dispatch-conf`,
 preserving the intended shared configuration. Use an ordinary interactive terminal.
 Disk-setup failures still clean up the resources created by that attempt. If a
-mapping remains busy after ordinary handoff unmounts, use the explicit
+mapping remains busy after ordinary manual unmounts, use the explicit
 [namespace recovery procedure](../docs/skills/qemu-nbd/references/namespace-recovery.md);
-normal handoff no longer enters other processes' mount namespaces automatically.
+Handoff leaves all mounts/mappings intact and never enters other processes'
+mount namespaces. Do not start QEMU until unmounting, LUKS closure, and NBD
+detachment succeed.
 Keep the installation mount root outside `/tmp`: service-private `/tmp` overlays
 can hide propagated target mounts from the ordinary recovery procedure. The
 disposable image itself may still live in `/tmp`.
