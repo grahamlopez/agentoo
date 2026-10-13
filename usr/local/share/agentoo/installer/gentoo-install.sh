@@ -810,6 +810,15 @@ EOF
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
   [[ -b $TARGET_DISK ]] || die "target is not a block device: $TARGET_DISK"
   [[ $(lsblk -dn -o TYPE "$TARGET_DISK") == disk ]] || die "target must be a whole disk, not a partition or mapper: $TARGET_DISK"
+  local target_bytes
+  target_bytes=$(lsblk --bytes --nodeps --noheadings --output SIZE "$TARGET_DISK") \
+    || die "could not read target capacity: $TARGET_DISK"
+  [[ $target_bytes =~ ^[[:space:]]*[0-9]+[[:space:]]*$ && $target_bytes -gt 0 ]] \
+    || die "target has zero capacity: $TARGET_DISK; attach its backing image before running the installer"
+  if [[ ${TARGET_DISK##*/} =~ ^nbd[0-9]+$ ]]; then
+    [[ -s /sys/block/${TARGET_DISK##*/}/pid ]] \
+      || die "NBD target is disconnected: $TARGET_DISK; attach its backing image before running the installer"
+  fi
   [[ $EFI_SIZE =~ ^[1-9][0-9]*[MmGg]$ ]] || die "EFI size must look like 1G or 512M: $EFI_SIZE"
   [[ $MOUNT_ROOT == /* && $MOUNT_ROOT != / ]] || die "mount root must be a non-root absolute path: $MOUNT_ROOT"
   for value in "$LUKS_NAME" "$BTRFS_LABEL"; do
