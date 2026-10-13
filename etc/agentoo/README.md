@@ -63,6 +63,8 @@ primary group and supplementary `wheel,portage`, and prompts for an account
 password when none is usable and an optional SSH public key. Reruns preserve a
 usable password and resume the optional Git identity choice after interruption. Conflicting identities stop setup; existing
 home contents and supplementary groups are preserved. No skeleton dotfiles are copied.
+After installing packages, setup reapplies Agentoo's file permission policy so
+shared Git configuration remains readable when configuring Graham's identity.
 
 The managed sudo policy requires Graham’s password. SSH keys remain local in
 `/home/graham/.ssh/authorized_keys`, labeled `agentoo:graham:ssh-login` plus any
@@ -78,6 +80,13 @@ Graham login and `sudo -k; sudo -i` before closing the root console.
 `agentoo-git br` and `agentoo-git --no-pager log -5` work like their Git
 equivalents. `setup-hooks` and `enable-write` remain Agentoo helper commands;
 the older `agentoo-git git ...` form is also supported.
+
+Commands run as root; invoking the wrapper as an ordinary user requests sudo
+authorization automatically. Git identity, configuration, and SSH access then
+come from root's context.
+
+The shared Git configuration trusts `/var/db/repos/gentoo`, matching the entry
+Portage adds for its Git repository backend.
 
 Git aliases in `/etc/gitconfig` are shared by root and ordinary users. They work
 with both `git` and `agentoo-git`; no root-local copy is needed. To verify the

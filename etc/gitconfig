@@ -70,3 +70,5 @@
     path = ~/.gitconfig-local
 [init]
     defaultBranch = main
+[safe]
+    directory = /var/db/repos/gentoo

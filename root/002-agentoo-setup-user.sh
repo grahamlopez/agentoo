@@ -51,6 +51,9 @@ read -r -p 'SSH public key: ' public_key
 packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git)
 # Show Portage's dependency/build plan and obtain its own confirmation.
 emerge --ask --noreplace "${packages[@]}"
+# Package/configuration tools can rewrite shared files with root-only modes.
+# Restore the declared policy before running Git as the new account.
+/usr/local/bin/agentoo-permissions --fix
 shell=$(readlink -f "$(command -v zsh)") || die 'Zsh is unavailable.'
 grep -Fxq "$shell" /etc/shells || die 'Installed Zsh is not listed in /etc/shells.'
 [[ -f /etc/ssh/sshd_config.d/10-agentoo-graham.conf && ! -L /etc/ssh/sshd_config.d/10-agentoo-graham.conf ]] || die 'Managed SSH policy is missing; update the agentoo checkout.'

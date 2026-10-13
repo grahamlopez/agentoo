@@ -5,6 +5,11 @@ readonly GIT_DIR=/var/lib/agentoo/repository.git
 readonly WORK_TREE=/
 readonly SSH_REMOTE=git@github.com:grahamlopez/agentoo.git
 
+if [[ $# -gt 0 ]] && (( EUID != 0 )); then
+  printf 'Agentoo manages root-owned system configuration; requesting sudo authorization.\n' >&2
+  exec sudo -- /usr/local/bin/agentoo-git "$@"
+fi
+
 git_config() {
   git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" "$@"
 }

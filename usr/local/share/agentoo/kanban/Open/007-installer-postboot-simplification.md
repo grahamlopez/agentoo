@@ -469,3 +469,53 @@ Remaining work:
   ShellCheck, whitespace, and permission coverage also pass. The host binary is
   older than the terminal-requiring version reported on the physical target;
   that target's execution and actual wireless authentication remain to be checked.
+
+### 2026-10-13 Physical post-boot setup: Git access and file permissions
+
+- User reports completing physical post-boot setup. Ordinary-user agentoo-git
+  emitted a misleading broken-branch message for the root-owned system repository.
+  Added announced sudo elevation through the installed root-owned wrapper before
+  Git execution. Argument-free usage remains unprivileged; elevated Git uses root's
+  identity/configuration/SSH context. Targeted checks preserve arguments, exit
+  status, and usage behavior; Bash syntax and whitespace checks pass.
+- Inspected the unlocked thinktop disk through private read-only Btrfs mounts.
+  Verified LUKS identity and read-only mapping; no installed files were modified.
+  Local commit `4477c55` adds only `safe.directory = /var/db/repos/gentoo` to the
+  shared gitconfig. The installed account script matches the reviewed version.
+- User clarified the Git identity step had failed because `/etc/gitconfig` had
+  incorrect permissions. Running agentoo-permissions fixed them and setup then
+  succeeded; committing the content change happened afterward and was not the fix.
+  Current gitconfig is root-owned 0644; Graham's identity file is user-owned 0600,
+  with the intended name/email and a completed identity marker.
+- Added the existing agentoo-permissions --fix call after the account script's
+  package transaction, before any Git command as Graham. This repairs declared
+  shared-file permissions rather than requiring a clean Git work tree. The exact
+  tool that changed the original mode remains unknown; a targeted Git rewrite
+  under umask 077 preserved 0644, so no causal claim is made about that rewrite.
+- Both inspection mounts were unmounted. The user-opened read-only
+  agentoo-inspect mapping remains available for explicit closure. Changes to the
+  wrapper, account script, documentation, and this log remain local/uncommitted.
+
+### 2026-10-13 Git configuration addition provenance
+
+- Traced the safe.directory content addition to Portage's Git backend:
+  [GitSync.add_safe_directory](https://github.com/gentoo/portage/blob/master/lib/portage/sync/modules/git/git.py)
+  checks for the configured repository location and, if absent, calls
+  `git config --system --add safe.directory LOCATION`. Clone, update, and repository
+  head retrieval call this method, so it can occur during ordinary package work.
+  This matches the physical target's `/var/db/repos/gentoo` addition exactly.
+- Recommend tracking that exact entry alongside Agentoo's fixed Gentoo repository
+  path, to keep expected Gentoo-managed configuration from appearing as an
+  uncommitted shared-file change. The original permission change remains
+  untraced; identifying this content writer does not establish a mode-change cause.
+
+### 2026-10-13 Adopt shared Git trust entry and commit physical setup fixes
+
+- At the user's request, added exactly `/var/db/repos/gentoo` to the shared
+  safe.directory list. Included the announced agentoo-git sudo elevation and
+  post-package account-setup permission repair in the same commit, with their
+  documentation and rationale. No physical installation files were changed.
+- Validated Git configuration parsing and the exact trust entry, Bash syntax,
+  wrapper argument/status preservation and unprivileged usage, and whitespace.
+  The user will reconcile the unpublished physical-host commit and pull the
+  shared changes for further execution validation.
