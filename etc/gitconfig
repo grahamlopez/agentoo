@@ -1,9 +1,4 @@
 # Agentoo shared Git defaults; ~/.gitconfig and repository settings override these.
-# proposed removal: Personal author identity belongs in user-local Git configuration.
-# [user]
-#     name = graham
-#     email = m477@duck.com
-# 
 [color]
     ui = true
 [color "decorate"]
@@ -29,8 +24,6 @@
     # -X keeps less off the alternate screen, so log/diff output stays in the
     # scrollback after quitting instead of being wiped. Intentional - not cruft.
     pager = less -RMFX
-# proposed removal: The shared excludes file now has a system location.
-#    excludesFile = ~/.gitignore
     excludesFile = /etc/agentoo/gitignore
 
 [alias]
@@ -63,8 +56,6 @@
 [fetch]
     prune = true
 [pull]
-# proposed removal: Fast-forward-only rejects divergence instead of using the chosen rebase policy.
-#    ff = only
     rebase = true
 [diff]
     algorithm = histogram

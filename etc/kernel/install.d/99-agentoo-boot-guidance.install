@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Optional copy/paste guidance only: never execute firmware commands.
+[[ ${1:-} == add ]] || exit 0
+version=${2:-}
+case $version in *-gentoo-dist|*-gentoo-dist-bin) ;; *) exit 0 ;; esac
+# Offline installation already prints destination-specific guidance.
+[[ $(stat -Lc '%d:%i' / 2>/dev/null) == $(stat -Lc '%d:%i' /proc/1/root 2>/dev/null) ]] || exit 0
+[[ -s /etc/kernel/cmdline && -s /boot/EFI/Gentoo/kernel-$version.efi &&
+   -s /boot/EFI/Gentoo/initramfs-$version.img ]] || exit 0
+esp=$(findmnt -rn -o SOURCE --mountpoint /boot) || exit 0
+parent=$(lsblk -dnro PKNAME "$esp") || exit 0
+part=$(lsblk -dnro PARTN "$esp") || exit 0
+[[ -n $parent && $part =~ ^[0-9]+$ ]] || exit 0
+cmdline=$(cat /etc/kernel/cmdline) || exit 0
+options=()
+grep -Fxq 'GENTOO_TARGET_HOST="startop"' /etc/agentoo/target-host && options+=(--full-dev-path)
+{
+  printf '\nNew distribution kernel: %s\nManual EFI registration (inspect existing entries first):\n' "$version"
+  printf 'sudo efibootmgr --create-only'
+  printf ' %q' "${options[@]}" --disk "/dev/$parent" --part "$part" \
+    --label "Gentoo distribution $version" --loader "\\EFI\\Gentoo\\kernel-$version.efi" \
+    --unicode "$cmdline initrd=\\EFI\\Gentoo\\initramfs-$version.img"
+  printf '\nRetain a tested previous entry; this command leaves BootOrder unchanged.\n'
+} || :
+exit 0

@@ -1,6 +1,4 @@
-sys-kernel/gentoo-kernel ~amd64
 sys-kernel/gentoo-sources ~amd64
-virtual/dist-kernel ~amd64
 app-misc/keyd ~amd64
 gui-wm/hyprland ~amd64
 gui-apps/hyprpaper ~amd64

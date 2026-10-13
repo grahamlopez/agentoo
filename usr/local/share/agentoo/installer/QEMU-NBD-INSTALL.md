@@ -21,6 +21,15 @@ The configuration repository leaves the binhost configured for later explicit
 `EMERGE_DEFAULT_OPTS`. Ordinary post-install package operations build from source.
 The existing prebuilt distribution kernel is used in either installation mode.
 
+## Default host-backed RAM builds
+
+Installer package builds use host-visible `/dev/shm` by default, including
+chroot updates and resumed phases. Use `--no-ram-builds` to select `/var/tmp` for an
+invocation when memory is insufficient; it reaches child phases too. This does
+not persist in QEMU's make.conf; the booted guest uses normal disk-backed
+storage. Host memory and the mounted tmpfs limit constrain builds. Physical
+hosts may keep their explicit machine-specific build-storage policy.
+
 ## Host tools
 
 ```bash
@@ -159,7 +168,7 @@ on the existing mounted target:
 ./usr/local/share/agentoo/installer/gentoo-install.sh --disk "$NBD_DEVICE" \
   --target-host qemu --phase kernel-foundation \
   --qemu-vars "$INSTALL_DIR/OVMF_VARS.4m.fd" --verbose
-sudo chroot /mnt/gentoo cat /etc/kernel/gentoo-dist.cmdline
+sudo chroot /mnt/gentoo cat /etc/kernel/cmdline
 sudo ls -lh /mnt/gentoo/boot/EFI/Gentoo/
 virt-fw-vars --input "$INSTALL_DIR/OVMF_VARS.4m.fd" --print
 ```
@@ -328,3 +337,80 @@ journalctl -b -1 -t install-check --no-pager
 
 Confirm that the machine ID matches the previous output, both boots are listed,
 and the previous boot's tagged message is readable.
+
+## Distribution kernel updates and manual physical registration
+
+The distribution fallback uses stable `gentoo-kernel-bin`, the tracked kernel
+policy, and Gentoo's packaged generation/copy tools. After updating it, register
+the new version manually on physical hardware and retain a tested previous
+entry. Custom source images must use separate names/paths and must not modify
+this fallback pipeline. Automatic offline QEMU registration remains part of
+initial guest creation; native registration during later kernel updates is deferred.
+
+On the booted target, identify the release and ESP:
+
+```bash
+ATOM=$(portageq best_version / sys-kernel/gentoo-kernel-bin)
+awk '$1 == "obj" && $2 ~ /\/include\/config\/kernel.release$/ {print $2}' "/var/db/pkg/$ATOM/CONTENTS"
+findmnt --mountpoint /boot -o SOURCE,UUID,FSTYPE
+lsblk -o NAME,PKNAME,PARTN,UUID
+cat /etc/kernel/cmdline
+```
+
+Read the `kernel.release` associated with the installed distribution fallback.
+Replace the values below with that release and the ESP's actual parent disk and
+partition number. `/etc/kernel/gentoo-dist.version` is installation history and
+must not supply the version for later updates.
+
+```bash
+VERSION=REPLACE_WITH_DISTRIBUTION_RELEASE
+DISK=/dev/REPLACE_WITH_ESP_PARENT_DISK
+PART=1
+sudo efibootmgr --verbose
+sudo efibootmgr --create-only --disk "$DISK" --part "$PART" \
+  --label "Gentoo distribution $VERSION" \
+  --loader "\\EFI\\Gentoo\\kernel-$VERSION.efi" \
+  --unicode "$(cat /etc/kernel/cmdline) initrd=\\EFI\\Gentoo\\initramfs-$VERSION.img"
+```
+
+For Startop, add `--full-dev-path` to the creation command. Inspect the resulting
+entry and select a one-time boot with `sudo efibootmgr --bootnext XXXX` if desired.
+Creation is explicit and does not change persistent BootOrder. The small
+`99-agentoo-boot-guidance.install` hook also prints a populated command on the
+booted target when matching EFI files exist. It never executes the command;
+these instructions remain the fallback. Kernel-install can run more than once
+during a package transaction, so guidance may be repeated.
+
+## Applying this cleanup to an existing installation
+
+Fresh installation checks out the tracked policy before package configuration.
+For an existing target, review `agentoo-git diff`, then reconcile older local
+installer policy before updating packages. Do not delete unknown/user-owned files.
+
+- Move local boot arguments from `/etc/kernel/gentoo-dist.cmdline` to
+  `/etc/kernel/cmdline` after checking their mounted-root identity; maintain one
+  record, not two competing copies.
+- Remove old installer-marked `zz-kernel-foundation` USE/keyword files and the
+  installer-marked Dracut/ESP guard files once their tracked replacements are
+  installed. Unmarked files require manual reconciliation. Do not keep both guards.
+- Reconcile the old dhcpcd ExecStart drop-in and alternate configuration with the
+  packaged service and normal `/etc/dhcpcd.conf`. Keep per-interface supplicant
+  startup and the no-duplicate-hook setting. The package plan must remove
+  systemd's resolvconf compatibility symlink; check for any other provider before
+  deleting the fake-path workaround.
+- Remove only the installer-marked `90-first-boot.conf` journald drop-in. Preserve
+  existing journal directories and logs. Report previous-boot history after reboot.
+- Review protected configuration updates with `dispatch-conf`, check permissions,
+  then test networking, the fallback boot files, and reboot before checkpointing.
+
+Recoverable installer failures preserve the target for inspection and retry.
+If first-boot packages leave protected configuration updates, review them with
+`chroot "$MOUNT_ROOT" dispatch-conf`, preserve the intended shared configuration,
+then resume `first-boot-foundation`. Use an ordinary interactive terminal.
+Disk-setup failures still clean up the resources created by that attempt. If a
+mapping remains busy after ordinary handoff unmounts, use the explicit
+[namespace recovery procedure](../docs/skills/qemu-nbd/references/namespace-recovery.md);
+normal handoff no longer enters other processes' mount namespaces automatically.
+Keep the installation mount root outside `/tmp`: service-private `/tmp` overlays
+can hide propagated target mounts from the ordinary recovery procedure. The
+disposable image itself may still live in `/tmp`.

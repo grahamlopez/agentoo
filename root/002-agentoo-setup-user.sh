@@ -20,10 +20,10 @@ uid=1000
 gid=1000
 policy=/etc/sudoers.d/90-agentoo-graham
 validate_identity() {
-  local record name password actual_uid actual_gid gecos actual_home shell
+  local record actual_uid actual_gid actual_home shell
   record=$(getent passwd "$account" || true)
   if [[ -n $record ]]; then
-    IFS=: read -r name password actual_uid actual_gid gecos actual_home shell <<< "$record"
+    IFS=: read -r _ _ actual_uid actual_gid _ actual_home shell <<< "$record"
     [[ $actual_uid == "$uid" && $actual_gid == "$gid" && $actual_home == "$home" ]] || die 'Existing graham identity conflicts with UID/GID 1000 and /home/graham.'
   else
     ! getent passwd "$uid" >/dev/null || die 'UID 1000 belongs to another account.'
@@ -43,7 +43,7 @@ validate_identity() {
 }
 validate_identity
 printf '\n┌─ User setup ─────────────────────────────────────┐\n'
-printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup for a new account\n│ Packages      Zsh, sudo, OpenSSH, Git\n└──────────────────────────────────────────────────┘\n'
+printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup; interrupted runs resume\n│ Packages      Zsh, sudo, OpenSSH, Git\n└──────────────────────────────────────────────────┘\n'
 read -r -p 'Proceed with user setup? [y/N] ' answer
 [[ $answer == y || $answer == Y || $answer == yes ]] || { echo 'User setup declined; no account or package changes made.'; exit 0; }
 printf '\nPaste one SSH public key (empty to skip). Label: agentoo:graham:ssh-login\n'
@@ -51,7 +51,7 @@ read -r -p 'SSH public key: ' public_key
 packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git)
 # Show Portage's dependency/build plan and obtain its own confirmation.
 emerge --ask --noreplace "${packages[@]}"
-shell=$(command -v zsh) || die 'Zsh is unavailable.'
+shell=$(readlink -f "$(command -v zsh)") || die 'Zsh is unavailable.'
 grep -Fxq "$shell" /etc/shells || die 'Installed Zsh is not listed in /etc/shells.'
 [[ -f /etc/ssh/sshd_config.d/10-agentoo-graham.conf && ! -L /etc/ssh/sshd_config.d/10-agentoo-graham.conf ]] || die 'Managed SSH policy is missing; update the agentoo checkout.'
 # Generate missing server host keys without starting the service.
@@ -76,9 +76,7 @@ if [[ -n $public_key ]]; then
 fi
 validate_identity
 getent group "$account" >/dev/null || groupadd --gid "$gid" "$account"
-created_account=false
 if ! getent passwd "$account" >/dev/null; then
-  created_account=true
   useradd --uid "$uid" --gid "$account" --groups wheel,portage --shell "$shell" --home-dir "$home" --no-create-home "$account"
   install -d -m 0700 -o "$uid" -g "$gid" "$home"
 else
@@ -86,10 +84,18 @@ else
   usermod --append --groups wheel,portage --shell "$shell" "$account"
   [[ -d $home ]] || install -d -m 0700 -o "$uid" -g "$gid" "$home"
 fi
-printf '\nSet Graham’s account password (also used by sudo):\n'
-passwd "$account"
-# Identity is local account state. Reruns never change it or repeat this prompt.
-if $created_account; then
+password_status=$(passwd -S "$account")
+read -r _ password_status _ <<< "$password_status"
+if [[ $password_status != P ]]; then
+  printf '\nSet Graham’s account password (also used by sudo):\n'
+  passwd "$account"
+else
+  printf '\nExisting account password preserved.\n'
+fi
+# Mark the optional choice only after completion, so interrupted setup can resume.
+identity_done=/var/lib/agentoo/graham-git-identity.done
+identity_file=$home/.gitconfig-local
+if [[ ! -e $identity_done ]]; then
   git_name="graham (@$(hostname))"
   git_email='m477@duck.com'
   printf '\n┌─ Personal Git identity ──────────────────────────┐\n'
@@ -100,16 +106,19 @@ if $created_account; then
     git_name=${value:-$git_name}
     read -r -p "Author email [$git_email]: " value
     git_email=${value:-$git_email}
-    identity_file=$home/.gitconfig-local
-    [[ ! -e $identity_file && ! -L $identity_file ]] || die 'Git identity file already exists; configure it manually.'
+    [[ ! -L $identity_file && ( ! -e $identity_file || ( -f $identity_file && $(stat -c %u "$identity_file") == "$uid" ) ) ]] || die 'Git identity file must be a regular file owned by Graham.'
     # runuser retains root's working directory; Git must start in Graham's home.
-    runuser -u "$account" -- git -C "$home" config --file "$identity_file" user.name "$git_name"
-    runuser -u "$account" -- git -C "$home" config --file "$identity_file" user.email "$git_email"
+    for field in name email; do
+      identity_variable=git_$field
+      value=$(runuser -u "$account" -- git -C "$home" config --file "$identity_file" --get "user.$field" || true)
+      [[ -n $value ]] || runuser -u "$account" -- git -C "$home" config --file "$identity_file" "user.$field" "${!identity_variable}"
+    done
   else
     printf '\nGit identity skipped. Later, run these as Graham (edit the values as needed):\n'
     printf '  git config --file "$HOME/.gitconfig-local" user.name %q\n' "$git_name"
     printf '  git config --file "$HOME/.gitconfig-local" user.email %q\n' "$git_email"
   fi
+  touch "$identity_done"
 fi
 # Apply Graham’s key-only policy to an already-running server; do not start it.
 if systemctl is-active --quiet sshd.service; then systemctl reload sshd.service; fi

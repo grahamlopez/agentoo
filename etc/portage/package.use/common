@@ -1,7 +1,6 @@
 # Keep fallback Vim from pulling in the audio stack for sound playback.
 app-editors/vim -X -alsa -sound
-sys-apps/systemd cryptsetup
-sys-kernel/linux-firmware savedconfig
+sys-apps/systemd cryptsetup -resolvconf
 media-video/pipewire pipewire-alsa sound-server
 media-sound/alsa-tools -gtk
 media-sound/alsaplayer -gtk

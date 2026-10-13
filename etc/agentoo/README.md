@@ -38,8 +38,7 @@ These files describe the target hardware, independent of the installation host.
 after boot. It is tracked in agentoo; the installer sets its permissions to
 `0700`. Run it as root on the booted target, with package operations and
 configuration automation idle. Use `--verify-only` for diagnostics without
-cleanup, checkpoint preflight, or a checkpoint prompt. Diagnostics report time
-state; checkpoint preflight additionally requires synchronized time.
+cleanup, checkpoint preflight, or a checkpoint prompt. Diagnostics report time and journal history using packaged logging defaults; checkpoint preflight additionally requires synchronized time.
 
 After required verification succeeds, a short plan asks whether to remove
 cached distfiles and binary packages and capture the fresh-install checkpoint. Declining leaves
@@ -61,7 +60,8 @@ replacing the active root. Checkpoints share the disk with the original data.
 After verifying/checkpointing, run `/root/002-agentoo-setup-user.sh` interactively.
 It installs Zsh, sudo, and OpenSSH, creates or validates `graham` with UID/GID 1000, a private
 primary group and supplementary `wheel,portage`, and prompts for an account
-password and optional SSH public key. Conflicting identities stop setup; existing
+password when none is usable and an optional SSH public key. Reruns preserve a
+usable password and resume the optional Git identity choice after interruption. Conflicting identities stop setup; existing
 home contents and supplementary groups are preserved. No skeleton dotfiles are copied.
 
 The managed sudo policy requires Graham’s password. SSH keys remain local in
@@ -139,3 +139,38 @@ Normal user configs remain local overrides, with no copied or symlinked dotfiles
   review checkpoint coverage before enabling those operations.
 - Nested subvolumes are excluded from root snapshots. Do not reintroduce them
   without changing and testing the checkpoint/recovery design.
+
+## Installer policy and updates
+
+Physical installation runs on the destination hardware. The fixed encrypted
+Btrfs layout is `@` for root and `@home` for home; QEMU/NBD is a separately
+supported host-backed installation path. Installer package transactions use
+host-visible `/dev/shm` by default; `--no-ram-builds` selects `/var/tmp` for an invocation,
+including its child chroot phases. QEMU's booted guest uses normal disk-backed
+build storage.
+
+Kernel policy is tracked in `/etc/portage/package.use/kernel`,
+`/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
+The stable binary distribution kernel remains the fallback; the future custom
+image workflow is separate and undefined. `/etc/kernel/cmdline` contains local
+boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
+data, not a permanently maintained running-kernel requirement.
+
+Physical firmware registration remains manual. QEMU installation retains offline
+registration in its explicitly selected VM variable store. See the installation
+runbook for copy/paste registration after kernel updates. A small kernel-install
+hook prints the populated command on the booted target; it never runs firmware
+commands or changes BootOrder. Automatic registration during updates is deferred.
+
+Networking uses the packaged dhcpcd service and `/etc/dhcpcd.conf`, with direct
+ownership of `/etc/resolv.conf`. Systemd's resolvconf shim is disabled in package
+USE policy. Physical setup copies a host per-interface or common wpa_supplicant
+configuration unchanged if present, otherwise prompts or defers. Referenced
+external credentials/certificates need separate provisioning. NetworkManager
+profile conversion is not supported. Only configured
+supplicant instances are required by post-boot verification. Secrets stay in
+root-only per-interface files outside Git.
+
+Journald inherits packaged storage and retention defaults. The tracked monthly
+scrub timer and ordinary-directory systemd storage policy remain intentional
+Agentoo additions.

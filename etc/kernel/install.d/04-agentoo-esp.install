@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# BOOT_ROOT=/boot bypasses automatic ESP discovery. The packaged copy hook
+# accepts a directory; require the mounted ESP to match this installation.
+set -euo pipefail
+[[ ${1:-} == add ]] || exit 0
+case ${2:-} in *-gentoo-dist|*-gentoo-dist-bin) ;; *) exit 0 ;; esac
+expected=$(cat /etc/kernel/gentoo-dist-esp.uuid)
+mountpoint -q /boot && [[ $(findmnt -n -o FSTYPE --mountpoint /boot) == vfat ]] &&
+  [[ $(findmnt -n -o UUID --mountpoint /boot) == "$expected" ]] || {
+  printf 'Distribution kernel update requires the target ESP mounted at /boot.\n' >&2
+  exit 1
+}

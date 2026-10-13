@@ -1,0 +1,7 @@
+# Distribution fallback: packaged generation/copy, manual physical registration.
+*/* dist-kernel
+sys-kernel/installkernel systemd dracut -efistub -grub -systemd-boot -refind -uki -ukify -ugrd
+sys-kernel/dracut systemd
+sys-kernel/gentoo-kernel-bin initramfs -generic-uki
+sys-kernel/linux-firmware -savedconfig
+sys-firmware/intel-microcode -hostonly

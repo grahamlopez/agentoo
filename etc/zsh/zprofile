@@ -16,13 +16,3 @@ if (( $+commands[nvim] )); then
 elif (( $+commands[vim] )); then
   export EDITOR=vim VISUAL=vim
 fi
-
-# proposed removal: Replace login-time identity writes with one-time account setup.
-# proposed removal: GUI autostart belongs to later host/session configuration.
-# host=$(hostname)
-# printf '[user]\n    name = graham (@%s)\n    email = m477@duck.com\n' "$host" > ~/.gitconfig-local
-# 
-# if [ "$(tty)" = "/dev/tty1" ]; then
-#     sleep 1
-#     start-hyprland
-# fi

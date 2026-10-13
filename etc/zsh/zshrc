@@ -57,8 +57,8 @@ export LESS='-ifqMR'
 export PAGER='less'
 
 umask 077
-# proposed removal: Retain crash diagnostics; do not disable core dumps globally.
-# limit coredumpsize 0        # Turn off core dumps
+# Keep this interactive shell's core-size limit at zero.
+limit coredumpsize 0
 
 # report time for long-running commands (based on system+user time)
 # can also notify with some hackery: https://superuser.com/a/578651
@@ -106,24 +106,16 @@ fi
 # shell) cannot stack the same directory onto PATH twice.
 typeset -U path PATH
 path=("$HOME/.local/bin" $path)
-# proposed removal: Legacy local/bin and Go-specific path; start with ~/.local/bin only.
-# export PATH="${HOME}/local/bin:${PATH}"
-# export GOBIN="${HOME}/local/bin"
-# export PATH="${HOME}/.local/bin:${PATH}"
-# 
+
 #################################################################
 # }}}
 #################################################################
 
-
-
-
 #################################################################
-# keybindings, aliases, functions, abbreviations              {{{
+# keybindings, aliases, functions                             {{{
 #################################################################
 
 # display existing key bindings with `bindkey`
-
 # reset to emacs style
 bindkey -e
 
@@ -150,103 +142,6 @@ alias grep="grep --color=auto"
 (( $+commands[nvim] )) && alias vim="nvim"
 (( $+commands[nvim] )) && alias vimall="nvim **/*(.)"
 
-# proposed removal: Old home repository wrappers and automatic SSH-agent startup; use agentoo-git and preserve existing/forwarded agents.
-# # dotfile management
-# alias dgit='git --git-dir=$HOME/.dots-git/ --work-tree=$HOME'
-# alias ggit='git --git-dir=$HOME/.dots-gui-git/ --work-tree=$HOME'
-# alias agit='git --git-dir=$HOME/.dots-ai-git/ --work-tree=$HOME'
-# alias gs='$HOME/.utils/git-status-all.sh --fetch'
-# 
-# # ssh-agent on a fixed socket, reused across shells.
-# # Starts a *keyless* agent if none is reachable - no passphrase prompt here.
-# # Keys load on first actual connection via AddKeysToAgent in ~/.ssh/config.
-# export SSH_AUTH_SOCK="${HOME}/.ssh/agent.sock"
-# ssh-add -l >/dev/null 2>&1
-# _ssh_agent_rc=$?               # capture immediately; 2 = no agent reachable
-# if [ ${_ssh_agent_rc} -eq 2 ]; then
-#     rm -f "${SSH_AUTH_SOCK}"   # clear a stale socket left by a dead agent
-#     ssh-agent -a "${SSH_AUTH_SOCK}" >/dev/null 2>&1
-# fi
-# unset _ssh_agent_rc
-# 
-# proposed removal: GUI helpers, alternate editor installs, reset utilities, and ad hoc directory comparison are deferred.
-# # graphical environment related settings
-# function brightness_set () {
-#   local max val backpath
-# 
-#   if [ -d /sys/class/backlight/intel_backlight ]; then # flattop, nvgen
-#     backpath=/sys/class/backlight/intel_backlight
-#   elif [ -d /sys/class/backlight/acpi_video0 ]; then # startop
-#     backpath=/sys/class/backlight/acpi_video0
-#   else
-#     echo "cannot find backlight" >&2
-#     return 1
-#   fi
-# 
-#   max=$(< ${backpath}/max_brightness) || {
-#     echo "Cannot read max_brightness" >&2
-#     return 1
-#   }
-# 
-#   case "$1" in
-#     1) val=$(( max * 1  / 100 )) ;;   # 1%
-#     2) val=$(( max * 5  / 100 )) ;;   # 5%
-#     3) val=$(( max * 10 / 100 )) ;;   # 10%
-#     4) val=$(( max * 25 / 100 )) ;;   # 25%
-#     5) val=$(( max * 40 / 100 )) ;;   # 40%
-#     6) val=$(( max * 60 / 100 )) ;;   # 60%
-#     7) val=$(( max * 80 / 100 )) ;;   # 80%
-#     8) val=$(( max * 100 / 100 )) ;;  # 100%
-#     *) echo "provide setting level 1-8" ; return 1 ;;
-#   esac
-# 
-#   echo "$val" > ${backpath}/brightness
-# }
-# 
-# function dark_theme() {
-#   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
-# }
-# 
-# function light_theme() {
-#   gsettings set org.gnome.desktop.interface color-scheme 'prefer-light'
-# }
-# 
-# function reset_hypr_scaling() {
-#   hyprctl keyword monitor "eDP-1,preferred,auto,1.33"
-# }
-# 
-# # launch kitty to trust remote ssh hosts with our local clipboard contents
-# alias kitty_trusted='kitty -o clipboard_control="write-clipboard write-primary read-clipboard read-primary no-ask"'
-# 
-# function opacity_kitty_toggle () {
-#   if [ -n "$TMUX" ] ; then
-#     echo "Opacity toggle disabled inside tmux" >&2
-#     return 1
-#   fi
-#   kitty @ --to ${KITTY_LISTEN_ON} set-background-opacity --toggle 1.0
-# }
-# 
-# # messing with neovim
-# alias cvim="NVIM_APPNAME=nvim.cprog nvim"
-# alias ovim="NVIM_APPNAME=nvim.old nvim"
-# 
-# function uninstall_nvim() {
-#   if [ -z "$1" ]; then
-#     echo "uninstalling main nvim state"
-#     rm -rf ${HOME}/.local/share/nvim
-#     rm -rf ${HOME}/.local/state/nvim
-#     rm -rf ${HOME}/.cache/nvim
-#   else
-#     echo "uninstalling nvim.$1 state"
-#     rm -rf ${HOME}/.local/share/nvim.$1
-#     rm -rf ${HOME}/.local/state/nvim.$1
-#     rm -rf ${HOME}/.cache/nvim.$1
-#   fi
-# }
-# 
-# 
-# # more homegrown functions
-# 
 # Install a terminfo entry into a remote account, so a host that lacks it gets
 # the real terminal instead of the fallback the TERM guard above picks. Writes
 # to ~/.terminfo, which needs no root and which ncurses searches first.
@@ -276,46 +171,9 @@ bit_diff_dirs() (
     diff --color -- "$work/source" "$work/target"
 )
 
-# proposed removal: Only one container-specific abbreviation currently uses this custom space-key widget.
-# # abbreviations and magic expansion
-# # obtained from stackoverflow (but the link now redirects incorrectly)
-# setopt extendedglob
-# typeset -Ag abbreviations
-# abbreviations=(
-#   "lxe"   "lxc exec __CURSOR__ -- sudo --login --user ubuntu"
-# )
-# 
-# magic-abbrev-expand() {
-#     local MATCH
-#     LBUFFER=${LBUFFER%%(#m)[_a-zA-Z0-9]#}
-#     command=${abbreviations[$MATCH]}
-#     LBUFFER+=${command:-$MATCH}
-# 
-#     if [[ "${command}" =~ "__CURSOR__" ]]
-#     then
-#         RBUFFER=${LBUFFER[(ws:__CURSOR__:)2]}
-#         LBUFFER=${LBUFFER[(ws:__CURSOR__:)1]}
-#     else
-#         zle self-insert
-#     fi
-# }
-# 
-# no-magic-abbrev-expand() {
-#   LBUFFER+=' '
-# }
-# 
-# zle -N magic-abbrev-expand
-# zle -N no-magic-abbrev-expand
-# bindkey " " magic-abbrev-expand
-# bindkey "^x " no-magic-abbrev-expand
-# bindkey -M isearch " " self-insert
-# 
 #################################################################
 # }}}
 #################################################################
-
-
-
 
 #################################################################
 # Appearance and prompt                                       {{{
@@ -451,11 +309,3 @@ export MANPAGER='less -s +Gg'
 #################################################################
 # Auto installed stuff                                        {{{
 #################################################################
-
-# proposed removal: NVM belongs to the later language/agent environment.
-# # Intentional: the -s guards make this a no-op on machines without ~/.nvm,
-# # and load nvm on the ones that have it. Not dead code - leave it.
-# export NVM_DIR="$HOME/.nvm"
-# [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-# [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-

@@ -1,0 +1,10 @@
+[Unit]
+Description=Scrub the Gentoo Btrfs filesystem
+RequiresMountsFor=/
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/btrfs scrub start -B /
+TimeoutStartSec=infinity
+Nice=19
+IOSchedulingClass=idle

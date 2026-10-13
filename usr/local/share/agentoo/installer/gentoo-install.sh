@@ -2,6 +2,12 @@
 #
 # Repeatable Gentoo installer — first milestone
 #
+# Download and run this single file; no local repository checkout is needed:
+#   curl -fL https://raw.githubusercontent.com/grahamlopez/agentoo/main/usr/local/share/agentoo/installer/gentoo-install.sh -o gentoo-install.sh
+#   bash ./gentoo-install.sh --disk /dev/REPLACE_WITH_TARGET_DISK [options]
+# Keep the downloaded file available: child chroot phases copy this same script.
+# Stage3 and the target configuration are fetched during installation.
+#
 # This file is both the executable installer and its canonical design record.
 # Each phase begins with its own readable explanation immediately beside the
 # code that implements it.  Run with `--verbose` to print the technical notes
@@ -18,7 +24,7 @@
 #   kernel-foundation: install the binary distribution kernel, firmware, and
 #   broad initramfs, then validate EFI files and register QEMU firmware offline.
 #   first-boot-foundation: configure mounts, identity, root login, minimal
-#   networking, persistent journal, time synchronization and Btrfs scrubbing.
+#   networking, packaged journal defaults, time synchronization and Btrfs scrubbing.
 #   handoff: verify and unmount the target, close LUKS, and print boot guidance.
 #
 # It executes selected phases by default.  Use --dry-run to print plans without
@@ -52,8 +58,8 @@ readonly DEFAULT_LOCALE='en_US.UTF-8'
 TARGET_DISK=${TARGET_DISK:-}
 LUKS_NAME=${LUKS_NAME:-cryptroot}
 BTRFS_LABEL=${BTRFS_LABEL:-GENTOO}
-ROOT_SUBVOL=${ROOT_SUBVOL:-@}
-HOME_SUBVOL=${HOME_SUBVOL:-@home}
+readonly ROOT_SUBVOL=@
+readonly HOME_SUBVOL=@home
 EFI_SIZE=${EFI_SIZE:-$DEFAULT_EFI_SIZE}
 MOUNT_ROOT=${MOUNT_ROOT:-/mnt/gentoo}
 CONFIG_SOURCE=${CONFIG_SOURCE:-$DEFAULT_CONFIG_SOURCE}
@@ -64,6 +70,7 @@ TARGET_LOCALE=${TARGET_LOCALE:-$DEFAULT_LOCALE}
 MODE=apply
 ASSUME_YES=0
 INSTALL_BINPKGS=0
+RAM_BUILDS=1
 PACKAGE_OPTIONS=(--usepkg=n --getbinpkg=n)
 BINARY_INSTALL_OPTIONS=()
 SELECTED_PHASES=(disk-setup stage3-bootstrap portage-foundation system-update kernel-foundation first-boot-foundation handoff)
@@ -108,6 +115,8 @@ Options:
   --install-binpkgs          Prefer signed official binaries during installation,
                               respecting USE flags; compile unmatched packages.
                               Source builds remain the post-install default.
+  --no-ram-builds            Build in /var/tmp instead of the default /dev/shm.
+                              This never changes post-install build storage.
   --verbose                  Print technical notes and detailed phase output.
                               It does not affect execution or confirmations.
   --phase NAME               Run a named phase (currently: disk-setup,
@@ -134,15 +143,13 @@ Options:
   --locale LOCALE            Target UTF-8 locale (default: $TARGET_LOCALE).
   --luks-name NAME           Mapper name after opening LUKS (default: $LUKS_NAME).
   --btrfs-label LABEL        Btrfs volume label (default: $BTRFS_LABEL).
-  --root-subvol NAME         Root Btrfs subvolume (default: $ROOT_SUBVOL).
-  --home-subvol NAME         Home Btrfs subvolume (default: $HOME_SUBVOL).
   --efi-size SIZE            EFI partition size, e.g. 1G (default: $EFI_SIZE).
   --mount-root PATH          Where prepared filesystems remain mounted
                               (default: $MOUNT_ROOT).
   -h, --help                 Show this help.
 
 Environment overrides mirror these options: TARGET_DISK, LUKS_NAME,
-BTRFS_LABEL, ROOT_SUBVOL, HOME_SUBVOL, EFI_SIZE, MOUNT_ROOT, CONFIG_SOURCE,
+BTRFS_LABEL, EFI_SIZE, MOUNT_ROOT, CONFIG_SOURCE,
 CONFIG_BRANCH, TARGET_HOST, TARGET_TIMEZONE, TARGET_LOCALE, TARGET_CPU_FLAGS,
 TARGET_MICROCODE, TARGET_HOSTNAME, QEMU_VARS, and QEMU_VARS_TEMPLATE.
 SOF audio firmware is selected by the target's agentoo fragments.
@@ -194,6 +201,77 @@ run_privileged() {
   sudo -n -- "$@"
 }
 
+resolve_target_partitions() {
+  TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
+  case ${TARGET_DISK##*/} in
+    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
+    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
+  esac
+}
+
+require_chroot_mounts() {
+  local source
+  for source in proc sys dev run; do
+    mountpoint -q "$MOUNT_ROOT/$source" || die "required chroot mount is missing: $source"
+  done
+}
+
+# Run one target phase with a clean environment and invocation-owned helper.
+run_chroot_phase() {
+  local phase=$1 helper
+  shift
+  helper=/run/$PROGRAM.$phase.$$
+  run_privileged install -m 700 "$0" "$MOUNT_ROOT$helper"
+  run_privileged /bin/bash -c '
+    set -euo pipefail
+    target_root=$1 helper=$2
+    shift 2
+    cleanup_helper() {
+      local status=$?
+      trap - EXIT
+      rm -f -- "$target_root$helper" || printf "Warning: temporary phase helper remains.\n" >&2
+      exit "$status"
+    }
+    trap cleanup_helper EXIT
+    chroot "$target_root" /usr/bin/env -i \
+      HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+      TERM="${TERM:-dumb}" /bin/bash "$helper" "$@"
+  ' "$PROGRAM-$phase" "$MOUNT_ROOT" "$helper" "$@"
+}
+
+install_emerge() {
+  local build_dir=/dev/shm
+  (( RAM_BUILDS )) || build_dir=/var/tmp
+  PORTAGE_TMPDIR=$build_dir emerge "$@"
+}
+
+target_emerge() {
+  local root=$1 build_dir=/dev/shm
+  shift
+  (( RAM_BUILDS )) || build_dir=/var/tmp
+  chroot "$root" /usr/bin/env PORTAGE_TMPDIR=$build_dir /usr/bin/emerge "$@"
+}
+
+# Atomic local-data writes permit matching content, owned files, or stage3 comments.
+write_target_file() (
+  local path=$1 temporary content old
+  content=$(cat)
+  if [[ -e $path || -L $path ]]; then
+    [[ -f $path && ! -L $path ]] || die "unsafe target file: $path"
+    old=$(cat "$path")
+    if [[ $old != "$content" ]] &&
+       ! grep -Fxq '# Managed by gentoo-install first-boot-foundation.' "$path" &&
+       grep -Evq '^[[:space:]]*(#.*)?$' "$path"; then
+      die "existing target file requires manual review: $path"
+    fi
+  fi
+  temporary=$(mktemp "${path}.XXXXXX")
+  trap 'rm -f -- "$temporary"' EXIT
+  printf '%s\n' "$content" >"$temporary"
+  chmod 644 "$temporary"
+  mv -f -- "$temporary" "$path"
+)
+
 # Command-line selection and configuration
 
 is_selected() {
@@ -225,7 +303,7 @@ set_phase_selection() {
 parse_args() {
   while (($#)); do
     case $1 in
-      --disk|--phase|--luks-name|--btrfs-label|--root-subvol|--home-subvol|--efi-size|--mount-root|--config-source|--config-branch|--target-host|--timezone|--locale|--cpu-flags|--microcode|--qemu-vars|--qemu-vars-template|--hostname)
+      --disk|--phase|--luks-name|--btrfs-label|--efi-size|--mount-root|--config-source|--config-branch|--target-host|--timezone|--locale|--cpu-flags|--microcode|--qemu-vars|--qemu-vars-template|--hostname)
         (($# >= 2)) && [[ $2 != --* ]] \
           || die "$1 requires a value; use $PROGRAM --help for examples"
         ;;
@@ -240,6 +318,7 @@ parse_args() {
       --dry-run) MODE=dry-run ;;
       --yes) ASSUME_YES=1 ;;
       --install-binpkgs) INSTALL_BINPKGS=1 ;;
+      --no-ram-builds) RAM_BUILDS=0 ;;
       --verbose) VERBOSE=1 ;;
       --phase)
         (($# >= 2)) || die '--phase requires a phase name'
@@ -259,18 +338,6 @@ parse_args() {
         shift
         ;;
       --btrfs-label=*) BTRFS_LABEL=${1#*=} ;;
-      --root-subvol)
-        (($# >= 2)) || die '--root-subvol requires a value'
-        ROOT_SUBVOL=$2
-        shift
-        ;;
-      --root-subvol=*) ROOT_SUBVOL=${1#*=} ;;
-      --home-subvol)
-        (($# >= 2)) || die '--home-subvol requires a value'
-        HOME_SUBVOL=$2
-        shift
-        ;;
-      --home-subvol=*) HOME_SUBVOL=${1#*=} ;;
       --efi-size)
         (($# >= 2)) || die '--efi-size requires a value'
         EFI_SIZE=$2
@@ -374,12 +441,12 @@ validate_arguments() {
   normalized=$(readlink -m -- "$MOUNT_ROOT")
   [[ $MOUNT_ROOT == /* && $normalized != / && $MOUNT_ROOT != *$'\n'* ]] \
     || errors+=("--mount-root must be an absolute directory other than /, such as /mnt/gentoo.")
-  for option in LUKS_NAME BTRFS_LABEL ROOT_SUBVOL HOME_SUBVOL; do
+  for option in LUKS_NAME BTRFS_LABEL; do
     value=${!option}
     [[ $value =~ ^[A-Za-z0-9._@+-]+$ && $value != . && $value != .. ]] \
       || errors+=("$option must be a nonempty name using letters, numbers, dots, underscores, @, +, or hyphens; '.' and '..' are not allowed.")
   done
-  [[ $ROOT_SUBVOL != "$HOME_SUBVOL" ]] || errors+=("--root-subvol and --home-subvol must differ.")
+  [[ $LUKS_NAME =~ ^[A-Za-z0-9_-]+$ ]] || errors+=("LUKS_NAME must use letters, numbers, underscores, or hyphens.")
   [[ -z $TARGET_HOSTNAME || ( ${#TARGET_HOSTNAME} -le 63 && $TARGET_HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ) ]] \
     || errors+=("--hostname must be one DNS label of at most 63 characters, with letters, numbers, and internal hyphens.")
   [[ $TARGET_LOCALE =~ ^[A-Za-z][A-Za-z_]*\.(UTF-8|utf8)$ ]] \
@@ -745,24 +812,14 @@ EOF
   [[ $(lsblk -dn -o TYPE "$TARGET_DISK") == disk ]] || die "target must be a whole disk, not a partition or mapper: $TARGET_DISK"
   [[ $EFI_SIZE =~ ^[1-9][0-9]*[MmGg]$ ]] || die "EFI size must look like 1G or 512M: $EFI_SIZE"
   [[ $MOUNT_ROOT == /* && $MOUNT_ROOT != / ]] || die "mount root must be a non-root absolute path: $MOUNT_ROOT"
-  for value in "$LUKS_NAME" "$BTRFS_LABEL" "$ROOT_SUBVOL" "$HOME_SUBVOL"; do
+  for value in "$LUKS_NAME" "$BTRFS_LABEL"; do
     [[ $value =~ ^[A-Za-z0-9._@+-]+$ ]] || die "unsupported characters in layout name: $value"
   done
-  [[ $ROOT_SUBVOL != "$HOME_SUBVOL" ]] || die 'root and home subvolume names must differ'
 
   # NVMe, eMMC, and loop device names already end in a digit, so their
   # partitions are /dev/nvme0n1p1 rather than /dev/nvme0n11.  SATA-style names
   # remain /dev/sda1.  Both names come from the one accepted target disk.
-  case ${TARGET_DISK##*/} in
-    *[0-9])
-      EFI_PARTITION=${TARGET_DISK}p1
-      CRYPT_PARTITION=${TARGET_DISK}p2
-      ;;
-    *)
-      EFI_PARTITION=${TARGET_DISK}1
-      CRYPT_PARTITION=${TARGET_DISK}2
-      ;;
-  esac
+  resolve_target_partitions
 
   # findmnt can identify a plain partition, a /dev/mapper LUKS device, or an
   # LVM logical volume.  lsblk --inverse walks that source back to physical
@@ -875,7 +932,7 @@ EOF
   run_privileged umount "$MOUNT_ROOT"
   MOUNTED_ROOT=0
 
-  # These are the root/home options later expected in fstab.  Named subvolumes,
+  # These are the fixed root/home options later expected in fstab.  Named subvolumes,
   # rather than numeric IDs, keep recovery commands and fstab auditable.
   run_privileged mount -o "subvol=$ROOT_SUBVOL,noatime,compress=zstd:1" "/dev/mapper/$LUKS_NAME" "$MOUNT_ROOT"
   MOUNTED_ROOT=1
@@ -942,16 +999,7 @@ cleanup_stage3_bootstrap_failure() {
   # These locations are made by mktemp in this invocation.  Leave the mounted
   # install layout intact; a failed download or verification must not undo it.
   [[ -n ${STAGE_WORKDIR:-} ]] && run_privileged rm -rf -- "$STAGE_WORKDIR"
-  for mountpoint in "$MOUNT_ROOT/run" "$MOUNT_ROOT/dev" "$MOUNT_ROOT/sys" "$MOUNT_ROOT/proc"; do
-    run_privileged umount --recursive "$mountpoint" 2>/dev/null || true
-  done
-  run_privileged umount "$MOUNT_ROOT/boot" 2>/dev/null || true
-  run_privileged umount "$MOUNT_ROOT/home" 2>/dev/null || true
-  run_privileged umount "$MOUNT_ROOT" 2>/dev/null || true
-  if run_privileged cryptsetup status "$LUKS_NAME" >/dev/null 2>&1; then
-    run_privileged cryptsetup close "$LUKS_NAME" || true
-  fi
-  printf 'error: stage3 bootstrap did not complete; temporary files, mounts, and the LUKS mapper were cleaned up.\n' >&2
+  printf 'error: stage3 bootstrap failed; temporary downloads removed, target preserved for retry.\n' >&2
   exit "$exit_code"
 }
 
@@ -1062,14 +1110,10 @@ EOF
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
   [[ -b $TARGET_DISK ]] || die "target is not a block device: $TARGET_DISK"
   [[ $MOUNT_ROOT == /* && $MOUNT_ROOT != / ]] || die "mount root must be a non-root absolute path: $MOUNT_ROOT"
-  for command in "$LUKS_NAME" "$BTRFS_LABEL" "$ROOT_SUBVOL" "$HOME_SUBVOL"; do
+  for command in "$LUKS_NAME" "$BTRFS_LABEL"; do
     [[ $command =~ ^[A-Za-z0-9._@+-]+$ ]] || die "unsupported characters in layout name: $command"
   done
-  [[ $ROOT_SUBVOL != "$HOME_SUBVOL" ]] || die 'root and home subvolume names must differ'
-  case ${TARGET_DISK##*/} in
-    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
 
   cat <<EOF
 
@@ -1096,9 +1140,7 @@ EOF
   for source in /etc/resolv.conf /proc /sys /dev /run; do
     [[ -e $source ]] || die "live environment prerequisite is unavailable: $source"
   done
-  for source in "$MOUNT_ROOT/proc" "$MOUNT_ROOT/sys" "$MOUNT_ROOT/dev" "$MOUNT_ROOT/run"; do
-    ! mountpoint -q "$source" || die "chroot mount already exists: $source"
-  done
+  [[ ! -d $MOUNT_ROOT/var/lib/agentoo/repository.git ]] || die 'stage3 extraction is bootstrap-only; resume a later phase on a configured target'
 
   confirm_phase 'stage3 bootstrap'
   verify_disk_setup || die 'stage3-bootstrap requires a verified disk-setup layout'
@@ -1159,12 +1201,12 @@ EOF
   log 'Extracting verified stage3 archive'
   run_privileged tar xpf "$archive" --xattrs-include='*.*' --numeric-owner -C "$MOUNT_ROOT"
   run_privileged cp --dereference /etc/resolv.conf "$MOUNT_ROOT/etc/resolv.conf"
-  run_privileged mount --types proc /proc "$MOUNT_ROOT/proc"
-  run_privileged mount --rbind /sys "$MOUNT_ROOT/sys"
+  mountpoint -q "$MOUNT_ROOT/proc" || run_privileged mount --types proc /proc "$MOUNT_ROOT/proc"
+  mountpoint -q "$MOUNT_ROOT/sys" || run_privileged mount --rbind /sys "$MOUNT_ROOT/sys"
   run_privileged mount --make-rslave "$MOUNT_ROOT/sys"
-  run_privileged mount --rbind /dev "$MOUNT_ROOT/dev"
+  mountpoint -q "$MOUNT_ROOT/dev" || run_privileged mount --rbind /dev "$MOUNT_ROOT/dev"
   run_privileged mount --make-rslave "$MOUNT_ROOT/dev"
-  run_privileged mount --bind /run "$MOUNT_ROOT/run"
+  mountpoint -q "$MOUNT_ROOT/run" || run_privileged mount --bind /run "$MOUNT_ROOT/run"
   run_privileged mount --make-slave "$MOUNT_ROOT/run"
 
   [[ -x $MOUNT_ROOT/bin/bash && -r $MOUNT_ROOT/etc/resolv.conf ]] \
@@ -1195,27 +1237,12 @@ valid_target_host() {
 
 cleanup_portage_foundation_failure() {
   local exit_code=${1:-$?}
-  local mountpoint
-
   (( exit_code == 0 )) && return
   trap - ERR EXIT
   set +e
-  [[ -n ${PORTAGE_INTERNAL_SCRIPT:-} ]] \
-    && run_privileged rm -f -- "$MOUNT_ROOT/run/$PORTAGE_INTERNAL_SCRIPT"
   [[ -n ${PORTAGE_REPOSITORY_GPG_HOME:-} ]] \
     && run_privileged rm -rf -- "$PORTAGE_REPOSITORY_GPG_HOME"
-  for mountpoint in "$MOUNT_ROOT/run" "$MOUNT_ROOT/dev" "$MOUNT_ROOT/sys" "$MOUNT_ROOT/proc"; do
-    run_privileged umount --recursive "$mountpoint" 2>/dev/null || true
-  done
-  run_privileged umount "$MOUNT_ROOT/boot" 2>/dev/null || true
-  run_privileged umount "$MOUNT_ROOT/home" 2>/dev/null || true
-  run_privileged umount "$MOUNT_ROOT" 2>/dev/null || true
-  if run_privileged cryptsetup status "$LUKS_NAME" >/dev/null 2>&1; then
-    if ! run_privileged cryptsetup close "$LUKS_NAME"; then
-      printf 'error: LUKS mapper remains open: %s; inspect remaining mounts, including other mount namespaces.\n' "$LUKS_NAME" >&2
-    fi
-  fi
-  printf 'error: Portage foundation did not complete; target cleanup was attempted.\n' >&2
+  printf 'error: Portage foundation failed; temporary helpers removed, target preserved for retry.\n' >&2
   exit "$exit_code"
 }
 
@@ -1324,7 +1351,7 @@ apply_optional_systemd_policy() {
 }
 
 install_portage_foundation() {
-  local command source config_git_dir config_revision signature_status planned_profile
+  local command source config_git_dir config_revision signature_status planned_profile esp_uuid
 
   if (( VERBOSE )); then
     cat <<'EOF'
@@ -1390,17 +1417,14 @@ EOF
   [[ -n $CONFIG_SOURCE && $CONFIG_SOURCE != *$'\n'* ]] || die 'configuration source must be a non-empty single line'
   [[ -n $CONFIG_BRANCH && $CONFIG_BRANCH != -* && $CONFIG_BRANCH != *$'\n'* ]] \
     || die 'configuration branch must be a non-empty branch name'
-  [[ $TARGET_TIMEZONE =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)+$ && $TARGET_TIMEZONE != *..* ]] \
+  [[ $TARGET_TIMEZONE =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ && $TARGET_TIMEZONE != *..* ]] \
     || die "unsupported timezone syntax: $TARGET_TIMEZONE"
   [[ $TARGET_LOCALE =~ ^[A-Za-z][A-Za-z_]*\.(UTF-8|utf8)$ ]] \
     || die "locale must be a UTF-8 locale such as en_US.UTF-8: $TARGET_LOCALE"
   [[ -n $TARGET_DISK ]] || die 'portage-foundation requires --disk DEVICE to verify the prepared layout'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
   [[ -b $TARGET_DISK ]] || die "target is not a block device: $TARGET_DISK"
-  case ${TARGET_DISK##*/} in
-    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
 
   if [[ $MODE == dry-run ]]; then
     planned_profile='existing AMD64 desktop/systemd profile (verified during execution)'
@@ -1447,15 +1471,29 @@ EOF
   for source in "$MOUNT_ROOT/proc" "$MOUNT_ROOT/sys" "$MOUNT_ROOT/dev" "$MOUNT_ROOT/run"; do
     mountpoint -q "$source" || die "required chroot mount is missing: $source"
   done
-  [[ ! -e $MOUNT_ROOT/var/lib/agentoo/repository.git ]] \
-    || die 'configuration repository already exists in the target; perform the normal full installer rerun'
 
   confirm_phase 'Portage foundation'
   trap 'cleanup_portage_foundation_failure $?' ERR EXIT
 
+  # A retry must keep the original policy selection, rather than silently
+  # relabeling an existing checkout as a different source, branch, or host.
+  local record expected
+  for record in source branch target-host; do
+    case $record in
+      source) expected=$CONFIG_SOURCE ;;
+      branch) expected=$CONFIG_BRANCH ;;
+      target-host) expected="GENTOO_TARGET_HOST=\"$TARGET_HOST\"" ;;
+    esac
+    if run_privileged test -s "$MOUNT_ROOT/etc/agentoo/$record"; then
+      [[ $(run_privileged cat "$MOUNT_ROOT/etc/agentoo/$record") == "$expected" ]] ||
+        die "existing $record differs; resume with the original installation options"
+    fi
+  done
   run_privileged install -d -m 755 "$MOUNT_ROOT/var/lib/agentoo"
-  run_privileged git clone --bare --single-branch --branch "$CONFIG_BRANCH" \
-    "$CONFIG_SOURCE" "$MOUNT_ROOT/var/lib/agentoo/repository.git"
+  if [[ ! -d $MOUNT_ROOT/var/lib/agentoo/repository.git ]]; then
+    run_privileged git clone --bare --single-branch --branch "$CONFIG_BRANCH" \
+      "$CONFIG_SOURCE" "$MOUNT_ROOT/var/lib/agentoo/repository.git"
+  fi
   config_git_dir=$MOUNT_ROOT/var/lib/agentoo/repository.git
   run_privileged git --git-dir="$config_git_dir" config core.bare false
   run_privileged git --git-dir="$config_git_dir" config core.worktree /
@@ -1464,11 +1502,17 @@ EOF
   run_privileged git --git-dir="$config_git_dir" config remote.origin.fetch "+refs/heads/$CONFIG_BRANCH:refs/remotes/origin/$CONFIG_BRANCH"
   run_privileged git --git-dir="$config_git_dir" config "branch.$CONFIG_BRANCH.remote" origin
   run_privileged git --git-dir="$config_git_dir" config "branch.$CONFIG_BRANCH.merge" "refs/heads/$CONFIG_BRANCH"
-  checkout_configuration "$config_git_dir" "$MOUNT_ROOT"
+  # The configured revision marks a completed checkout; preserve live edits on retry.
+  if ! run_privileged test -s "$MOUNT_ROOT/etc/agentoo/revision"; then
+    checkout_configuration "$config_git_dir" "$MOUNT_ROOT"
+  fi
   config_revision=$(run_privileged git --git-dir="$config_git_dir" rev-parse "$CONFIG_BRANCH^{commit}")
   [[ -f $MOUNT_ROOT/usr/local/bin/agentoo-permissions && ! -L $MOUNT_ROOT/usr/local/bin/agentoo-permissions ]] \
     || die 'configuration checkout lacks agentoo-permissions'
   run_privileged python3 "$MOUNT_ROOT/usr/local/bin/agentoo-permissions" --root "$MOUNT_ROOT" --fix
+  esp_uuid=$(run_privileged findmnt -rn -o UUID --mountpoint "$MOUNT_ROOT/boot")
+  [[ -n $esp_uuid ]] || die 'mounted ESP UUID is missing'
+  printf '%s\n' "$esp_uuid" | run_privileged tee "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid" >/dev/null
   apply_optional_systemd_policy
   # Enable only after first checkout: hooks use the target's absolute live paths.
   run_privileged git --git-dir="$config_git_dir" config core.hooksPath /usr/local/share/agentoo/git-hooks
@@ -1483,7 +1527,9 @@ EOF
   [[ -r $MOUNT_ROOT/usr/share/openpgp-keys/gentoo-release.asc ]] \
     || die 'the stage3 does not provide the Gentoo release-key bundle'
   run_privileged install -d -m 755 "$MOUNT_ROOT/var/db/repos"
-  run_privileged git clone --depth 1 "$GENTOO_REPOSITORY_URL" "$MOUNT_ROOT/var/db/repos/gentoo"
+  if [[ ! -d $MOUNT_ROOT/var/db/repos/gentoo/.git ]]; then
+    run_privileged git clone --depth 1 "$GENTOO_REPOSITORY_URL" "$MOUNT_ROOT/var/db/repos/gentoo"
+  fi
   PORTAGE_REPOSITORY_GPG_HOME=$(run_privileged mktemp -d "$MOUNT_ROOT/.gentoo-repository-keys.XXXXXX")
   run_privileged gpg --batch --homedir "$PORTAGE_REPOSITORY_GPG_HOME" --import \
     "$MOUNT_ROOT/usr/share/openpgp-keys/gentoo-release.asc" >/dev/null
@@ -1495,15 +1541,8 @@ EOF
   run_privileged rm -rf -- "$PORTAGE_REPOSITORY_GPG_HOME"
   unset PORTAGE_REPOSITORY_GPG_HOME
 
-  PORTAGE_INTERNAL_SCRIPT=$PROGRAM.portage.$$
-  run_privileged install -m 700 "$0" "$MOUNT_ROOT/run/$PORTAGE_INTERNAL_SCRIPT"
-  run_privileged chroot "$MOUNT_ROOT" /usr/bin/env -i \
-    HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    TERM="${TERM:-dumb}" /bin/bash "/run/$PORTAGE_INTERNAL_SCRIPT" \
-    --internal-portage-chroot --target-host "$TARGET_HOST" \
+  run_chroot_phase portage --internal-portage-chroot --target-host "$TARGET_HOST" \
     --timezone "$TARGET_TIMEZONE" --locale "$TARGET_LOCALE"
-  run_privileged rm -f -- "$MOUNT_ROOT/run/$PORTAGE_INTERNAL_SCRIPT"
-  unset PORTAGE_INTERNAL_SCRIPT
   trap - ERR EXIT
 
   log 'Portage foundation installed'
@@ -1528,13 +1567,14 @@ EOF
 # https://wiki.gentoo.org/wiki/Upgrading_Gentoo
 
 pending_config_updates() {
-  local protect path
-  local -a paths
-  protect=$(portageq envvar CONFIG_PROTECT)
+  local root=${1:-} protect path
+  local -a paths context=()
+  [[ -z $root ]] || context=(chroot "$root")
+  protect=$("${context[@]}" portageq envvar CONFIG_PROTECT)
   IFS=' ' read -r -a paths <<<"$protect"
   for path in "${paths[@]}"; do
-    [[ -d $path ]] || continue
-    find "$path" -type f -name '._cfg????_*' -print
+    [[ -d $root$path ]] || continue
+    find "$root$path" -type f -name '._cfg????_*' -print
   done
 }
 
@@ -1559,11 +1599,11 @@ system_update_chroot() {
   portageq envvar COMMON_FLAGS >/dev/null
   prepare_install_binpkgs
   # The choice applies only to installer commands; no persistent opt-in.
-  emerge --oneshot --noreplace "${PACKAGE_OPTIONS[@]}" dev-vcs/git app-portage/cpuid2cpuflags
+  install_emerge --oneshot --noreplace "${PACKAGE_OPTIONS[@]}" dev-vcs/git app-portage/cpuid2cpuflags
   emaint --auto sync
   # news list can return 1 after successfully listing items; read displays titles too.
   eselect news read
-  emerge --oneshot --update "${PACKAGE_OPTIONS[@]}" sys-apps/portage
+  install_emerge --oneshot --update "${PACKAGE_OPTIONS[@]}" sys-apps/portage
 
   flags=$TARGET_CPU_FLAGS
   if [[ -z $flags ]]; then
@@ -1575,9 +1615,9 @@ system_update_chroot() {
   install -d /etc/portage/package.use
   printf '*/* cpu_flags_x86: %s\n' "$flags" >/etc/portage/package.use/00cpu-flags
   printf 'Target CPU flags: %s\n' "$flags"
-  emerge --pretend --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
+  install_emerge --pretend --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
   confirm_phase 'initial world update (review relevant news above)'
-  emerge --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
+  install_emerge --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
 
   pending=$(pending_config_updates)
   if [[ -n $pending ]]; then
@@ -1593,7 +1633,7 @@ system_update_chroot() {
     pending=$(pending_config_updates)
     [[ -z $pending ]] || die "configuration updates remain unresolved: $pending"
   fi
-  emerge --verbose "${PACKAGE_OPTIONS[@]}" @preserved-rebuild
+  install_emerge --verbose "${PACKAGE_OPTIONS[@]}" @preserved-rebuild
   pending=$(pending_config_updates)
   [[ -z $pending ]] || die "rebuilds left configuration updates requiring review: $pending"
   git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ --no-pager diff --stat
@@ -1688,42 +1728,15 @@ EOF
   [[ -n $TARGET_DISK ]] || die 'system-update requires --disk DEVICE'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
   [[ -b $TARGET_DISK ]] || die "target is not a block device: $TARGET_DISK"
-  case ${TARGET_DISK##*/} in
-    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
   verify_disk_setup || die 'system-update requires a verified disk layout'
   [[ -r $MOUNT_ROOT/etc/gentoo-release ]] || die 'the Gentoo target is missing'
-  for source in proc sys dev run; do
-    mountpoint -q "$MOUNT_ROOT/$source" || die "required chroot mount is missing: $source"
-  done
+  require_chroot_mounts
   confirm_phase 'system update'
   # Preserve the mounted target on failure so builds and merges can be resumed.
-  local internal_script=/run/$PROGRAM.update.$$
   local -a update_options=("${BINARY_INSTALL_OPTIONS[@]}")
   (( ASSUME_YES == 0 )) || update_options+=(--yes)
-  run_privileged install -m 700 "$0" "$MOUNT_ROOT$internal_script"
-  # Keep cleanup in the same root process: sudo credentials may expire during
-  # the build. Cleanup warnings must not replace the update's exit status.
-  run_privileged /bin/bash -c '
-    target_root=$1
-    helper=$2
-    shift 2
-    cleanup_update_helper() {
-      local update_status=$?
-      trap - EXIT
-      if ! rm -f -- "$target_root$helper"; then
-        printf "Warning: could not remove temporary update helper: %s\n" \
-          "$target_root$helper" >&2
-      fi
-      exit "$update_status"
-    }
-    trap cleanup_update_helper EXIT
-    chroot "$target_root" /usr/bin/env -i \
-      HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-      TERM="${TERM:-dumb}" /bin/bash "$helper" "$@"
-  ' "$PROGRAM-update" "$MOUNT_ROOT" "$internal_script" \
-    --internal-update-chroot --target-host "$TARGET_HOST" \
+  run_chroot_phase update --internal-update-chroot --target-host "$TARGET_HOST" \
     --cpu-flags "$TARGET_CPU_FLAGS" "${update_options[@]}" || status=$?
   (( status == 0 )) || die 'system-update did not complete; target remains mounted for review and retry'
   log 'System update complete: ready for kernel installation'
@@ -1774,20 +1787,6 @@ read_kernel_firmware_policy() {
     yes|no) TARGET_SOF_FIRMWARE=$SOF_FIRMWARE ;;
     *) die "SOF_FIRMWARE must be yes or no in $directory" ;;
   esac
-}
-
-# Write policy supplied on stdin, replacing only regular installer-marked files.
-# Unmarked files and symlinks stop the phase for the user to inspect and reconcile;
-# the marker permits full replacement, including any edits that retained it.
-kernel_policy_file() {
-  local path=$1 content
-  content=$(cat)
-  if [[ -e $path || -L $path ]]; then
-    [[ -f $path && ! -L $path ]] || die "kernel policy is not a regular file: $path"
-    grep -Fxq '# Managed by gentoo-install kernel-foundation.' "$path" \
-      || die "existing kernel policy requires manual review: $path"
-  fi
-  printf '%s\n' "$content" >"$path"
 }
 
 # Record target boot parameters or ESP identity, allowing retries with the same value.
@@ -1871,12 +1870,12 @@ register_qemu_distribution_kernel() (
   initrd="\\EFI\\Gentoo\\initramfs-$version.img"
   run_privileged test -s "$root/boot/EFI/Gentoo/kernel-$version.efi"
   run_privileged test -s "$root/boot/EFI/Gentoo/initramfs-$version.img"
-  cmdline=$(run_privileged cat "$root/etc/kernel/gentoo-dist.cmdline")
+  cmdline=$(run_privileged cat "$root/etc/kernel/cmdline")
   [[ -n $cmdline && $cmdline != *$'\n'* && $cmdline != *$'\r'* ]]
   run_privileged virt-fw-vars --input "$source" --output-json /dev/stdout >"$work/before.json"
   # Only the QEMU VM store is passed to the CLI, never the host's live EFI variables.
   run_privileged virt-fw-vars --input "$source" --output "$work/appended.fd" \
-    --append-boot-filepath "$kernel $cmdline console=tty0 console=ttyS0,115200n8 initrd=$initrd"
+    --append-boot-filepath "$kernel $cmdline initrd=$initrd"
   run_privileged virt-fw-vars --input "$work/appended.fd" --output-json /dev/stdout >"$work/appended.json"
   # Identify the CLI-created entry and reuse an identical entry on ordinary retries.
   new=$(jq -er --slurpfile before "$work/before.json" '
@@ -1955,7 +1954,7 @@ verify_distribution_kernel() {
     || die 'EFI image differs from the installed distribution kernel'
   modules=$(lsinitrd -m "$initrd")
   for driver in crypt btrfs; do
-    grep -Eq "^[[:space:]]*$driver[[:space:]]*$" <<<"$modules" \
+    grep -Eq "^[[:space:]]*${driver}[[:space:]]*$" <<<"$modules" \
       || die "initramfs lacks the Dracut $driver module"
   done
   listing=$(lsinitrd "$initrd")
@@ -2048,108 +2047,45 @@ kernel_foundation_chroot() {
   [[ -z $pending ]] || die "resolve protected configuration updates first: $pending"
   mountpoint -q /boot && [[ $(findmnt -n -o FSTYPE --target /boot) == vfat ]] \
     || die 'the target EFI partition must be mounted at /boot'
-  case ${TARGET_DISK##*/} in
-    *[0-9]) CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
   root_uuid=$(blkid -s UUID -o value "/dev/mapper/$LUKS_NAME")
   luks_uuid=$(cryptsetup luksUUID "$CRYPT_PARTITION")
   [[ $root_uuid =~ ^[[:xdigit:]-]+$ && $luks_uuid =~ ^[[:xdigit:]-]+$ ]] || die 'invalid target UUIDs'
-  [[ $ROOT_SUBVOL =~ ^[A-Za-z0-9_@.-]+$ && $LUKS_NAME =~ ^[A-Za-z0-9_-]+$ ]] \
-    || die 'kernel root subvolume or mapper name contains unsupported characters'
   efi_uuid=$(findmnt -n -o UUID --target /boot)
   [[ $efi_uuid =~ ^[[:xdigit:]-]+$ ]] || die 'could not identify the mounted ESP UUID'
   cmdline="root=UUID=$root_uuid rootfstype=btrfs rootflags=subvol=$ROOT_SUBVOL rd.luks.uuid=luks-$luks_uuid rd.luks.name=$luks_uuid=$LUKS_NAME ro"
+  [[ $TARGET_HOST != qemu ]] || cmdline+=' console=tty0 console=ttyS0,115200n8'
 
-  install -d /etc/portage/package.use /etc/portage/package.accept_keywords /etc/kernel/install.d /etc/dracut.conf.d
-  # Retire only earlier installer-owned policy names; never delete user files.
-  local old_policy
-  for old_policy in /etc/portage/package.use/99-kernel-foundation /etc/portage/package.accept_keywords/99-kernel-foundation; do
-    if [[ -f $old_policy && ! -L $old_policy ]] &&
-      grep -Fxq '# Managed by gentoo-install kernel-foundation.' "$old_policy"; then
-      rm -- "$old_policy"
-    fi
+  for policy in /etc/portage/package.use/kernel /etc/kernel/install.conf /etc/dracut.conf.d/agentoo-dist.conf /etc/kernel/install.d/04-agentoo-esp.install; do
+    [[ -f $policy && ! -L $policy ]] || die "missing tracked kernel policy: $policy"
   done
-  kernel_policy_file /etc/portage/package.use/zz-kernel-foundation <<'POLICY'
-# Managed by gentoo-install kernel-foundation.
-*/* dist-kernel
-sys-apps/systemd kernel-install
-sys-kernel/installkernel systemd dracut -efistub -grub -systemd-boot -refind -uki -ukify -ugrd
-sys-kernel/dracut systemd
-sys-kernel/gentoo-kernel-bin initramfs -generic-uki
-# Broad fallback firmware; target-specific pruning belongs to the custom path.
-sys-kernel/linux-firmware -savedconfig
-sys-firmware/intel-microcode -hostonly
-POLICY
-  # The inherited configuration keywords virtual/dist-kernel for testing.
-  # Keep its provider aligned with the stable binary fallback, so future world
-  # updates cannot satisfy a newer testing virtual by compiling gentoo-kernel.
-  kernel_policy_file /etc/portage/package.accept_keywords/zz-kernel-foundation <<'POLICY'
-# Managed by gentoo-install kernel-foundation.
-sys-kernel/gentoo-kernel-bin -~amd64
-virtual/dist-kernel -~amd64
-POLICY
-  kernel_policy_file /etc/kernel/install.conf <<'POLICY'
-# Managed by gentoo-install kernel-foundation.
-# efistub layout copies files; USE=-efistub disables EFI registration plugins.
-layout=efistub
-initrd_generator=dracut
-uki_generator=none
-BOOT_ROOT=/boot
-POLICY
-  kernel_policy_file /etc/dracut.conf.d/99-gentoo-dist.conf <<'POLICY'
-# Managed by gentoo-install kernel-foundation.
-# The chroot sees the installation host, not the destination machine.
-hostonly="no"
-hostonly_cmdline="no"
-uefi="no"
-early_microcode="yes"
-add_dracutmodules+=" crypt btrfs "
-add_drivers+=" nvme ahci virtio_pci virtio_blk virtio_scsi usbhid hid_generic xhci_pci atkbd i8042 "
-POLICY
-  kernel_target_data /etc/kernel/gentoo-dist.cmdline "$cmdline"
+  kernel_target_data /etc/kernel/cmdline "$cmdline"
   kernel_target_data /etc/kernel/gentoo-dist-esp.uuid "$efi_uuid"
-  kernel_policy_file /etc/kernel/install.d/04-gentoo-dist-esp.install <<'POLICY'
-#!/usr/bin/env bash
-# Managed by gentoo-install kernel-foundation.
-set -euo pipefail
-[[ ${1:-} == add ]] || exit 0
-case ${2:-} in *-gentoo-dist|*-gentoo-dist-bin) ;; *) exit 0 ;; esac
-# Fail before generation/copy if the ESP is missing during a later update.
-expected=$(cat /etc/kernel/gentoo-dist-esp.uuid)
-mountpoint -q /boot && [[ $(findmnt -n -o FSTYPE --target /boot) == vfat ]] &&
-  [[ $(findmnt -n -o UUID --target /boot) == "$expected" ]] || {
-  printf 'Distribution kernel update requires the target ESP mounted at /boot.\n' >&2
-  exit 1
-}
-POLICY
-  chmod 755 /etc/kernel/install.d/04-gentoo-dist-esp.install
   [[ $TARGET_MICROCODE != intel ]] || packages+=(sys-firmware/intel-microcode)
   [[ $TARGET_SOF_FIRMWARE != yes ]] || packages+=(sys-firmware/sof-firmware)
-  # Use a filename after common in lexical order: 99-* sorts before common.
   # Keep the binary provider in every transaction to prevent an OR dependency
   # (firmware -> virtual/dist-kernel) from selecting the source provider.
   # Explicit packages, rather than @early_install (which also contains sources
   # and Genkernel). kernel-bin is an ebuild containing a prebuilt kernel; this
   # works in both source-only and binary-preferred installation modes.
   prepare_install_binpkgs
-  emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
+  install_emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
   confirm_phase 'distribution kernel packages (review the plan above)'
   # Dracut modules require target-side tools before the kernel postinst runs.
   # This transaction has no firmware -> virtual/dist-kernel dependency.
-  emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}"
+  install_emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}"
   # Fail closed if local overrides re-enable firmware-writing plugins.
   local hook
   for hook in /usr/lib/kernel/install.d/*efistub* /etc/kernel/install.d/*efistub*; do
     [[ ! -e $hook ]] || die "unexpected firmware registration hook: $hook"
   done
-  emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
-  emerge --oneshot --verbose "${PACKAGE_OPTIONS[@]}" @module-rebuild
+  install_emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
+  install_emerge --oneshot --verbose "${PACKAGE_OPTIONS[@]}" @module-rebuild
   atom=$(portageq best_version / sys-kernel/gentoo-kernel-bin)
   [[ -n $atom ]] || die 'binary distribution kernel was not installed'
   # pkg_config regenerates the initramfs after external modules are ready,
   # using the installed package's release rather than uname -r.
-  emerge --config "=$atom"
+  install_emerge --config "=$atom"
   # Resolve the version from this package's recorded installed kernel tree.
   local -a release_files=()
   local contents_path
@@ -2160,10 +2096,7 @@ POLICY
   version=$(<"${release_files[0]}")
   [[ $version =~ ^[A-Za-z0-9._+-]+-gentoo-dist(-bin)?$ ]] || die "unexpected distribution kernel release: $version"
   verify_distribution_kernel "$version"
-  kernel_policy_file /etc/kernel/gentoo-dist.version <<VERSION
-# Managed by gentoo-install kernel-foundation.
-$version
-VERSION
+  printf '# Managed by gentoo-install kernel-foundation.\n%s\n' "$version" >/etc/kernel/gentoo-dist.version
   pending=$(pending_config_updates)
   [[ -z $pending ]] || die "kernel packages left protected configuration updates: $pending"
   printf '\nKernel command line:\n%s\n' "$cmdline"
@@ -2176,7 +2109,7 @@ VERSION
   fi
   printf 'After kernel updates, register the new version; retain a tested previous entry.\n'
   printf 'Custom EFI images use their own build/copy workflow, without make install.\n'
-  agentoo-git diff --stat
+  agentoo-git --no-pager diff --stat
 }
 
 # Present the kernel phase plan and verify the mounted target before installation.
@@ -2213,7 +2146,7 @@ remove microcode that the generic initramfs includes from installed firmware.
 
 Establish package and image-generation policy
 --------------------------------------------
-The phase writes /etc/portage/package.use/zz-kernel-foundation with dist-kernel,
+Tracked /etc/portage/package.use/kernel supplies dist-kernel,
 installkernel[systemd,dracut] and kernel-bin[initramfs,-generic-uki]. It disables
 boot-manager and EFI registration flags. /etc/kernel/install.conf selects:
 
@@ -2228,9 +2161,7 @@ An ESP guard stops distribution updates if the expected FAT partition is not
 mounted at /boot. Final system configuration must arrange this mount in fstab.
 The Dracut configuration keeps hostonly=no, early_microcode=yes, crypt/btrfs
 modules, and storage/keyboard drivers. These settings persist across updates.
-An existing policy file without the installer marker stops the phase so the
-user can inspect and reconcile it before retrying. Marked files are replaced
-in full, including edits retaining that marker. Conflicting saved boot parameters
+Static policy is tracked in Agentoo; review it through the normal Git workflow. Conflicting saved boot parameters
 or ESP identity also stop the phase. These checks do not open a merge dialog
 or roll back earlier changes in the phase.
 
@@ -2267,7 +2198,7 @@ Derive UUIDs from the target devices, never the host's running command line:
 
 blkid -s UUID -o value /dev/mapper/cryptroot
 cryptsetup luksUUID /dev/nbd0p2
-cat /etc/kernel/gentoo-dist.cmdline
+cat /etc/kernel/cmdline
 lsinitrd -m /boot/EFI/Gentoo/initramfs-6.18.54-gentoo-dist-bin.img
 lsinitrd /boot/EFI/Gentoo/initramfs-6.18.54-gentoo-dist-bin.img
 modinfo -k 6.18.54-gentoo-dist-bin btrfs
@@ -2367,40 +2298,16 @@ PLAN
   [[ -n $TARGET_DISK ]] || die 'kernel-foundation requires --disk DEVICE'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
   [[ -b $TARGET_DISK ]] || die "target is not a block device: $TARGET_DISK"
-  case ${TARGET_DISK##*/} in
-    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
   verify_disk_setup || die 'kernel-foundation requires a verified disk layout'
-  for source in proc sys dev run; do
-    mountpoint -q "$MOUNT_ROOT/$source" || die "required chroot mount is missing: $source"
-  done
+  require_chroot_mounts
   [[ -r $MOUNT_ROOT/etc/gentoo-release ]] || die 'the Gentoo target is missing'
   check_qemu_firmware
   confirm_phase 'distribution kernel foundation'
-  local helper=/run/$PROGRAM.kernel.$$
   local -a options=("${BINARY_INSTALL_OPTIONS[@]}")
   (( ASSUME_YES == 0 )) || options+=(--yes)
-  run_privileged install -m 700 "$0" "$MOUNT_ROOT$helper"
-  run_privileged /bin/bash -c '
-    target_root=$1
-    helper=$2
-    shift 2
-    # Remove the temporary installer copy on success or failure.
-    # Preserve the chroot exit status so a failed phase remains visible to the caller.
-    cleanup_kernel_helper() {
-      local status=$?
-      trap - EXIT
-      rm -f -- "$target_root$helper" || printf "Warning: temporary kernel helper remains: %s\n" "$helper" >&2
-      exit "$status"
-    }
-    trap cleanup_kernel_helper EXIT
-    chroot "$target_root" /usr/bin/env -i \
-      HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-      TERM="${TERM:-dumb}" /bin/bash "$helper" "$@"
-  ' "$PROGRAM-kernel" "$MOUNT_ROOT" "$helper" \
-    --internal-kernel-chroot --target-host "$TARGET_HOST" \
-    --disk "$TARGET_DISK" --luks-name "$LUKS_NAME" --root-subvol "$ROOT_SUBVOL" \
+  run_chroot_phase kernel --internal-kernel-chroot --target-host "$TARGET_HOST" \
+    --disk "$TARGET_DISK" --luks-name "$LUKS_NAME" \
     --microcode "$TARGET_MICROCODE" "${options[@]}" || status=$?
   (( status == 0 )) || die 'kernel-foundation did not complete; target remains mounted for review and retry'
   # Offline firmware editing is exclusively for the QEMU target.
@@ -2415,6 +2322,55 @@ PLAN
 # systemd-firstboot(1), systemctl(1), and dhcpcd's 20-resolv.conf hook.
 # Runtime initialization is automatic at boot. This phase establishes persistent
 # identity, mounts, credentials and explicit service policy before that boot.
+configure_wifi() (
+  local root=$1 device interface destination source candidate ssid password temporary=
+  umask 077
+  trap 'if [[ -n $temporary ]]; then rm -f -- "$temporary"; fi' EXIT
+  for device in /sys/class/net/*; do
+    [[ -d $device/phy80211 ]] || continue
+    interface=${device##*/}
+    destination=$root/etc/wpa_supplicant/wpa_supplicant-$interface.conf
+    if [[ -e $destination || -L $destination ]]; then
+      [[ -s $destination && -f $destination && ! -L $destination ]] || die "inspect existing Wi-Fi configuration: $destination"
+      chmod 600 "$destination"
+      printf 'Preserving Wi-Fi configuration for %s.\n' "$interface"
+      continue
+    fi
+    install -d -m 755 "$root/etc/wpa_supplicant"
+    source=
+    for candidate in "/etc/wpa_supplicant/wpa_supplicant-$interface.conf" \
+        /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa_supplicant.conf; do
+      [[ -s $candidate && -f $candidate ]] || continue
+      source=$candidate
+      break
+    done
+    if [[ -n $source ]]; then
+      install -m 600 "$source" "$destination"
+      printf 'Copied native Wi-Fi configuration for %s.\n' "$interface"
+      continue
+    fi
+    printf 'Wi-Fi SSID for %s (blank to defer): ' "$interface" >/dev/tty
+    IFS= read -r ssid </dev/tty
+    [[ -n $ssid ]] || continue
+    printf 'Wi-Fi password (blank for an open network): ' >/dev/tty
+    IFS= read -r -s password </dev/tty
+    printf '\n' >/dev/tty
+    temporary=$(mktemp "$destination.XXXXXX")
+    printf 'ctrl_interface=/run/wpa_supplicant\n' >"$temporary"
+    if [[ -n $password ]]; then
+      printf '%s\n' "$password" | chroot "$root" /usr/bin/wpa_passphrase "$ssid" |
+        sed '/^[[:space:]]*#psk=/d' >>"$temporary"
+    else
+      ssid=$(printf '%s' "$ssid" | od -An -v -tx1 | tr -d ' \n')
+      printf 'network={\n ssid=%s\n key_mgmt=NONE\n}\n' "$ssid" >>"$temporary"
+    fi
+    unset password
+    mv -- "$temporary" "$destination"
+    temporary=
+    printf 'Configured Wi-Fi for %s.\n' "$interface"
+  done
+)
+
 firstboot_offline() {
   (( EUID == 0 )) || die 'offline first-boot setup requires root'
   local root=$MOUNT_ROOT root_uuid esp_uuid hostname=$TARGET_HOSTNAME command unit
@@ -2422,11 +2378,9 @@ firstboot_offline() {
     || die 'first-boot-foundation requires the configured Gentoo target'
   grep -Fxq "GENTOO_TARGET_HOST=\"$TARGET_HOST\"" "$root/etc/agentoo/target-host" \
     || die 'target-host differs from the installed configuration'
-  for command in systemd-firstboot systemctl python3; do require_command "$command"; done
+  for command in systemd-firstboot systemctl; do require_command "$command"; done
   [[ -x $root/usr/lib/systemd/systemd-timesyncd ]] || die 'target systemd lacks timesyncd'
-  [[ -s $root/etc/kernel/gentoo-dist.cmdline ]] || die 'run kernel-foundation first'
-  [[ $ROOT_SUBVOL =~ ^[A-Za-z0-9_@.-]+$ && $HOME_SUBVOL =~ ^[A-Za-z0-9_@.-]+$ ]] \
-    || die 'unsupported Btrfs subvolume name'
+  [[ -s $root/etc/kernel/cmdline ]] || die 'run kernel-foundation first'
   if [[ -z $hostname && $TARGET_HOST != generic && $TARGET_HOST != qemu ]]; then hostname=$TARGET_HOST; fi
   if [[ -z $hostname && -s $root/etc/hostname ]]; then hostname=$(cat "$root/etc/hostname"); fi
   if [[ -z $hostname ]]; then
@@ -2442,8 +2396,8 @@ firstboot_offline() {
   esp_uuid=$(blkid -s UUID -o value "$EFI_PARTITION")
   [[ $root_uuid =~ ^[[:xdigit:]-]+$ && $esp_uuid =~ ^[[:xdigit:]-]+$ ]] || die 'invalid filesystem UUIDs'
   [[ $(cat "$root/etc/kernel/gentoo-dist-esp.uuid") == "$esp_uuid" ]] || die 'kernel ESP identity differs'
-  grep -Fq "rootflags=subvol=$ROOT_SUBVOL " "$root/etc/kernel/gentoo-dist.cmdline" || die 'kernel root subvolume differs'
-  grep -Fq "root=UUID=$root_uuid " "$root/etc/kernel/gentoo-dist.cmdline" || die 'kernel root UUID differs'
+  grep -Fq "rootflags=subvol=$ROOT_SUBVOL " "$root/etc/kernel/cmdline" || die 'kernel root subvolume differs'
+  grep -Fq "root=UUID=$root_uuid " "$root/etc/kernel/cmdline" || die 'kernel root UUID differs'
 
   # Run package operations inside the target, but never start services there.
   [[ -f $root/root/001-firstboot-verify-and-checkpoint.sh && ! -L $root/root/001-firstboot-verify-and-checkpoint.sh ]] \
@@ -2455,189 +2409,45 @@ firstboot_offline() {
   local -a packages=(net-misc/dhcpcd app-shells/zsh)
   [[ $TARGET_HOST == qemu ]] || packages+=(net-wireless/wpa_supplicant)
   prepare_install_binpkgs "$root"
-  chroot "$root" /usr/bin/emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
+  target_emerge "$root" --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
   confirm_phase 'first-boot networking packages (review the plan above)'
-  chroot "$root" /usr/bin/emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
+  target_emerge "$root" --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
+  local pending
+  pending=$(pending_config_updates "$root")
+  [[ -z $pending ]] || die "review protected configuration updates with chroot $root dispatch-conf, then resume first-boot-foundation: $pending"
 
   # Root uses the same system Zsh defaults as ordinary users, without home copies.
   local root_shell
-  root_shell=$(chroot "$root" /bin/sh -c 'command -v zsh') || die 'target Zsh is unavailable'
+  root_shell=$(chroot "$root" /bin/sh -c 'readlink -f "$(command -v zsh)"') || die 'target Zsh is unavailable'
   [[ $root_shell == /* && -x $root$root_shell ]] || die 'target Zsh path is invalid'
   grep -Fxq "$root_shell" "$root/etc/shells" || die 'target Zsh is not listed in /etc/shells'
   chroot "$root" /usr/sbin/usermod --shell "$root_shell" root
 
-  # Python writes persistent files atomically and rejects unowned conflicts.
-  # Imported credentials are never printed, passed in argv, or tracked in Git.
-  python3 - "$root" "$TARGET_HOST" "$root_uuid" "$esp_uuid" "$ROOT_SUBVOL" "$HOME_SUBVOL" <<'PYTHON'
-import configparser, getpass, hashlib, os, pathlib, re, tempfile
-import sys
-root, target, uuid, esp, subvol, home = sys.argv[1:]
-base = pathlib.Path(root)
-marker = '# Managed by gentoo-install first-boot-foundation.\n'
-def write(name, content, mode=0o644, allow_comments=False, marked=True):
-    desired = (marker if marked else "") + content
-    path = base / name.lstrip('/')
-    if path.is_symlink():
-        raise SystemExit(f'Refusing symlink at {name}')
-    if path.exists():
-        old = path.read_text()
-        if old == desired:
-            os.chmod(path, mode)
-            return
-        harmless = allow_comments and all(not x.strip() or x.lstrip().startswith('#') for x in old.splitlines())
-        if not (old.startswith(marker) or old.startswith('#!/bin/bash\n' + marker)) and not harmless:
-            raise SystemExit(f'Existing {name} requires manual review')
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent)
-    try:
-        with os.fdopen(fd, 'w') as stream:
-            os.fchmod(stream.fileno(), mode)
-            stream.write(desired)
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp): os.unlink(tmp)
-write('/etc/fstab', f'UUID={uuid} / btrfs noatime,compress=zstd:1,subvol={subvol} 0 0\n'
-      f'UUID={uuid} /home btrfs noatime,compress=zstd:1,subvol={home} 0 0\n'
-      f'UUID={esp} /boot vfat umask=0077 0 2\n', allow_comments=True)
-write('/etc/adjtime', '0.0 0 0.0\n0\nUTC\n', marked=False)
-write('/etc/systemd/journald.conf.d/90-first-boot.conf', '[Journal]\nStorage=persistent\nSystemMaxUse=256M\nSystemKeepFree=512M\n')
-# An invalid command prevents dhcpcd from selecting systemd's resolvconf shim.
-write('/etc/dhcpcd/gentoo-install.conf', 'hostname\nclientid\noption domain_name_servers, domain_name, domain_search\n'
-      'option classless_static_routes\noption interface_mtu\nrequire dhcp_server_identifier\n'
-      'slaac private\nnohook wpa_supplicant, hostname\nenv resolvconf=/nonexistent/gentoo-install-resolvconf\n', allow_comments=True)
-write('/etc/systemd/system/dhcpcd.service.d/90-first-boot.conf', '[Service]\nExecStart=\n'
-      'ExecStart=/sbin/dhcpcd -q -f /etc/dhcpcd/gentoo-install.conf\n')
-write('/etc/systemd/system/gentoo-btrfs-scrub.service', '[Unit]\nDescription=Scrub the Gentoo Btrfs filesystem\n'
-      'RequiresMountsFor=/\n[Service]\nType=oneshot\nExecStart=/usr/bin/btrfs scrub start -B /\n'
-      'TimeoutStartSec=infinity\nNice=19\nIOSchedulingClass=idle\n')
-write('/etc/systemd/system/gentoo-btrfs-scrub.timer', '[Unit]\nDescription=Monthly Btrfs integrity check\n'
-      '[Timer]\nOnCalendar=monthly\nPersistent=true\nRandomizedDelaySec=1d\n'
-      '[Install]\nWantedBy=timers.target\n')
-# Only scrub: no automatic balance, defragmentation, or encrypted discard policy.
-if target == 'qemu':
-    print('QEMU: DHCP on virtual Ethernet; no Wi-Fi credentials imported.')
-else:
-    destination = base / 'etc/wpa_supplicant/gentoo-install.conf'
-    if not destination.exists() and not destination.is_symlink():
-        networks = []
-        def supplicant_blocks(data):
-            # Match braces only outside quoted strings and comments.
-            blocks, start, depth, quoted, escaped, comment = [], None, 0, False, False, False
-            for i, c in enumerate(data):
-                if comment:
-                    if c == '\n': comment = False
-                    continue
-                if escaped: escaped = False; continue
-                if quoted and c == '\\': escaped = True; continue
-                if c == '"': quoted = not quoted; continue
-                if quoted: continue
-                if c == '#': comment = True; continue
-                if c == '{':
-                    if depth == 0:
-                        match = re.search(r'network\s*=\s*$', data[:i])
-                        start = match.start() if match else None
-                    depth += 1
-                elif c == '}':
-                    depth -= 1
-                    if depth < 0: return []
-                    if depth == 0 and start is not None: blocks.append(data[start:i+1])
-            return blocks if depth == 0 and not quoted else []
-        # Reuse a self-contained supplicant configuration; certificate paths need
-        # explicit provisioning and must not silently refer to files on the host.
-        candidates = list(pathlib.Path('/etc/wpa_supplicant').glob('*.conf'))
-        candidates += [pathlib.Path('/etc/wpa_supplicant.conf')]
-        for candidate in candidates:
-            if not candidate.is_file(): continue
-            data = candidate.read_text()
-            if re.search(r'^\s*(ca_cert\w*|client_cert\w*|private_key\w*|include|eap)\s*=', data, re.M):
-                continue
-            blocks = supplicant_blocks(data)
-            networks.extend(blocks)
-        # NetworkManager keyfiles: support saved personal WPA-PSK/SAE and open
-        # networks. Do not guess enterprise, WEP, or externally stored secrets.
-        def network(ssid, key='', method='WPA-PSK'):
-            encoded = ssid.encode('utf-8')
-            if not 1 <= len(encoded) <= 32: return None
-            if method == 'NONE': return f'network={{\n ssid={encoded.hex()}\n key_mgmt=NONE\n}}'
-            if method == 'SAE':
-                if not key or any(ord(c) < 32 for c in key): return None
-                escaped = key.replace('\\', '\\\\').replace('"', '\\"')
-                return f'network={{\n ssid={encoded.hex()}\n key_mgmt=SAE\n ieee80211w=2\n sae_password="{escaped}"\n}}'
-            if re.fullmatch(r'[0-9a-fA-F]{64}', key): psk = key
-            elif 8 <= len(key) <= 63:
-                psk = hashlib.pbkdf2_hmac('sha1', key.encode(), encoded, 4096, 32).hex()
-            else: return None
-            return f'network={{\n ssid={encoded.hex()}\n key_mgmt=WPA-PSK\n psk={psk}\n}}'
-        for candidate in pathlib.Path('/etc/NetworkManager/system-connections').glob('*'):
-            if not candidate.is_file(): continue
-            config = configparser.ConfigParser(interpolation=None, strict=False)
-            try: config.read_string(candidate.read_text())
-            except (configparser.Error, UnicodeError): continue
-            section = 'wifi' if config.has_section('wifi') else '802-11-wireless'
-            if not config.has_section(section): continue
-            ssid = config.get(section, 'ssid', fallback='')
-            # Keyfile escaping and byte-array SSIDs need a dedicated converter.
-            if '\\' in ssid or re.fullmatch(r'(\d+;)+', ssid): continue
-            security = 'wifi-security' if config.has_section('wifi-security') else '802-11-wireless-security'
-            if config.get(section, 'security', fallback='') and not config.has_section(security): continue
-            method = config.get(security, 'key-mgmt', fallback='none')
-            if method not in ('none', 'wpa-psk', 'sae'): continue
-            block = network(ssid, config.get(security, 'psk', fallback=''),
-                            {'none':'NONE','wpa-psk':'WPA-PSK','sae':'SAE'}[method])
-            if block: networks.append(block)
-        if not networks:
-            print('Enterprise profiles, external certificate paths and unavailable secrets are not imported.')
-            # Buffered read/write mode requires seeking, which terminals cannot do.
-            with open('/dev/tty', 'r') as tty_input, open('/dev/tty', 'w') as tty_output:
-                tty_output.write('No supported saved Wi-Fi credentials. SSID (blank to defer Wi-Fi): '); tty_output.flush()
-                ssid = tty_input.readline().rstrip('\n')
-                if ssid:
-                    password = getpass.getpass('Wi-Fi password (blank for an open network): ', stream=tty_output)
-                    block = network(ssid, password, 'WPA-PSK' if password else 'NONE')
-                    if not block: raise SystemExit('Invalid SSID or WPA password')
-                    networks.append(block)
-        if networks:
-            write('/etc/wpa_supplicant/gentoo-install.conf', 'ctrl_interface=/run/wpa_supplicant\n'
-                  'update_config=0\n' + '\n'.join(dict.fromkeys(networks)) + '\n', 0o600)
-            print('Saved supported Wi-Fi profiles in a root-only target file.')
-        else: print('Wi-Fi deferred; Ethernet DHCP is configured.')
-    if destination.exists() or destination.is_symlink():
-        if destination.is_symlink() or not destination.read_text().startswith(marker):
-            raise SystemExit('Existing Wi-Fi configuration requires manual review')
-        os.chmod(destination, 0o600)
-        template = base / 'usr/lib/systemd/system/wpa_supplicant@.service'
-        if not template.is_file():
-            template = base / 'lib/systemd/system/wpa_supplicant@.service'
-        if not template.is_file() or 'wpa_supplicant-%I.conf' not in template.read_text():
-            raise SystemExit('Packaged wpa_supplicant@.service is missing or uses an unexpected configuration path')
-        interfaces = sorted(p.name for p in pathlib.Path('/sys/class/net').glob('*')
-                            if (p / 'phy80211').exists())
-        if interfaces:
-            print('Using detected Wi-Fi interfaces: ' + ' '.join(interfaces))
-        else:
-            print('No Wi-Fi interface detected; saved credentials retained, Wi-Fi deferred. Ethernet DHCP is configured.')
-        for interface in dict.fromkeys(interfaces):
-            if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}', interface):
-                raise SystemExit('Invalid target Wi-Fi interface name')
-            write('/etc/wpa_supplicant/wpa_supplicant-' + interface + '.conf',
-                  destination.read_text()[len(marker):], 0o600)
-        # Migrate only installer-owned custom startup files. Never replace the
-        # packaged unit or delete user-owned service/rule definitions.
-        for name in ('etc/systemd/system/gentoo-wifi@.service',
-                     'etc/udev/rules.d/80-gentoo-wifi.rules',
-                     'etc/udev/rules.d/99-gentoo-wifi.rules'):
-            path = base / name
-            if path.exists() or path.is_symlink():
-                if path.is_symlink() or not path.read_text().startswith(marker):
-                    raise SystemExit('Existing custom Wi-Fi startup file requires manual review')
-                path.unlink()
-    exclude = base / 'var/lib/agentoo/repository.git/info/exclude'
-    exclude.parent.mkdir(parents=True, exist_ok=True)
-    existing = exclude.read_text() if exclude.exists() else ''
-    for pattern in ('/etc/wpa_supplicant/gentoo-install.conf', '/etc/wpa_supplicant/wpa_supplicant-*.conf'):
-        if pattern not in existing.splitlines():
-            with exclude.open('a') as stream: stream.write('\n' + pattern + '\n')
-PYTHON
+  write_target_file "$root/etc/fstab" <<EOF
+# Managed by gentoo-install first-boot-foundation.
+UUID=$root_uuid / btrfs noatime,compress=zstd:1,subvol=@ 0 0
+UUID=$root_uuid /home btrfs noatime,compress=zstd:1,subvol=@home 0 0
+UUID=$esp_uuid /boot vfat umask=0077 0 2
+EOF
+  write_target_file "$root/etc/adjtime" <<'EOF'
+0.0 0 0.0
+0
+UTC
+EOF
+  # Preserve the packaged service and configuration, adding only our hook policy.
+  local dhcpcd_config=$root/etc/dhcpcd.conf
+  [[ -f $dhcpcd_config && ! -L $dhcpcd_config ]] || die 'packaged dhcpcd.conf is missing'
+  grep -Fxq 'nohook wpa_supplicant, hostname' "$dhcpcd_config" ||
+    printf '\n# Per-interface supplicant services own authentication; hostname is local.\nnohook wpa_supplicant, hostname\n' >>"$dhcpcd_config"
+  # A resolvconf provider would divert DNS updates to a service we do not use.
+  ! chroot "$root" /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/sh -c 'command -v resolvconf' >/dev/null ||
+    die 'remove the resolvconf provider (systemd USE=-resolvconf) before configuring direct dhcpcd DNS'
+  if [[ $TARGET_HOST != qemu ]]; then
+    configure_wifi "$root"
+  fi
+  local exclude=$root/var/lib/agentoo/repository.git/info/exclude
+  grep -Fxq '/etc/wpa_supplicant/wpa_supplicant-*.conf' "$exclude" ||
+    printf '\n/etc/wpa_supplicant/wpa_supplicant-*.conf\n' >>"$exclude"
   # Fresh identity is random, not inherited from the shared host /run or D-Bus.
   # firstboot preserves already initialized values; never use --reset/--force.
   systemd-firstboot --root="$root" --hostname="$hostname" --setup-machine-id
@@ -2665,19 +2475,10 @@ PYTHON
       systemctl --root="$root" disable "$unit"
     fi
   done
-  # Remove only links to the obsolete installer-owned custom template.
-  local link config interface
-  for link in "$root"/etc/systemd/system/*.wants/gentoo-wifi@*.service; do
-    [[ -L $link ]] || continue
-    case $(readlink "$link") in
-      /etc/systemd/system/gentoo-wifi@.service|../gentoo-wifi@.service) rm -- "$link" ;;
-      *) die 'unexpected custom Wi-Fi service link; review it manually' ;;
-    esac
-  done
+  local config interface
   if [[ $TARGET_HOST != qemu ]]; then
     for config in "$root"/etc/wpa_supplicant/wpa_supplicant-*.conf; do
-      [[ -f $config && ! -L $config ]] || continue
-      [[ $(head -n 1 "$config") == '# Managed by gentoo-install first-boot-foundation.' ]] || continue
+      [[ -s $config && ! -L $config ]] || continue
       interface=${config##*/wpa_supplicant-}
       interface=${interface%.conf}
       systemctl --root="$root" enable "wpa_supplicant@$interface.service"
@@ -2704,8 +2505,8 @@ install_firstboot_foundation() {
 Target root: $MOUNT_ROOT
 Hostname: ${TARGET_HOSTNAME:-$([[ $TARGET_HOST == generic || $TARGET_HOST == qemu ]] && printf 'prompt (or preserve existing)' || printf '%s' "$TARGET_HOST")}
 Clock: UTC
-Networking: dhcpcd; $([[ $TARGET_HOST == qemu ]] && printf 'virtual Ethernet only' || printf 'import supported host Wi-Fi profiles, otherwise prompt')
-Logging: persistent journald, 256 MiB cap, 512 MiB kept free
+Networking: dhcpcd; $([[ $TARGET_HOST == qemu ]] && printf 'virtual Ethernet only' || printf 'copy native wpa_supplicant config or prompt/defer')
+Logging: packaged journald defaults
 Time: enable existing systemd-timesyncd (no added time-service packages)
 Storage: UUID mounts and monthly Btrfs scrub (no automatic balance/defrag)
 PLAN
@@ -2725,12 +2526,10 @@ Wi-Fi credentials remain local root-only state, excluded from agentoo Git tracki
 Physical targets use the packaged wpa_supplicant@INTERFACE.service with
 root-only per-interface configuration files and automatically detected
 Wi-Fi interface names from the installation host. No custom Wi-Fi unit or udev startup rule is installed.
-They import self-contained wpa_supplicant network blocks and saved
-NetworkManager personal WPA-PSK/SAE/open profiles. Enterprise profiles, external
-certificates and unavailable secrets require separate provisioning. If no
-supported profile exists, prompt for SSID/password or defer Wi-Fi. Existing
-installer Wi-Fi credentials are preserved on retries. A udev rule starts one
-supplicant per target wireless interface without importing host device names.
+Copy the host's per-interface or common native configuration unchanged when
+present; otherwise prompt for SSID/password or defer Wi-Fi. Referenced external
+credentials/certificates require separate provisioning. Existing target
+credentials are preserved on retries. Only configured packaged supplicant service instances are enabled.
 QEMU uses virtual Ethernet and receives DHCP/DNS from its host-side backend.
 
 dhcpcd owns routes and resolv.conf directly; competing network services are
@@ -2745,125 +2544,35 @@ NOTES
   [[ $MODE != dry-run ]] || { printf '\nDry run: no configuration, credentials, packages, or services changed.\n'; return; }
   [[ -n $TARGET_DISK ]] || die 'first-boot-foundation requires --disk'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
-  case ${TARGET_DISK##*/} in
-    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
   verify_disk_setup || die 'first-boot-foundation requires verified target mounts'
   local source
-  for source in proc sys dev run; do mountpoint -q "$MOUNT_ROOT/$source" || die "missing chroot mount: $source"; done
+  require_chroot_mounts
   confirm_phase 'first-boot foundation'
   local -a options=("${BINARY_INSTALL_OPTIONS[@]}")
   (( ASSUME_YES == 0 )) || options+=(--yes)
   run_privileged /bin/bash "$0" --internal-firstboot-offline --disk "$TARGET_DISK" \
     --mount-root "$MOUNT_ROOT" --target-host "$TARGET_HOST" --hostname "$TARGET_HOSTNAME" \
-    --luks-name "$LUKS_NAME" --root-subvol "$ROOT_SUBVOL" --home-subvol "$HOME_SUBVOL" "${options[@]}"
-}
-
-recover_handoff_namespace_mounts() {
-  # Keep the scan and teardown in one authorized root process. Ordinary
-  # unmounts have already completed; never use forced or lazy unmounts here.
-  run_privileged /bin/bash -s -- "$MOUNT_ROOT" "$LUKS_NAME" "$CRYPT_PARTITION" "$EFI_PARTITION" "$ROOT_SUBVOL" "$HOME_SUBVOL" <<'NAMESPACE_RECOVERY'
-set -euo pipefail
-target_root=$1
-luks_name=$2
-crypt_partition=$3
-efi_partition=$4
-root_subvol=$5
-home_subvol=$6
-[[ $target_root == /* && $target_root != / && $target_root != *[[:space:]\\]* ]] || {
-  printf 'error: namespace recovery requires a non-root mount path without whitespace or backslashes.\n' >&2
-  exit 1
-}
-for command in nsenter readlink awk cryptsetup; do
-  command -v "$command" >/dev/null || { printf 'error: namespace recovery requires %s\n' "$command" >&2; exit 1; }
-done
-verify_mapping() {
-  local device
-  device=$(cryptsetup status "$luks_name" | awk '$1 == "device:" { print $2 }')
-  [[ -n $device && $(readlink -f -- "$device") == $(readlink -f -- "$crypt_partition") ]] || {
-    printf 'error: namespace recovery refused unexpected LUKS backing device.\n' >&2
-    return 1
-  }
-}
-verify_mapping
-declare -A seen=()
-for info in /proc/[0-9]*/mountinfo; do
-  [[ -r $info ]] || continue
-  awk -v root="$target_root" '$5 == root || index($5, root "/") == 1 { found=1 } END { exit !found }' "$info" 2>/dev/null || continue
-  pid=${info#/proc/}
-  pid=${pid%/mountinfo}
-  namespace=$(readlink "/proc/$pid/ns/mnt") || { printf 'error: namespace disappeared; inspect remaining mounts and retry.\n' >&2; exit 1; }
-  [[ ${seen[$namespace]+present} ]] && continue
-  seen[$namespace]=1
-  printf 'Recovering target mounts in namespace of PID %s\n' "$pid"
-  # Revalidate inside the entered namespace, so a changed PID cannot cause
-  # teardown of an unverified tree. Reject unexpected descendant filesystems.
-  nsenter -t "$pid" -m -- /bin/bash -s -- "$target_root" "$luks_name" "$efi_partition" "$root_subvol" "$home_subvol" <<'VERIFY_AND_UNMOUNT'
-set -euo pipefail
-target_root=$1
-mapper=/dev/mapper/$2
-efi_partition=$3
-root_subvol=$4
-home_subvol=$5
-awk -v root="$target_root" -v mapper="$mapper" -v esp="$efi_partition" -v rootsub="/$root_subvol" -v homesub="/$home_subvol" '
-  $5 == root || index($5, root "/") == 1 {
-    for (i=7; i<=NF && $i != "-"; i++) {}
-    type=$(i+1); source=$(i+2); path=$5
-    if (path == root && type == "btrfs" && source == mapper && $4 == rootsub) { verified_root=1; next }
-    if (path == root "/home" && type == "btrfs" && source == mapper && $4 == homesub) next
-    if (path == root "/boot" && type == "vfat" && source == esp) next
-    if (path == root "/proc" && type == "proc") next
-    if ((path == root "/run" || index(path, root "/run/") == 1) && type == "tmpfs") next
-    if ((path == root "/dev" || index(path, root "/dev/") == 1) && type ~ /^(devtmpfs|devpts|tmpfs|mqueue|hugetlbfs)$/) next
-    if ((path == root "/sys" || index(path, root "/sys/") == 1) && type ~ /^(sysfs|efivarfs|securityfs|cgroup|cgroup2|pstore|bpf|fusectl|tracefs|configfs|debugfs)$/) next
-    print "error: unexpected target mount: " path " (" type ", " source ")" > "/dev/stderr"
-    unsafe=1
-  }
-  END { if (!verified_root) print "error: verified target root is absent in namespace; inspect remaining subtrees manually." > "/dev/stderr"; exit (unsafe || !verified_root) }
-' /proc/self/mountinfo
-mount --make-rprivate "$target_root"
-umount --recursive "$target_root"
-VERIFY_AND_UNMOUNT
-done
-# Fail rather than claim success if new copies appeared during recovery.
-for info in /proc/[0-9]*/mountinfo; do
-  [[ -r $info ]] || continue
-  if awk -v root="$target_root" '$5 == root || index($5, root "/") == 1 { found=1 } END { exit !found }' "$info" 2>/dev/null; then
-    printf 'error: target mounts remain in %s; inspect before retrying cleanup.\n' "$info" >&2
-    exit 1
-  fi
-done
-verify_mapping
-cryptsetup close "$luks_name"
-NAMESPACE_RECOVERY
+    --luks-name "$LUKS_NAME" "${options[@]}"
 }
 
 # Capture the connected image before releasing the target. Never guess a VM path.
 qemu_handoff_image() {
-  run_privileged python3 - "$TARGET_DISK" <<'PYTHON'
-from pathlib import Path
-import sys
-try:
-    device = Path(sys.argv[1]).name
-    if not device.startswith('nbd') or not device[3:].isdigit():
-        raise ValueError('target is not an NBD device')
-    pid = int(Path('/sys/block', device, 'pid').read_text().strip())
-    args = Path('/proc', str(pid), 'cmdline').read_bytes().rstrip(b'\0').split(b'\0')
-    args = [arg.decode() for arg in args]
-    if Path(args[0]).name != 'qemu-nbd' or '--image-opts' in args:
-        raise ValueError('cannot identify a regular qemu-nbd image path')
-    image = Path(args[-1])
-    if not image.is_absolute():
-        image = Path('/proc', str(pid), 'cwd').resolve() / image
-    image = image.resolve(strict=True)
-    if not image.is_file() or '\n' in str(image):
-        raise ValueError('invalid image path')
-    print(image)
-except (OSError, ValueError, IndexError, UnicodeError) as error:
-    print(f'Could not identify attached QEMU image: {error}', file=sys.stderr)
-    sys.exit(1)
-PYTHON
+  run_privileged /bin/bash -s -- "$TARGET_DISK" <<'IMAGE'
+set -euo pipefail
+device=${1##*/}
+[[ $device =~ ^nbd[0-9]+$ ]] || exit 1
+pid=$(cat "/sys/block/$device/pid")
+[[ $pid =~ ^[0-9]+$ ]] || exit 1
+mapfile -d '' -t args <"/proc/$pid/cmdline"
+[[ ${args[0]##*/} == qemu-nbd ]] || exit 1
+for arg in "${args[@]}"; do [[ $arg != --image-opts && $arg != --image-opts=* ]] || exit 1; done
+image=${args[-1]}
+[[ $image == /* ]] || image=$(readlink -f "/proc/$pid/cwd")/$image
+image=$(readlink -e -- "$image")
+[[ -f $image && $image != *$'\n'* ]] || exit 1
+printf '%s\n' "$image"
+IMAGE
 }
 
 print_qemu_handoff_commands() {
@@ -2915,7 +2624,7 @@ Handoff plan
 Target root: $MOUNT_ROOT
   * verify the target disk layout and first-boot configuration;
   * unmount chroot filesystems, the ESP, home, and root;
-  * recover verified target mount copies in other namespaces if LUKS remains busy;
+  * report busy mappings for explicit documented recovery;
   * close /dev/mapper/$LUKS_NAME; and
   * leave the target powered off and print the remaining boot steps.
 PLAN
@@ -2926,16 +2635,13 @@ PLAN
   [[ $MODE != dry-run ]] || { printf '\nDry run: no mounts or encrypted mappings changed.\n'; return; }
   [[ -n $TARGET_DISK ]] || die 'handoff requires --disk'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
-  case ${TARGET_DISK##*/} in
-    *[0-9]) EFI_PARTITION=${TARGET_DISK}p1; CRYPT_PARTITION=${TARGET_DISK}p2 ;;
-    *) EFI_PARTITION=${TARGET_DISK}1; CRYPT_PARTITION=${TARGET_DISK}2 ;;
-  esac
+  resolve_target_partitions
   verify_disk_setup || die 'handoff requires verified target mounts'
   run_privileged test -s "$MOUNT_ROOT/etc/fstab" || die 'first-boot fstab is missing'
   local version cmdline esp_uuid source qemu_image=
   version=$(run_privileged tail -n 1 "$MOUNT_ROOT/etc/kernel/gentoo-dist.version")
   [[ $version =~ ^[A-Za-z0-9._+-]+-gentoo-dist(-bin)?$ ]] || die 'invalid recorded kernel version'
-  cmdline=$(run_privileged cat "$MOUNT_ROOT/etc/kernel/gentoo-dist.cmdline")
+  cmdline=$(run_privileged cat "$MOUNT_ROOT/etc/kernel/cmdline")
   esp_uuid=$(run_privileged cat "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid")
   # Print saved registration parameters before cleanup can fail. Repeat after
   # success so they are also available when the installer's terminal is free.
@@ -2955,11 +2661,8 @@ PLAN
   for source in "$MOUNT_ROOT/boot" "$MOUNT_ROOT/home" "$MOUNT_ROOT"; do
     run_privileged umount "$source" || die "could not unmount $source; remaining mounts and LUKS mapping are preserved"
   done
-  if ! run_privileged cryptsetup close "$LUKS_NAME"; then
-    log 'Recovering remaining target mounts before retrying LUKS close'
-    recover_handoff_namespace_mounts \
-      || die 'handoff cleanup failed; inspect remaining mounts and mapper holders before retrying'
-  fi
+  run_privileged cryptsetup close "$LUKS_NAME" ||
+    die 'mapping is busy; inspect holders and follow the documented namespace-recovery procedure'
   log 'Handoff complete: target unmounted and LUKS closed'
   if [[ $TARGET_HOST == qemu ]]; then
     print_qemu_handoff_commands "$qemu_image"
@@ -2975,8 +2678,14 @@ main() {
     PACKAGE_OPTIONS=(--usepkg=y --getbinpkg=y --binpkg-respect-use=y --binpkg-changed-deps=y)
     BINARY_INSTALL_OPTIONS=(--install-binpkgs)
   fi
+  if (( RAM_BUILDS )); then
+    require_command findmnt
+    [[ $(findmnt -n -o FSTYPE --mountpoint /dev/shm) == tmpfs ]] || die 'installation RAM builds require /dev/shm as tmpfs; use --no-ram-builds to disable'
+  else
+    BINARY_INSTALL_OPTIONS+=(--no-ram-builds)
+  fi
   if (( INTERNAL_FIRSTBOOT_OFFLINE )); then
-    case ${TARGET_DISK##*/} in *[0-9]) EFI_PARTITION=${TARGET_DISK}p1 ;; *) EFI_PARTITION=${TARGET_DISK}1 ;; esac
+    resolve_target_partitions
     firstboot_offline
     return
   fi
