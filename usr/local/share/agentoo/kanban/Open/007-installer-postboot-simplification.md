@@ -446,3 +446,26 @@ Remaining work:
 - Checked Bash syntax, ShellCheck at the established severity/exclusions, and
   whitespace. This reporting-only change does not require another VM installation;
   the user's mounted physical installation supplies the next execution check.
+
+### 2026-10-13 Physical installation: Wi-Fi prompt compatibility
+
+- The host prompted instead of copying a profile; the user noted that Omarchy
+  likely uses NetworkManager. The native-file lookup does not convert
+  NetworkManager/iwd profiles, as agreed. Added a clear fallback explanation;
+  native per-interface/common file copying remains unchanged.
+- The protected-network prompt failed with `tcgetattr: Inappropriate ioctl for
+  device`. Current wpa_passphrase source requires terminal input when no password
+  argument is supplied; the installer incorrectly piped the password. Earlier
+  fixtures simulated that command and missed the compatibility problem.
+- Let wpa_passphrase read directly from `/dev/tty`. Disable echo before displaying
+  the password prompt, restore terminal settings on exit, and continue filtering
+  the plaintext `#psk` comment from the root-only atomic configuration file.
+  Passwords are never passed as command arguments. An explicit open-network
+  yes/no choice replaces the blank-password shortcut; blank SSID still defers.
+- Passed PTY checks using the real host wpa_passphrase, asserting terminal input,
+  no password argument, hidden input, the expected derived PSK, and removal of the
+  plaintext comment. Invalid-password failure restores echo and removes temporary
+  files. Native/common copying, retry preservation, open/deferred setup, syntax,
+  ShellCheck, whitespace, and permission coverage also pass. The host binary is
+  older than the terminal-requiring version reported on the physical target;
+  that target's execution and actual wireless authentication remain to be checked.

@@ -170,6 +170,9 @@ external credentials/certificates need separate provisioning. NetworkManager
 profile conversion is not supported. Only configured
 supplicant instances are required by post-boot verification. Secrets stay in
 root-only per-interface files outside Git.
+When prompting, blank SSID defers setup; open networks have an explicit yes/no
+choice. For protected networks, wpa_passphrase reads the password directly from
+the terminal with echo disabled, without putting it in command arguments.
 
 Journald inherits packaged storage and retention defaults. The tracked monthly
 scrub timer and ordinary-directory systemd storage policy remain intentional

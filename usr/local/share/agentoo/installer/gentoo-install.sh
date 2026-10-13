@@ -2323,7 +2323,7 @@ PLAN
 # Runtime initialization is automatic at boot. This phase establishes persistent
 # identity, mounts, credentials and explicit service policy before that boot.
 configure_wifi() (
-  local root=$1 device interface destination source candidate ssid password temporary=
+  local root=$1 device interface destination source candidate ssid open_network temporary=
   umask 077
   trap 'if [[ -n $temporary ]]; then rm -f -- "$temporary"; fi' EXIT
   for device in /sys/class/net/*; do
@@ -2349,22 +2349,29 @@ configure_wifi() (
       printf 'Copied native Wi-Fi configuration for %s.\n' "$interface"
       continue
     fi
+    printf 'No native host wpa_supplicant configuration found for %s; NetworkManager/iwd profiles are not imported.\n' "$interface"
     printf 'Wi-Fi SSID for %s (blank to defer): ' "$interface" >/dev/tty
     IFS= read -r ssid </dev/tty
     [[ -n $ssid ]] || continue
-    printf 'Wi-Fi password (blank for an open network): ' >/dev/tty
-    IFS= read -r -s password </dev/tty
-    printf '\n' >/dev/tty
+    printf 'Open network (no password)? [y/N] ' >/dev/tty
+    IFS= read -r open_network </dev/tty
     temporary=$(mktemp "$destination.XXXXXX")
     printf 'ctrl_interface=/run/wpa_supplicant\n' >"$temporary"
-    if [[ -n $password ]]; then
-      printf '%s\n' "$password" | chroot "$root" /usr/bin/wpa_passphrase "$ssid" |
-        sed '/^[[:space:]]*#psk=/d' >>"$temporary"
-    else
+    if [[ $open_network == y || $open_network == Y || $open_network == yes ]]; then
       ssid=$(printf '%s' "$ssid" | od -An -v -tx1 | tr -d ' \n')
       printf 'network={\n ssid=%s\n key_mgmt=NONE\n}\n' "$ssid" >>"$temporary"
+    else
+      # New wpa_passphrase requires a terminal; older releases do not hide input.
+      # Restore terminal settings even when generation fails or is interrupted.
+      (
+        local tty_settings
+        tty_settings=$(stty -g </dev/tty)
+        trap 'stty "$tty_settings" </dev/tty; printf "\n" >/dev/tty' EXIT
+        stty -echo </dev/tty
+        printf 'Wi-Fi password: ' >/dev/tty
+        chroot "$root" /usr/bin/wpa_passphrase "$ssid" </dev/tty
+      ) | sed '/^[[:space:]]*#psk=/d' >>"$temporary"
     fi
-    unset password
     mv -- "$temporary" "$destination"
     temporary=
     printf 'Configured Wi-Fi for %s.\n' "$interface"
