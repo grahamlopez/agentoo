@@ -1,7 +1,8 @@
 # Installer and post-boot simplification
 
 Created: 2026-10-12
-Status: Open
+Status: Completed
+Completed: 2026-10-13
 Source: [Agentoo installer and post boot audit](https://chatgpt.com/space/page_cc2bd4729cd08191807d5b06b4ca0b99)
 Initial audit baseline: `7c08b29`
 Repository baseline when opened: `00fe99e`
@@ -324,18 +325,18 @@ Use this tracker alongside the detailed T-actions above. Record what changed and
 
 | Action | Status | Implementation and validation record |
 |---|---|---|
-| T01 Installation and recovery contract | Validated on QEMU | Fixed @/@home; destination-hardware physical contract; offline system/home/EFI restore passed. |
-| T02 Distribution fallback policy | Validated on QEMU | Packaged regeneration and reboot passed; absent ESP stops kernel-install. A version-to-version upgrade remains untested. |
-| T03 Manual physical registration and automatic QEMU setup | Validated on QEMU | Initial offline registration booted; update guidance printed without firmware changes. Physical registration remains manual. |
-| T04 Temporary QEMU RAM builds | Revised after review; focused checks passed | RAM builds default on for all installer invocations; --no-ram-builds selects /var/tmp and propagates to children. No persistent QEMU override. |
+| T01 Installation and recovery contract | Complete | Fixed @/@home; destination-hardware physical contract; offline system/home/EFI restore passed. |
+| T02 Distribution fallback policy | Complete; upgrade limit recorded | Packaged regeneration and reboot passed; absent ESP stops kernel-install. A version-to-version upgrade remains untested. |
+| T03 Manual physical registration and automatic QEMU setup | Complete | Initial offline registration booted; update guidance printed without firmware changes. Physical registration remains manual. |
+| T04 Temporary QEMU RAM builds | Complete | RAM builds default on for all installer invocations; --no-ram-builds selects /var/tmp and propagates to children. No persistent QEMU override. |
 | T05 Normal dhcpcd paths and direct DNS | Complete | Packaged service/configuration; systemd -resolvconf; provider check. |
-| T06 Native Wi-Fi import and deferred configuration | Revised after review; focused checks passed | Embedded Bash copies a host native configuration unchanged or prompts/defers; no parser or companion installer file. Hardware authentication remains untested. |
+| T06 Native Wi-Fi import and deferred configuration | Complete | Embedded Bash copies native host configuration or prompts/defers; copy/defer fixtures passed and user reports successful fresh physical installation and post-boot helpers. |
 | T07 Packaged logging defaults | Complete | Packaged journal history and tagged previous-boot message survived reboot. |
-| T08 Installer plumbing and retries | Implemented; focused checks passed | Shared partition/chroot helpers; mounted targets retained on failure; consistent retry selections. |
+| T08 Installer plumbing and retries | Complete | Shared partition/chroot helpers; mounted targets retained on failure; consistent retry selections. |
 | T09 Verification and account reruns | Complete | Guest diagnostics and interrupted/normal account reruns passed; password, home, groups and partial Git identity preserved. |
-| T10 EFI command notification | Implemented; focused and offline checks passed | 27-line print-only update hook; never executes firmware changes; documented fallback. |
+| T10 EFI command notification | Complete | 27-line print-only update hook; never executes firmware changes; documented fallback. |
 | T11 Automatic registration investigation card | Complete; investigation deferred | Backlog 008 records future native registration; QEMU exception retained. |
-| T12 Retained-core validation | Available closeout checks passed; limits recorded | Installation/boot, capture/cache cleanup, account retries, regeneration/reboot, scrub/journal/networking and offline system/home/EFI recovery passed. Physical Wi-Fi authentication and a version-to-version kernel upgrade remain untested. |
+| T12 Retained-core validation | Complete; coverage limits recorded | QEMU installation/boot, capture/cache cleanup, retries, regeneration/reboot and offline system/home/EFI recovery passed. User reports fresh physical installation and both helpers succeeded. Version-to-version kernel upgrade remains untested. |
 
 ## Work log
 
@@ -548,3 +549,83 @@ Remaining work:
   unmount or LUKS closure fails. No live target or mounts were changed; a fresh
   installation with the revised reporting phase has not been run. Changes remain
   local/uncommitted.
+
+### 2026-10-13 Final physical validation and efficacy report
+
+- User reports a new end-to-end physical disk installation and successful runs of
+  both post-boot helpers without issues. This supplies the final physical-path
+  validation after the Wi-Fi prompt, Git access/permissions, and handoff revisions.
+  Earlier QEMU installation, regeneration/reboot, checkpoint creation/cache
+  cleanup, and independent offline system/home/EFI recovery results remain recorded
+  above. A genuine version-to-version kernel upgrade remains untested.
+- Measurement compares implementation baseline `00fe99e` with final tested source
+  revision `7c43665`, before adding this report. Counts are physical text lines,
+  including comments, blank lines, and embedded walkthroughs, not a parsed count
+  of executable statements. Later additions to this historical record are excluded
+  from these fixed measurements. Earlier changes made while the audit was being
+  discussed are outside this baseline.
+
+| Category | Added | Removed | Net change |
+|---|---:|---:|---:|
+| Installer, post-boot scripts, Git wrapper, kernel hooks | 434 | 675 | -241 |
+| Zsh configuration | 4 | 164 | -160 |
+| Declarative configuration and permission manifest | 59 | 27 | +32 |
+| Documentation, audit/work log, backlog cards | 818 | 18 | +800 |
+| Entire repository change | 1,315 | 884 | +431 |
+
+- Implementation/configuration text across the entire repository fell from 6,716
+  to 6,347 lines: **369 fewer, or 5.5%**. Scripts and shell configuration among
+  changed files fell from 3,818 to 3,417: **401 fewer, or 10.5%**. All repository
+  text rose from 8,073 to 8,504 because the documentation increase exceeded the
+  implementation reduction. Of the 800 net documentation lines, 550 preserve card
+  007's audit/decisions/work log, 106 add backlog cards 008–010, and 144 expand
+  operational documentation.
+
+| Component | Before | After | Net change |
+|---|---:|---:|---:|
+| Main installer | 3,031 | 2,742 | -289 (-9.5%) |
+| First-boot verifier/checkpoint helper | 117 | 111 | -6 |
+| Account setup helper | 139 | 151 | +12 |
+| Git wrapper | 42 | 47 | +5 |
+| Two new kernel-install hooks | 0 | 37 | +37 |
+
+- Zsh's 160-line reduction is principally obsolete comments/inactive snippets and
+  blank lines, not removed runtime functionality. Nonblank/non-comment lines in
+  zprofile stayed at 15; zshrc changed from 137 to 138 with the explicitly retained
+  core-size limit. Removing that cosmetic reduction from the total leaves a net
+  209-line reduction elsewhere in implementation/configuration, still including
+  comments and embedded prose.
+- Three embedded Python programs were removed from the installer/verifier. Native
+  Wi-Fi provisioning is embedded Bash, and the installer needs no companion Wi-Fi
+  script. Python remains intentionally required for the existing permission helper
+  and Gentoo's package tooling; this effort does not make installation Python-free.
+- Seven small tracked policy/hook/unit files replace generated or implicit policy
+  (76 lines in total). No baseline tracked files were deleted. Declarative policy
+  grew modestly while installer orchestration shrank. Fixed root/home layout,
+  packaged networking/logging paths, removal of migration branches, and manual
+  teardown reduced interacting behaviors beyond what line counts alone measure.
+- Retained boot/checkpoint safeguards, independent fallback/custom-kernel policy,
+  automatic offline QEMU firmware registration, and lengthy embedded walkthroughs.
+  The two helpers grew/shrank unevenly because account retries and shared-file
+  permission repair are purposeful additions. Follow-up features remain separate
+  backlog work. This report records efficacy before the user reviews closeout;
+  the card has not yet been moved to Completed.
+
+
+### 2026-10-13 Closeout
+
+- User approved the efficacy report and requested closure and commit after a new
+  successful end-to-end physical disk installation and both post-boot helpers.
+  This physical validation is user-reported; the agent's QEMU and focused checks
+  are documented separately above.
+- Card 007 is complete. Moved it to Completed, reconciled the implementation
+  tracker, and retained the full original audit, rationale, amendments, test
+  history, and fixed-revision efficacy measurements. Updated incoming backlog
+  links and the permission manifest for the new location.
+- The version-to-version distribution-kernel upgrade remains a recorded coverage
+  limit. Cards 008–010 remain independent backlog work; deferred embedded-prose
+  trimming and the undefined custom-kernel workflow are outside this closeout.
+- Closeout changes affect documentation and card-path metadata only. Checked
+  whitespace, reference destinations, manifest coverage, and preservation of the
+  original audit snapshot before committing. No further installation run was
+  required for these changes.

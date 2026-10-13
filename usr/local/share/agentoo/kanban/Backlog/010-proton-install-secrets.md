@@ -39,4 +39,4 @@ retained on the target and covered by checkpoints.
 This card authorizes investigation only; it does not enable account access or
 change installer behavior.
 
-Related: [007 installer and post-boot simplification](../Open/007-installer-postboot-simplification.md).
+Related: [007 installer and post-boot simplification](../Completed/007-installer-postboot-simplification.md).

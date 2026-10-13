@@ -33,4 +33,4 @@ transactions and child phases. Missing or invalid `--target-host` must fail befo
 target mutation; explicit supported targets and argument-free help must work.
 Help and documented examples must agree with the implemented defaults.
 
-Related: [007 installer and post-boot simplification](../Open/007-installer-postboot-simplification.md).
+Related: [007 installer and post-boot simplification](../Completed/007-installer-postboot-simplification.md).

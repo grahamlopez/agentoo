@@ -25,4 +25,4 @@ Record the options, sources, update/failure behavior, and proposed enablement.
 Validate on disposable physical/VM targets as appropriate before enabling it.
 Creating this card does not authorize automatic physical firmware modifications.
 
-Related: [007 installer and post-boot simplification](../Open/007-installer-postboot-simplification.md).
+Related: [007 installer and post-boot simplification](../Completed/007-installer-postboot-simplification.md).
