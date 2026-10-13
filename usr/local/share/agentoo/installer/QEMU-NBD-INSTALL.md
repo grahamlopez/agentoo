@@ -173,30 +173,72 @@ sudo fuser -vm /mnt/gentoo
 
 Confirm `cryptroot` belongs to `/dev/nbd0p2` before closing it.
 If ordinary unmounting succeeds but the mapping remains busy, another mount
-namespace may hold copies of the mounts. List those namespaces:
+namespace may hold copies of the mounts. Run this read-only scan to show
+only namespaces containing `/mnt/gentoo` or its descendants:
 
 ```bash
-sudo lsns -t mnt -o NS,PID,COMMAND
+sudo bash <<'SCAN'
+while read -r pid; do
+  mounts=$(nsenter -t "$pid" -m -- findmnt -rn -o SOURCE,TARGET |
+    awk '$2 == "/mnt/gentoo" || index($2, "/mnt/gentoo/") == 1')
+  if [[ -n $mounts ]]; then
+    printf '\nPID %s\n%s\n' "$pid" "$mounts"
+  fi
+done < <(lsns -t mnt -n -o PID)
+SCAN
 ```
 
-For each representative PID, inspect the target mounts (replace `PID` with
-its number):
+After the installer and package builds have finished, leave all chroots and
+run this block on the host. It finds current namespace PIDs automatically,
+checks that each root mount belongs to `cryptroot`, and stops on an unexpected
+source or failed unmount. It does not stop services.
 
 ```bash
-sudo nsenter -t PID -m -- findmnt -R /mnt/gentoo
+cd /home/graham
+sudo bash <<'CLEANUP'
+set -e
+backing=$(cryptsetup status cryptroot | awk '$1 == "device:" {print $2}')
+[[ $backing == /dev/nbd0p2 ]] || {
+  echo "Stop: cryptroot is not backed by /dev/nbd0p2: $backing" >&2
+  exit 1
+}
+while read -r pid; do
+  source=$(nsenter -t "$pid" -m -- findmnt -rn \
+    --mountpoint /mnt/gentoo -o SOURCE) || continue
+  case "$source" in
+    /dev/mapper/cryptroot|/dev/mapper/cryptroot\[*)
+      echo "Unmounting Gentoo mounts in PID $pid"
+      nsenter -t "$pid" -m -- umount --recursive /mnt/gentoo
+      ;;
+    *)
+      echo "Stop: unexpected source in PID $pid: $source" >&2
+      exit 1
+      ;;
+  esac
+done < <(lsns -t mnt -n -o PID)
+CLEANUP
 ```
 
-Only when the displayed sources are this installation's `cryptroot` and
-`/dev/nbd0p1`, and no install/build is running there, unmount that copy:
+Only after this block finishes without an unmount failure, close and detach:
 
 ```bash
-sudo nsenter -t PID -m -- umount --recursive /mnt/gentoo
+sudo cryptsetup close cryptroot &&
+sudo qemu-nbd --disconnect /dev/nbd0
 ```
 
-Repeat inspection for the other namespaces. If only descendant mounts remain,
-inspect and unmount those exact paths. Then retry `cryptsetup close` and NBD
-disconnection from section 2. Do not use forced/lazy unmounts or kill services
-as a shortcut. See [namespace recovery](../docs/skills/qemu-nbd/references/namespace-recovery.md)
+Verify `/dev/nbd0` shows `0B` and `qemu-img info` succeeds as in section 2,
+then boot:
+
+```bash
+bash /home/graham/VMs/agentic-gentoo/boot.sh
+```
+
+A namespace without `findmnt` may print “No such file or directory”; the loop
+continues, but successful mapping closure is still required before detachment.
+If closure remains busy, rerun the read-only scan and investigate remaining
+holders. If only descendant mounts remain, inspect and unmount those exact
+paths. Do not use forced/lazy unmounts or kill services as a shortcut.
+See [namespace recovery](../docs/skills/qemu-nbd/references/namespace-recovery.md)
 for deeper inspection when these checks do not resolve the holder.
 
 ### Missing EFI kernel, followed by PXE
