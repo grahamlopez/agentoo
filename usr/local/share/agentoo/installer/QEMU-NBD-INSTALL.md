@@ -404,9 +404,9 @@ installer policy before updating packages. Do not delete unknown/user-owned file
   then test networking, the fallback boot files, and reboot before checkpointing.
 
 Recoverable installer failures preserve the target for inspection and retry.
-If first-boot packages leave protected configuration updates, review them with
-`chroot "$MOUNT_ROOT" dispatch-conf`, preserve the intended shared configuration,
-then resume `first-boot-foundation`. Use an ordinary interactive terminal.
+If first-boot packages leave protected configuration updates, the installer
+reports them and continues. Review them after boot with `sudo dispatch-conf`,
+preserving the intended shared configuration. Use an ordinary interactive terminal.
 Disk-setup failures still clean up the resources created by that attempt. If a
 mapping remains busy after ordinary handoff unmounts, use the explicit
 [namespace recovery procedure](../docs/skills/qemu-nbd/references/namespace-recovery.md);

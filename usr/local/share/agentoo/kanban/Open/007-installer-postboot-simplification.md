@@ -432,3 +432,17 @@ Remaining work:
 - Coverage limits: physical Wi-Fi authentication is unavailable on this VM; native copying/prompt/defer behavior has fixture coverage. A real version-to-version distribution-kernel upgrade and physical firmware registration were not exercised. Full fresh installation preceded the last RAM/Wi-Fi review amendments; their current behavior has focused coverage rather than another destructive full installation.
 - After recovery, booted through the original Boot0000 entry, confirmed baseline system/home/EFI markers plus the retained later EFI file, and passed guest diagnostics again. Removed temporary recovery boot entry/image; BootOrder returned to its original value. Powered the guest off normally; its QEMU session exited with status 0. The persistent disposable image and VARS remain available, while the older independent host attachment remains untouched as previously documented.
 - Final handoff: staged the remaining reviewed changes and this updated work log. No repository commit or publication was made. The historical audit and original rationale remain intact; this Open card remains the implementation record.
+
+### 2026-10-13 Physical installation: defer first-boot configuration merging
+
+- Physical thinktop testing reached first-boot-foundation and paused on Portage's
+  protected `/etc/zsh/zprofile` update. The user requested the earlier behavior:
+  report these pending updates, continue installation, and leave merging until
+  after boot.
+- Replaced the first-boot-foundation configuration-update failure with a report
+  and `sudo dispatch-conf` reminder; updated the runbook. Existing configuration
+  files and Portage's pending update files remain intact. The earlier system-update
+  review and kernel-phase checks retain their existing behavior.
+- Checked Bash syntax, ShellCheck at the established severity/exclusions, and
+  whitespace. This reporting-only change does not require another VM installation;
+  the user's mounted physical installation supplies the next execution check.

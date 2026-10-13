@@ -2414,7 +2414,10 @@ firstboot_offline() {
   target_emerge "$root" --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}"
   local pending
   pending=$(pending_config_updates "$root")
-  [[ -z $pending ]] || die "review protected configuration updates with chroot $root dispatch-conf, then resume first-boot-foundation: $pending"
+  if [[ -n $pending ]]; then
+    printf '\nConfiguration updates awaiting review (installation will continue):\n%s\n' "$pending"
+    printf 'After boot, review these with sudo dispatch-conf; preserve intentional Agentoo settings.\n'
+  fi
 
   # Root uses the same system Zsh defaults as ordinary users, without home copies.
   local root_shell
