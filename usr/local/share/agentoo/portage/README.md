@@ -131,7 +131,8 @@ installation. Remove any separately configured `DISABLE_UPDATES` or
 
 Codex retains the previously inspected native package's runtime prerequisites:
 glibc >= 2.38, ncurses with tinfo, and the GCC runtime provider on arm64, plus
-Bash, Git, CA certificates, and curl for installation. Claude retains glibc
+Bash, Git, CA certificates, and curl for installation. It also supplies bubblewrap
+for Linux sandboxing; Codex uses the `bwrap` executable from `PATH`. Claude retains glibc
 >= 2.26, Bash, Git, CA certificates and qrencode for phone login, and adds curl
 and jq for installation. Its default `sandbox` USE flag supplies bubblewrap and
 socat. Neither native installer requires Node.js or npm; Pi does require Node

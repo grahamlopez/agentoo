@@ -16,6 +16,7 @@ RDEPEND="
 	arm64? ( sys-devel/gcc )
 	app-misc/ca-certificates
 	app-shells/bash
+	sys-apps/bubblewrap
 	dev-vcs/git
 	net-misc/curl
 "
