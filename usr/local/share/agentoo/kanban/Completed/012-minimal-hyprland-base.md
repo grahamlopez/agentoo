@@ -1,7 +1,8 @@
 # Build a minimal Hyprland base on a physical target
 
 Created: 2026-10-14
-Status: Open (repository configuration prepared; installation and physical validation pending)
+Status: Completed
+Completed: 2026-10-14
 
 ## Decisions and scope
 
@@ -159,10 +160,58 @@ and WirePlumber 0.5.15. Selected release source confirms the used Lua APIs,
 absolute `require()` tracking, XDG fallback discovery, watchdog argument
 forwarding, and native session environment handling. Lua syntax checks passed;
 Portage atoms/repository configuration parsed, permission policy covers all new
-files, and `git diff --check` passed. The installed Hyprland parser and all
-runtime/hardware checks remain for thinktop.
+files, and `git diff --check` passed. At repository-preparation time, the installed
+Hyprland parser and runtime/hardware checks remained for thinktop; subsequent
+physical testing is recorded below.
 
 Before completion, record thinktop's exact hardware/firmware and installed
 versions, checkpoint name, inspected plan/build result, normal-user session and
 audio compatibility tests, repeated suspend/lid/dock recovery, and clean
 exit/relaunch results. Re-run dependency resolution after sync on that target.
+
+## Thinktop validation reported by the user (2026-10-14)
+
+- Synced hyproverlay, successfully emerged `@gui-base`, and entered Hyprland.
+- Speaker playback works. Initial left/right announcement samples played through
+  both speakers because the files are mono; the runbook now routes them explicitly.
+  Separate channel routing has not yet been confirmed.
+- Suspend/resume was very fast, and sound still works after resume. This confirms
+  a reported suspend/resume cycle and playback recovery; the sleep state has not
+  been checked against the journal.
+- The missing-guiutils startup warning is expected with the chosen minimal
+  package policy. RTKit `ServiceUnknown` warnings were observed from `wpctl`,
+  which still returned the volume successfully. No audio dropouts were reported.
+
+At this initial report, still unconfirmed: microphone capture/replay before and after resume, ALSA
+compatibility, volume/mute controls, repeated suspend/resume, lid/dock behavior
+where applicable, input/network recovery, user-session/configuration checks,
+and clean exit/relaunch. Exact hardware/installed versions and checkpoint details
+also remained to be recorded. The final acceptance report follows.
+
+## Final physical acceptance (2026-10-14)
+
+The user confirmed successful repeated suspend/resume cycles with working audio,
+then explicitly confirmed microphone recording/replay, lid behavior, and clean
+Hyprland exit/relaunch. The card is closed on this physical acceptance report.
+Installation, launch, playback, microphone, repeated suspend/resume, lid handling,
+and exit/relaunch are reported passed on thinktop. The agent did not execute
+these interactive hardware tests.
+
+Read-only host/package inspection records:
+
+- Target selector: `thinktop`; Lenovo product `21TDCTO1WW`.
+- Running kernel: `6.18.54-gentoo-dist-bin`.
+- Installed Hyprland 0.56.2, Kitty 0.48.2, PipeWire 1.6.8, WirePlumber 0.5.15,
+  and SOF firmware 2025.12.2.
+
+Accepted limitations: no screen locking (resume is unlocked), GUI utilities,
+portals, notifications, or other deferred desktop companions. The missing
+GUI-utilities warning and optional RTKit warnings are documented in the session
+and runbook; playback recovery works and no dropouts were reported. The runbook
+was corrected to use installed PulseAudio-compatible tools and explicit routing
+of the mono channel-announcement samples.
+
+No raw hardware-test logs, checkpoint identifier, separate ALSA/channel-isolation
+result, or dock/external-display result were supplied in this conversation;
+do not treat this closure as independent verification of those details. Legacy
+sets remain historical pending separate review of their remaining requirements.
