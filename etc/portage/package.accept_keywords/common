@@ -1,4 +1,5 @@
 sys-kernel/gentoo-sources ~amd64
+app-admin/proton-pass-cli-bin ~amd64 ~arm64
 app-misc/keyd ~amd64
 gui-wm/hyprland ~amd64
 gui-apps/hyprpaper ~amd64
