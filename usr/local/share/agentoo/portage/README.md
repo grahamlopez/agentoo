@@ -53,93 +53,135 @@ release manifest, inspect runtime dependencies, and regenerate the Portage
 Manifest. Do not commit downloaded binaries. The download manifest is available
 at <https://proton.me/download/pass-cli/versions.json>.
 
-## Codex CLI and Claude Code
+## User-managed AI clients
 
-`dev-util/codex-cli-bin` (0.162.1) and `dev-util/claude-code-bin` (2.1.287,
-upstream's stable channel at packaging time) install the official native Linux
-releases for amd64 and arm64. Both are selected by `@early_install`, with testing
-keywords accepted in agentoo's common configuration. Claude is proprietary:
-its ebuild uses `all-rights-reserved` and restricts mirroring and binary
-redistribution. Agentoo already accepts all licenses in its common make.conf;
-on other systems explicitly accept that license for this package after reviewing
-[Anthropic's terms](https://www.anthropic.com/legal/commercial-terms).
-
-For just these clients and their dependencies, after enabling the overlay:
+`dev-util/codex-cli-deps` and `dev-util/claude-code-deps` supply prerequisites
+for user-owned upstream installations. Both are selected by `@early_install`,
+with testing keywords accepted in agentoo's common configuration.
+`dev-util/pi-coding-agent-deps` supplies the same model for Pi and can be selected
+separately (accept its testing keyword on your system first).
 
 ```sh
-emerge --ask dev-util/codex-cli-bin dev-util/claude-code-bin
+emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps
 ```
 
-The installer does not emerge the entire `@early_install` set automatically;
-its kernel phase deliberately uses an explicit package list. Install these
-clients in the configured target once the Portage foundation is ready, or after
-first boot. They can be installed before creating a normal user account. No
-login, home-directory initialization, npm command, or vendor installer runs
-while emerging either package.
+These dependency-only packages install no client binaries or launchers. They
+print install instructions but do not run vendor installers, authenticate, or
+modify user homes during any Portage phase. Package version `1` describes the
+prerequisite recipe, not an upstream client version. The installer does not
+emerge the entire `@early_install` set automatically; its kernel phase uses an
+explicit package list.
 
-### System binaries, per-user state
+### Install and update as your normal user
 
-Codex preserves its complete upstream package under `/opt/codex`, with
-`/usr/bin/codex` pointing to its entrypoint. The package includes the code-mode
-host, package marker, private ripgrep and bubblewrap, Zsh, and voice resources.
-Preserving the layout allows the client to locate companion tools correctly.
+Codex's [standalone installer](https://developers.openai.com/codex/cli) installs
+the complete upstream package, preserving its companion tools and resources:
 
-Claude installs its executable under `/opt/claude-code`; `/usr/bin/claude` is a
-small launcher that sets `DISABLE_UPDATES=1` before executing it. This blocks
-both background and manual upstream updates; use Portage for version changes.
-Do not run `claude install` to initialize a user: running `claude` is sufficient.
-See the [upstream update controls](https://code.claude.com/docs/en/env-vars).
+```sh
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```
 
-Launch either command as the account that will use it. Codex stores user state
-under `~/.codex` (or `CODEX_HOME`); Claude uses `~/.claude` and `~/.claude.json`
-(or its `CLAUDE_CONFIG_DIR` override). Each user signs in separately. A root
-session uses root's home and credentials; nothing is copied to other users.
-Existing user installations in `~/.local/bin` or npm directories can shadow the
-system commands: check `command -v codex` and `command -v claude`.
+Run `codex update` to update a release that supports self-update, or rerun the
+installer. The visible command defaults to `~/.local/bin/codex`; its package
+cache is under `CODEX_HOME/packages/standalone` (default `~/.codex`).
 
-### Early-install dependencies
+For Claude, use the native installer with the stable channel:
 
-| Package | Declared runtime dependencies | Included upstream |
-| --- | --- | --- |
-| Codex | glibc >= 2.38, ncurses with tinfo, GCC runtime provider on arm64, CA certificates, Bash, Git | Native CLI and code-mode host, ripgrep, bubblewrap, Zsh, voice libraries |
-| Claude | glibc >= 2.26, CA certificates, Bash, Git, qrencode for phone login; bubblewrap and socat with the default `sandbox` USE flag | Native runtime and ripgrep |
+```sh
+curl -fsSL https://claude.ai/install.sh | bash -s stable
+```
 
-The glibc floors and library dependencies were checked against **both** downloaded
-architectures. Codex's main executable is static, but its bundled Zsh needs
-glibc 2.38 and `libtinfo.so.6`; its arm64 voice host also needs `libgcc_s.so.1`.
-Voice libraries remain private in the upstream layout, including their license
-notices and source manifests. Voice device access still depends on the host's
-audio setup and is not an early-install requirement.
+The native installation auto-updates; `claude update` performs a manual update.
+Use `latest` instead of `stable` for releases as soon as they ship. See
+[Claude's installation and update documentation](https://code.claude.com/docs/en/setup).
+The default executable is `~/.local/bin/claude`, with versions under
+`~/.local/share/claude`. No update-disabling launcher is installed.
 
-No Rust compiler, Node.js, npm, Bun, Python, desktop, browser, or keyring is
-required to install these binary packages. Portage's normal download/unpack
-tools suffice; `curl` and `jq` from vendor installer recipes are not additional
-runtime requirements. Working network access, DNS, trusted certificates, and
-correct system time are needed to authenticate and make requests. A browser can
-run on another machine for terminal-only login workflows.
+Pi's [managed installer](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/quickstart.md)
+pins its dependencies and supports `pi update`:
 
-Linux sandboxing requires kernel support for unprivileged user namespaces and
-permission to create them. Installing Claude's sandbox dependencies does not
-enable its sandbox; use `/sandbox` or user settings. Its optional additional
-seccomp filter is not supplied by this ebuild. See
-[Claude's Linux sandbox requirements](https://code.claude.com/docs/en/sandboxing).
-Node.js/npm, Python, compilers, language servers, and MCP servers should be
-installed when a project or integration needs them, rather than pulled into the
-base system by these clients.
+```sh
+curl -fsSL https://pi.dev/install.sh | sh
+```
 
-### Validation and version bumps
+Follow each installer's PATH instructions. Run `command -v codex`,
+`command -v claude`, and the appropriate `--version` commands to verify the
+user-owned installations. Each user installs and signs in separately. Codex
+state lives in `~/.codex` (or `CODEX_HOME`); Claude uses `~/.claude` and
+`~/.claude.json` (or its `CLAUDE_CONFIG_DIR` override).
 
-Initial packaging verified SHA-256 against GitHub release asset digests for
-Codex and the versioned `manifest.json` at
-`https://downloads.claude.ai/claude-code-releases/2.1.287/manifest.json` for
-Claude. The thin Portage Manifests contain BLAKE2B and SHA512 for both architectures.
+### Migrate existing Portage installations
 
-For each bump, fetch versioned artifacts for both architectures, verify those
-upstream checksums, inspect ELF dependencies and bundled licenses, and regenerate
-the Manifests. Check Codex's package layout and helper names rather than assuming
-a standalone executable. Never use `latest` or `stable` URLs in `SRC_URI`, and
-do not commit downloaded binaries. On Gentoo, run package QA and an actual emerge,
-then check `codex --version`, `claude --version`, and sandbox operation as a
-normal user. Packaging-time checks on the development host cover hashes, ELF
-inspection, staged installation, shell syntax, and amd64 CLI startup; they do
-not establish arm64 execution or a completed Gentoo installation.
+Install the new dependency packages first, then remove the old binaries through
+Portage before running the user installers:
+
+```sh
+emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps
+emerge --ask --unmerge dev-util/codex-cli-bin dev-util/claude-code-bin
+```
+
+Unmerge only the old packages you actually installed. Their removal deletes the
+Portage-owned binaries and Claude's update-disabling wrapper, leaving user data
+intact. Removing ebuilds from the overlay does not uninstall existing packages.
+No automatic package move is declared: a rename would not create a user-owned
+installation. Remove any separately configured `DISABLE_UPDATES` or
+`DISABLE_AUTOUPDATER` setting if you want Claude updates enabled.
+
+### Prerequisites and tradeoffs
+
+Codex retains the previously inspected native package's runtime prerequisites:
+glibc >= 2.38, ncurses with tinfo, and the GCC runtime provider on arm64, plus
+Bash, Git, CA certificates, and curl for installation. Claude retains glibc
+>= 2.26, Bash, Git, CA certificates and qrencode for phone login, and adds curl
+and jq for installation. Its default `sandbox` USE flag supplies bubblewrap and
+socat. Neither native installer requires Node.js or npm; Pi does require Node
+and npm. Future upstream releases may change these requirements, so dependency
+ebuilds still need occasional maintenance.
+
+Linux sandboxing requires unprivileged user namespaces and permission to create
+them. Claude's sandbox dependencies do not enable sandboxing: use `/sandbox` or
+user settings. Its optional additional seccomp filter is not supplied here. See
+[Claude's sandbox requirements](https://code.claude.com/docs/en/sandboxing).
+The Claude post-install message also retains the phone-login QR code instructions.
+
+This model keeps client updates independent of overlay release bumps. Portage
+tracks prerequisites rather than client versions, so client updates are not
+covered by Portage binary rollback or artifact checksums. An upstream installer
+also needs working network access when each user installs the client. Use
+upstream version/channel controls when you need a particular release.
+
+### Remove a user installation
+
+Unmerging a dependency package prints copy/paste removal instructions and leaves
+user files intact. The message is suppressed during upgrades, downgrades, and
+reinstalls. Remove the client before depcleaning its prerequisites.
+
+For the default Codex standalone installation:
+
+```sh
+rm -f -- "$HOME/.local/bin/codex"
+rm -rf -- "${CODEX_HOME:-$HOME/.codex}/packages/standalone"
+```
+
+If `CODEX_INSTALL_DIR` was customized, remove its `codex` entry instead. For the
+default Claude native installation:
+
+```sh
+rm -f -- "$HOME/.local/bin/claude"
+rm -rf -- "$HOME/.local/share/claude"
+```
+
+For Pi, rerun its installer and choose **Uninstall Pi**. For npm installations,
+use the corresponding `npm uninstall -g` command in the original npm environment.
+
+These commands preserve settings and sessions. The ebuild messages separately
+provide optional deletion commands for user data, including credentials and
+session history. Review custom paths and other clients sharing those directories
+before deleting data. Project-local configuration is preserved.
+
+### Validation
+
+Check shell syntax, Portage dependency metadata, and install/removal messages,
+including suppression during replacement. On Gentoo, run package QA and emerge
+the dependency packages, then install upstream clients as a normal user and check
+versions and sandbox operation. Do not run upstream installers from Portage phases.

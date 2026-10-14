@@ -32,6 +32,6 @@ sys-power/acpi
 sys-power/acpilight
 sys-power/powertop
 
-# System-wide AI clients; authenticate separately as the intended user.
-dev-util/codex-cli-bin
-dev-util/claude-code-bin
+# AI client prerequisites; install and authenticate clients as the intended user.
+dev-util/codex-cli-deps
+dev-util/claude-code-deps
