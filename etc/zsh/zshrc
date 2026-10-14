@@ -138,8 +138,11 @@ bindkey '^U' kill-whole-line
 # general commands defaults
 alias ls="ls --color=auto -F"
 alias grep="grep --color=auto"
+# The trailing space also expands aliases in the command following sudo.
+alias sudo='sudo '
 # Prefer compatible local/remote binaries, falling back to source as in the installer.
 alias bemerge='emerge --usepkg=y --getbinpkg=y --binpkg-respect-use=y --binpkg-changed-deps=y'
+compdef bemerge=emerge
 # $+commands[x] is zsh's own lookup: no subprocess, no quoting hazard
 (( $+commands[nvim] )) && alias vim="nvim"
 (( $+commands[nvim] )) && alias vimall="nvim **/*(.)"
