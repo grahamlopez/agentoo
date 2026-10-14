@@ -1,25 +1,10 @@
-sys-kernel/gentoo-sources ~amd64
-app-admin/proton-pass-cli-bin ~amd64 ~arm64
+# Agentoo-owned packages currently carry testing keywords on both supported arches.
+# These provide the secret CLI and prerequisites for user-managed AI clients.
+app-admin/proton-pass-cli-bin::agentoo ~amd64 ~arm64
+dev-util/codex-cli-deps::agentoo ~amd64 ~arm64
+dev-util/claude-code-deps::agentoo ~amd64 ~arm64
+dev-util/pi-coding-agent-deps::agentoo ~amd64 ~arm64
+
 # System-wide keyboard remapping daemon and its IPC access group.
 app-misc/keyd::agentoo ~amd64 ~arm64
 acct-group/keyd::agentoo ~amd64 ~arm64
-gui-wm/hyprland ~amd64
-gui-apps/hyprpaper ~amd64
-dev-util/hyprwayland-scanner ~amd64
-gui-libs/hyprtoolkit ~amd64
-gui-libs/hyprland-guiutils ~amd64
-gui-libs/hyprutils ~amd64
-dev-cpp/glaze ~amd64
-dev-libs/hyprland-protocols ~amd64
-gui-libs/hyprcursor ~amd64
-gui-libs/aquamarine ~amd64
-gui-libs/hyprwire ~amd64
-dev-libs/hyprgraphics ~amd64
-dev-libs/hyprlang ~amd64
-app-misc/cliphist ~amd64
-dev-libs/wayland-protocols ~amd64
-dev-util/wayland-scanner ~amd64
-dev-libs/wayland ~amd64
-dev-util/codex-cli-deps ~amd64 ~arm64
-dev-util/claude-code-deps ~amd64 ~arm64
-dev-util/pi-coding-agent-deps ~amd64 ~arm64

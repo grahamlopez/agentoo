@@ -1,0 +1,8 @@
+# Native systemd integration; defer GUI companions, plugins, UWSM and XWayland.
+gui-wm/hyprland::hyproverlay systemd dbus-session -guiutils -hyprpm -uwsm -X
+x11-terms/kitty wayland -X
+
+# Per-user audio, with ALSA and PulseAudio protocol compatibility through PipeWire.
+# sound-server supplies pipewire-pulse; pulseaudio USE supplies libpulse integration.
+media-video/pipewire sound-server pipewire-alsa pulseaudio systemd -system-service
+media-video/wireplumber systemd -system-service

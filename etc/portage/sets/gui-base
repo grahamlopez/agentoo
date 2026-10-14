@@ -1,0 +1,5 @@
+# Minimal Wayland base; see /usr/local/share/agentoo/docs/gui-base.md before install.
+=gui-wm/hyprland-0.56.2::hyproverlay
+x11-terms/kitty
+media-video/pipewire
+media-video/wireplumber

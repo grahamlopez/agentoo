@@ -144,6 +144,13 @@ Normal user configs remain local overrides, with no copied or symlinked dotfiles
 - Outgoing SSH keys and local host includes stay in the user’s home.
 - Shared SSH defaults preserve an existing or forwarded agent.
 
+## Minimal GUI
+
+The optional [minimal Hyprland base](../../usr/local/share/agentoo/docs/gui-base.md)
+uses `@gui-base`, shared Lua defaults under `/etc/xdg/hypr/`, and explicit TTY
+launch. Read its installation and physical validation procedure before applying
+it on a target.
+
 ## Optional systemd features and snapshot boundaries
 
 - /srv, /var/lib/machines, and /var/lib/portables use ordinary directories.

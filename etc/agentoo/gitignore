@@ -1,4 +1,6 @@
 # Global excludes (git core.excludesFile).
+# Explicit local Hyprland host selection, independent of the common defaults.
+/etc/agentoo/hyprland-host.lua
 # Also guards the $HOME-as-work-tree dotfile repos (dgit/ggit/agit) against
 # accidentally committing secrets via `add -A`.
 

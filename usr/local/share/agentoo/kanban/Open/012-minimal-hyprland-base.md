@@ -1,7 +1,7 @@
 # Build a minimal Hyprland base on a physical target
 
 Created: 2026-10-14
-Status: Open (planning complete; implementation deferred to a physical target)
+Status: Open (repository configuration prepared; installation and physical validation pending)
 
 ## Decisions and scope
 
@@ -31,9 +31,11 @@ copied or symlinked user dotfiles.
 UWSM was considered for systemd user session lifecycle, environment propagation,
 autostart, and shutdown cleanup. Leave it out of the initial base: those benefits
 do not yet justify another layer for this small environment. Current Hyprland
-source already provides systemd/D-Bus environment handling and graphical session
-target integration. Verify the selected packaged release and its build options
-before adding session glue. Reconsider UWSM only for a concrete unmet need.
+source provides systemd/D-Bus environment handling. The selected 0.56.2 release
+imports and clears that environment and supports systemd readiness notification;
+plain TTY launch does not start a managed graphical session target by itself.
+No initial service requires that target. Reconsider UWSM only for a concrete
+unmet need, rather than adding session glue in anticipation.
 
 The old gentoo-notes README records a pam_systemd failure with missing
 XDG_RUNTIME_DIR, worked around by disabling systemd-userdbd. UWSM would not repair
@@ -95,7 +97,7 @@ References:
 
 ## Validation and execution boundary
 
-This discussion took place in a QEMU VM. Repository review, syntax checks,
+The original planning discussion took place in a QEMU VM. Repository review, syntax checks,
 dependency resolution, and limited guest integration tests can be performed
 there. Guest graphics/audio tests cannot establish physical GPU, audio firmware,
 lid, or suspend recovery correctness. Carry out the actual base implementation
@@ -111,10 +113,56 @@ recovery, expected user services, and clean session shutdown. Record hardware,
 versions, commands, outcomes, and any remaining limitations; do not count VM
 checks as physical validation.
 
-## Work completed in the planning session
+## Work completed in the original planning session
 
 - Added historical-note and upcoming-removal comments to all three legacy sets:
   early_install, hyprland_env, and optionals. Their package entries are unchanged.
 - Recorded agreed decisions and the implementation plan here. No GUI packages,
   repository configuration, keyword policy, services, or startup settings have
   been changed in this session.
+
+## Repository preparation (2026-10-14)
+
+The user selected repository-only work: they will commit and pull onto thinktop
+to install and test. This session has not installed packages, enabled services,
+modified the live system, or performed physical validation. Keep this card open.
+
+- Added hyproverlay repository configuration and `@gui-base`, selecting numbered
+  Hyprland 0.56.2, Kitty, PipeWire, and WirePlumber.
+- Reviewed all keyword exceptions. Replaced broad GUI acceptance with ten exact
+  version exceptions scoped to hyproverlay, including its glaze 7.x compatibility
+  build. Stable Gentoo Wayland libraries need no exception. Removed legacy
+  gentoo-sources/keyd/cliphist/hyprpaper/toolkit/GUI utility acceptance; retained
+  and explained the four original testing Agentoo package exceptions, scoped to
+  agentoo. Preserved independently added scoped keyd/group exceptions; these
+  packages are outside `@gui-base`.
+- Moved audio USE policy into `package.use/gui-base`; selected user systemd audio
+  services, native Wayland Kitty, and native systemd Hyprland, with UWSM, plugins,
+  GUI companions, and XWayland disabled.
+- Added shared Lua configuration discovered through the system XDG fallback,
+  with plain background, terminal/window/workspace/exit/volume bindings, optional
+  explicit host selection, and a final real personal override. No user entry
+  file, copied defaults, startup delay, or login workaround is required.
+- Added the [installation and validation runbook](../../docs/gui-base.md),
+  covering a checkpoint before the live pull, package-plan inspection, normal
+  TTY login, user audio enablement, launch/exit, and physical acceptance.
+- Preserved the three historical sets until their remaining package requirements
+  receive a separate review. Removing keyword acceptance does not uninstall
+  packages; inspect existing testing installations before a world update.
+
+Validation: an isolated Portage configuration using the desktop/systemd profile
+and Intel graphics resolved `emerge --pretend --verbose --autounmask=n @gui-base`
+successfully against Gentoo `9ef593f1a819cdc0465b29afb11d03bac79ad5f8` and
+hyproverlay `b2e7344722289a04ec5ccab6957a83597cd13048`. The plan selected 60
+package merges (59 new, one new slot), with stable Kitty 0.48.2, PipeWire 1.6.8,
+and WirePlumber 0.5.15. Selected release source confirms the used Lua APIs,
+absolute `require()` tracking, XDG fallback discovery, watchdog argument
+forwarding, and native session environment handling. Lua syntax checks passed;
+Portage atoms/repository configuration parsed, permission policy covers all new
+files, and `git diff --check` passed. The installed Hyprland parser and all
+runtime/hardware checks remain for thinktop.
+
+Before completion, record thinktop's exact hardware/firmware and installed
+versions, checkpoint name, inspected plan/build result, normal-user session and
+audio compatibility tests, repeated suspend/lid/dock recovery, and clean
+exit/relaunch results. Re-run dependency resolution after sync on that target.
