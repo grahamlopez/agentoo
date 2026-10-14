@@ -65,6 +65,11 @@ usable password and resume the optional Git identity choice after interruption. 
 home contents and supplementary groups are preserved. No skeleton dotfiles are copied.
 After installing packages, setup reapplies Agentoo's file permission policy so
 shared Git configuration remains readable when configuring Graham's identity.
+Setup separately offers a Git identity for Agentoo commits as root, stored in
+`/var/lib/agentoo/repository.git/config`. Both prompts default to
+`graham (@<hostname>)` and `m477@duck.com`; existing identity fields are preserved.
+Each choice has its own completion marker, so rerunning setup on a machine that
+already completed Graham's identity setup still offers the Agentoo identity step.
 
 The managed sudo policy requires Graham’s password. SSH keys remain local in
 `/home/graham/.ssh/authorized_keys`, labeled `agentoo:graham:ssh-login` plus any
@@ -84,6 +89,9 @@ the older `agentoo-git git ...` form is also supported.
 Commands run as root; invoking the wrapper as an ordinary user requests sudo
 authorization automatically. Git identity, configuration, and SSH access then
 come from root's context.
+If identity setup was skipped, configure it with
+`agentoo-git config --local user.name "Your Name"` and
+`agentoo-git config --local user.email "you@example.com"` before committing.
 
 The shared Git configuration trusts `/var/db/repos/gentoo`, matching the entry
 Portage adds for its Git repository backend.

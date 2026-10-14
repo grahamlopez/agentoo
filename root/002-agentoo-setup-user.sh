@@ -95,12 +95,15 @@ if [[ $password_status != P ]]; then
 else
   printf '\nExisting account password preserved.\n'
 fi
+# Shared defaults for personal and system-repository commit identities.
+default_git_name="graham (@$(hostname))"
+default_git_email='m477@duck.com'
 # Mark the optional choice only after completion, so interrupted setup can resume.
 identity_done=/var/lib/agentoo/graham-git-identity.done
 identity_file=$home/.gitconfig-local
 if [[ ! -e $identity_done ]]; then
-  git_name="graham (@$(hostname))"
-  git_email='m477@duck.com'
+  git_name=$default_git_name
+  git_email=$default_git_email
   printf '\n┌─ Personal Git identity ──────────────────────────┐\n'
   printf '│ Author name   %s\n│ Author email  %s\n│ Storage       ~/.gitconfig-local (Graham only)\n└──────────────────────────────────────────────────┘\n' "$git_name" "$git_email"
   read -r -p 'Configure Git identity? [y/N] ' answer
@@ -122,6 +125,33 @@ if [[ ! -e $identity_done ]]; then
     printf '  git config --file "$HOME/.gitconfig-local" user.email %q\n' "$git_email"
   fi
   touch "$identity_done"
+fi
+# Separate completion state also offers this step on machines that already
+# completed the personal identity setup. The repository settings apply when
+# agentoo-git runs directly as root or through sudo.
+agentoo_identity_done=/var/lib/agentoo/agentoo-git-identity.done
+if [[ ! -e $agentoo_identity_done ]]; then
+  git_name=$default_git_name
+  git_email=$default_git_email
+  printf '\n┌─ Agentoo Git identity ───────────────────────────┐\n'
+  printf '│ Author name   %s\n│ Author email  %s\n│ Storage       Agentoo repository (commits as root)\n└──────────────────────────────────────────────────┘\n' "$git_name" "$git_email"
+  read -r -p 'Configure Agentoo Git identity? [y/N] ' answer
+  if [[ $answer == y || $answer == Y || $answer == yes ]]; then
+    read -r -p "Author name [$git_name]: " value
+    git_name=${value:-$git_name}
+    read -r -p "Author email [$git_email]: " value
+    git_email=${value:-$git_email}
+    for field in name email; do
+      identity_variable=git_$field
+      value=$(/usr/local/bin/agentoo-git config --local --get "user.$field" || true)
+      [[ -n $value ]] || /usr/local/bin/agentoo-git config --local "user.$field" "${!identity_variable}"
+    done
+  else
+    printf '\nAgentoo Git identity skipped. Later, run (edit the values as needed):\n'
+    printf '  agentoo-git config --local user.name %q\n' "$git_name"
+    printf '  agentoo-git config --local user.email %q\n' "$git_email"
+  fi
+  touch "$agentoo_identity_done"
 fi
 # Apply Graham’s key-only policy to an already-running server; do not start it.
 if systemctl is-active --quiet sshd.service; then systemctl reload sshd.service; fi
