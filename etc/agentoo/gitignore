@@ -2,6 +2,10 @@
 # Also guards the $HOME-as-work-tree dotfile repos (dgit/ggit/agit) against
 # accidentally committing secrets via `add -A`.
 
+# Generated Python bytecode
+__pycache__/
+*.py[cod]
+
 # ssh: track only the shared config; never keys or machine-local includes
 .ssh/*
 !.ssh/config
