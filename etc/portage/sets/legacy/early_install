@@ -1,3 +1,6 @@
+# Historical installation notes, not the current agentoo package policy.
+# Scheduled for removal soon as reviewed package sets replace these leftovers.
+
 app-admin/sudo
 app-editors/neovim
 app-eselect/eselect-repository

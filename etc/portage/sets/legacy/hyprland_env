@@ -1,3 +1,6 @@
+# Historical GUI notes, not a recommended or supported agentoo environment.
+# Scheduled for removal soon; the planned @gui-base will be evaluated afresh.
+
 app-misc/cliphist
 app-misc/keyd
 app-text/zathura

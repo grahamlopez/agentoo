@@ -1,3 +1,6 @@
+# Historical optional-package notes, not the current agentoo package policy.
+# Scheduled for removal soon as individual requirements are reviewed.
+
 app-misc/evtest # debugging keyboard events
 dev-tex/tectonic # self-contained XeLaTeX-based TeX
 dev-vcs/lazygit # Git terminal interface
