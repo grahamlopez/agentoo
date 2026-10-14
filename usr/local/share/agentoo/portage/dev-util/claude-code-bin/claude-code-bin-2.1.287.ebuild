@@ -23,6 +23,7 @@ RDEPEND="
 	app-misc/ca-certificates
 	app-shells/bash
 	dev-vcs/git
+	media-gfx/qrencode
 	sandbox? (
 		sys-apps/bubblewrap
 		net-misc/socat
@@ -48,6 +49,13 @@ src_install() {
 pkg_postinst() {
 	elog "Run claude as the intended user; login and configuration remain in your home."
 	elog "The launcher disables upstream updates. Update this client through Portage."
+	elog "Headless login with a phone: run claude (or /login inside Claude Code)."
+	elog "Keep the login prompt open; in a second terminal or SSH session, run:"
+	elog "  tr -d '[:space:]' | qrencode -t ANSIUTF8"
+	elog "Paste the full login URL, then press Enter followed by Ctrl+D."
+	elog "Make the terminal wide enough to show the entire QR code."
+	elog "Scan it with your phone camera and sign in in the phone browser."
+	elog "Paste the browser's login code into the original Claude login prompt."
 	if use sandbox; then
 		elog "Sandbox dependencies are installed; enable sandboxing with /sandbox."
 		elog "The kernel must allow unprivileged user namespaces."

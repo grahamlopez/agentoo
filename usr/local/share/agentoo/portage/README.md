@@ -102,7 +102,7 @@ system commands: check `command -v codex` and `command -v claude`.
 | Package | Declared runtime dependencies | Included upstream |
 | --- | --- | --- |
 | Codex | glibc >= 2.38, ncurses with tinfo, GCC runtime provider on arm64, CA certificates, Bash, Git | Native CLI and code-mode host, ripgrep, bubblewrap, Zsh, voice libraries |
-| Claude | glibc >= 2.26, CA certificates, Bash, Git; bubblewrap and socat with the default `sandbox` USE flag | Native runtime and ripgrep |
+| Claude | glibc >= 2.26, CA certificates, Bash, Git, qrencode for phone login; bubblewrap and socat with the default `sandbox` USE flag | Native runtime and ripgrep |
 
 The glibc floors and library dependencies were checked against **both** downloaded
 architectures. Codex's main executable is static, but its bundled Zsh needs
