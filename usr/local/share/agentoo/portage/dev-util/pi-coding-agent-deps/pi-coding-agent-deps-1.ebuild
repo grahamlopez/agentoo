@@ -25,7 +25,7 @@ RDEPEND="
 S="${WORKDIR}"
 
 src_unpack() { :; }
-src_prepare() { :; }
+src_prepare() { eapply_user; }
 src_configure() { :; }
 src_compile() { :; }
 src_install() { :; }
