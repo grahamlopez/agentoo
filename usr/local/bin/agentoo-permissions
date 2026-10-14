@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check or restore ownership and modes of explicitly managed agentoo files."""
+"""Check or restore ownership and modes of explicitly managed agentoo paths."""
 import argparse
 import os
 from pathlib import Path, PurePosixPath
@@ -10,20 +10,23 @@ import sys
 POLICY = "etc/agentoo/permissions.conf"
 
 
-def safe_file(root, relative):
+def safe_path(root, relative):
     path = root
     for component in PurePosixPath(relative).parts:
         path = path / component
         if path.is_symlink():
             raise ValueError(f"refusing symlink: {path}")
-    if not path.is_file():
+    if relative.endswith("/"):
+        if not path.is_dir():
+            raise ValueError(f"missing or nondirectory path: {path}")
+    elif not path.is_file():
         raise ValueError(f"missing or nonregular file: {path}")
     return path
 
 
 def load_policy(root):
     entries = {}
-    for number, line in enumerate(safe_file(root, POLICY).read_text().splitlines(), 1):
+    for number, line in enumerate(safe_path(root, POLICY).read_text().splitlines(), 1):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -63,11 +66,11 @@ def main():
     # Validate all paths before changing anything. Never recurse or follow links.
     for relative, expected in entries.items():
         try:
-            path = safe_file(root, relative)
+            path = safe_path(root, relative)
             current = path.stat()
             actual = (current.st_uid, current.st_gid, stat.S_IMODE(current.st_mode))
             if actual != expected:
-                changes.append((path, expected))
+                changes.append((path, expected, relative.endswith("/")))
                 print(f"MISMATCH /{relative}: {actual[0]}:{actual[1]} {actual[2]:04o}"
                       f" -> {expected[0]}:{expected[1]} {expected[2]:04o}")
         except (ValueError, OSError) as error:
@@ -87,19 +90,20 @@ def main():
         print("No permissions changed: resolve policy/path errors first.", file=sys.stderr)
         return 1
     if args.fix:
-        for path, (uid, gid, mode) in changes:
+        for path, (uid, gid, mode), directory in changes:
             # Open without following a substituted symlink; change the opened file.
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             try:
-                if not stat.S_ISREG(os.fstat(fd).st_mode):
-                    raise ValueError(f"refusing nonregular file: {path}")
+                kind = os.fstat(fd).st_mode
+                if not (stat.S_ISDIR(kind) if directory else stat.S_ISREG(kind)):
+                    raise ValueError(f"refusing unexpected path type: {path}")
                 os.fchown(fd, uid, gid)
                 os.fchmod(fd, mode)
             finally:
                 os.close(fd)
-        print(f"Permissions: {len(changes)} corrected; {len(entries)} files checked.")
+        print(f"Permissions: {len(changes)} corrected; {len(entries)} paths checked.")
         return 0
-    print(f"Permissions: {len(changes)} mismatches; {len(entries)} files checked.")
+    print(f"Permissions: {len(changes)} mismatches; {len(entries)} paths checked.")
     return int(bool(changes))
 
 

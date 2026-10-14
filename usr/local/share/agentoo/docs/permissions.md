@@ -6,10 +6,11 @@
 The tool requires Python 3, already required by Gentoo/Portage.
 
 The manifest uses filesystem-relative paths, numeric UID/GID, and octal modes.
+A trailing `/` declares a directory, whose ownership and mode are also checked.
 Add an entry whenever adding a tracked file. Files must exist and be regular;
 symlinks and missing policy entries for tracked files cause failure before fixes.
-Only listed files are changed; there is no recursive ownership repair. Local
-identity, credentials, generated files, and directory permissions remain the
+Only listed paths are changed; there is no recursive ownership repair. Local
+identity, credentials, generated files, and unlisted directory permissions remain the
 installer's responsibility. In particular, the checkpoint helper stays `0700`.
 
 The installer applies the manifest after checkout, then configures the live
