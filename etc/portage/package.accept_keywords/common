@@ -18,3 +18,5 @@ app-misc/cliphist ~amd64
 dev-libs/wayland-protocols ~amd64
 dev-util/wayland-scanner ~amd64
 dev-libs/wayland ~amd64
+dev-util/codex-cli-bin ~amd64 ~arm64
+dev-util/claude-code-bin ~amd64 ~arm64
