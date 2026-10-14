@@ -72,7 +72,7 @@ H=${H:-$HOME_DEFAULT}
 [ "$ACTION" != create ] || [ -z "$DEVICE" ] || die 'offline creation is deferred'
 CLEAN=${CLEAN:-$S}
 [ "$ACTION" != create ] || [ "$CLEAN" != 1 ] || [ "$S" = 1 ] || die 'cleaning requires system capture'
-[ "$(id -u)" = 0 ] || die 'run as root'
+[ "$(id -u)" = 0 ] || die 'run agentoo-checkpoint with sudo or as root'
 for TOOL in btrfs findmnt mount umount flock mktemp sha256sum tar gzip awk sort cmp readlink stat pgrep; do
     command -v "$TOOL" >/dev/null || die "missing tool: $TOOL"
 done
