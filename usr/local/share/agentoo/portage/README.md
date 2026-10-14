@@ -24,6 +24,37 @@ The Gentoo repository must also be configured because this overlay inherits it.
 Check that Portage recognizes the overlay with `portageq get_repo_path / agentoo`;
 it should print `/usr/local/share/agentoo/portage`.
 
+## Keyd
+
+`app-misc/keyd` builds the tagged upstream 2.6.0 release and installs the
+system-wide remapping daemon, systemd and OpenRC services, man page, layouts,
+compose data, and configuration examples. `acct-group/keyd` creates its IPC
+access group through Portage. This initial package covers the core daemon;
+the optional Python application mapper and GNOME extensions are not installed.
+
+```sh
+emerge --ask app-misc/keyd::agentoo
+```
+
+Both packages carry `~amd64` and `~arm64` keywords. On systems without agentoo's
+keyword configuration, accept the appropriate testing keyword for both
+`app-misc/keyd::agentoo` and `acct-group/keyd::agentoo` first.
+
+Agentoo tracks `/etc/keyd/default.conf`, restored from the legacy configuration.
+It applies to all keyboards: Caps Lock sends Escape when tapped and Control
+when held; holding Left Alt maps H/J/K/L to the arrow keys. The `[nav:A]` layer
+preserves Alt for other keys, including Alt+Tab. Adjust this file directly to
+change the shared mapping.
+
+Then run `systemctl enable --now keyd`, or on OpenRC run
+`rc-update add keyd default` followed by `rc-service keyd start`.
+The kernel needs evdev and uinput support (`CONFIG_INPUT_EVDEV` and
+`CONFIG_INPUT_UINPUT`). Use `keyd monitor` to identify key names and
+`keyd reload` after configuration edits. Members of the `keyd` group can
+control the daemon through its socket; add users only when they need that
+access. Installing the package does not enable the service; the tracked mapping
+takes effect when the daemon starts.
+
 ## Proton Pass CLI
 
 `app-admin/proton-pass-cli-bin` installs the official, versioned Linux binary as

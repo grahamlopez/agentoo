@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+
+description="System-wide key remapping daemon"
+command="/usr/bin/keyd"
+command_background=true
+pidfile="/run/keyd.pid"
+
+depend() {
+	need localmount
+	after modules
+}

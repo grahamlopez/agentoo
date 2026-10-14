@@ -1,6 +1,8 @@
 sys-kernel/gentoo-sources ~amd64
 app-admin/proton-pass-cli-bin ~amd64 ~arm64
-app-misc/keyd ~amd64
+# System-wide keyboard remapping daemon and its IPC access group.
+app-misc/keyd::agentoo ~amd64 ~arm64
+acct-group/keyd::agentoo ~amd64 ~arm64
 gui-wm/hyprland ~amd64
 gui-apps/hyprpaper ~amd64
 dev-util/hyprwayland-scanner ~amd64
