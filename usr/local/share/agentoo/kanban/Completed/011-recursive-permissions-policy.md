@@ -1,7 +1,7 @@
 # Refactor permissions policy to support recursive definitions
 
 Created: 2026-10-14
-Status: Backlog
+Status: Completed
 
 ## Requested changes
 
@@ -53,4 +53,27 @@ updating its policy path even though its permissions do not change.
 - Exercise these cases in a temporary Git work tree, including Kanban card moves,
   newly added ebuilds, and post-merge repair of unrelated mode mismatches.
 
-This card records deferred work; it does not authorize implementing the refactor.
+## Implementation and validation
+
+Completed: 2026-10-14
+
+Implemented `tree`, `file`, and `dir` rules with numeric owners, distinct file
+and directory defaults, closest-tree inheritance, and exact-path exceptions.
+Rule order is irrelevant; duplicate and conflicting definitions are rejected.
+Converted the policy to nine recursive rules and four file exceptions, retaining
+all previously declared file and directory ownership/modes. Recursive rules now
+also manage their roots and covered parent directories.
+
+Selection uses Git's index, with installed and development repository layouts
+supported. Untracked contents are excluded; missing repositories fail rather
+than falling back to a filesystem walk. Roots and exact exceptions remain
+required paths. Validation precedes repairs; descriptor-based traversal rejects
+symlinks in every component, and mutation checks object type and identity.
+Existing installer and hook commands remain valid.
+
+Focused temporary-repository tests cover inheritance, shuffled rules, exact
+exceptions, tracked additions/deletions/moves, untracked state, actual mode
+repair, uncovered paths, malformed rules, symlinks, FIFO files, missing paths,
+and installed repository discovery. Compared the converted policy against all
+old entries to confirm unchanged permissions. This validation does not include
+an end-to-end installation or repair on the user's live system.
