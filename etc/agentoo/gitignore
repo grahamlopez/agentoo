@@ -10,3 +10,11 @@ __pycache__/
 .ssh/*
 !.ssh/config
 .ssh/config.d/
+
+# Local secret mappings, templates, and provisioned credentials
+/etc/agentoo/secrets/*
+!/etc/agentoo/secrets/qemu.conf
+/var/lib/agentoo/secrets/
+.config/agentoo/github-token
+.pi/agent/auth.json
+/etc/wpa_supplicant/wpa_supplicant-*.conf
