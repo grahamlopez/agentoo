@@ -18,6 +18,7 @@ Create: system + home + EFI; clean distfiles and binary packages with system cap
 --[no-]clean-distfiles controls both package caches.
 Restore: system + EFI; preserve home. Selected current state is discarded.
 Creation is online-only. Restore requires recovery media and unmounted targets.
+List scans Btrfs file extents for total, exclusive and shared sizes (EFI excluded).
 EOF
 }
 ACTION=${1:-}
@@ -308,13 +309,25 @@ else
     MODE=ro; [ "$ACTION" != restore ] || MODE=rw
     mount_top "$MODE"
     if [ "$ACTION" = list ]; then
+        printf '%-12s %-12s %-12s %-26s %s\n' TOTAL EXCLUSIVE SHARED STATE CHECKPOINT
         for CP in "$STORE"/*; do
-            [ -d "$CP" ] || continue
+            [ -d "$CP" ] && [ ! -L "$CP" ] || continue
             STATE=incomplete
             if [ -f "$CP/COMPLETE" ] && [ "$(cat "$CP/COMPLETE")" = "${CP##*/}" ] && [ ! -e "$CP/INCOMPLETE" ]; then STATE=complete; fi
             [ -f "$CP/manifest" ] || STATE="$STATE (legacy format)"
-            printf '%s  %s\n' "${CP##*/}" "$STATE"
+            # Scan each checkpoint as one set, including legacy nested snapshots.
+            # FIEMAP sizes describe file extents, not compressed physical usage.
+            SIZES='? ? ?'
+            if LC_ALL=C btrfs filesystem du --summarize --human-readable "$CP" > "$TMP/usage"; then
+                SIZES=$(awk 'NR==2 && NF>=4 {print $1, $2, $3; found=1}
+                    END {if (!found) print "? ? ?"}' "$TMP/usage")
+            else
+                printf 'Warning: sizes unavailable for %s\n' "${CP##*/}" >&2
+            fi
+            printf '%s\n' "$SIZES" | awk -v state="$STATE" -v name="${CP##*/}" \
+                '{printf "%-12s %-12s %-12s %-26s %s\n", $1, $2, $3, state, name}'
         done
+        printf 'Btrfs file extents only; EFI excluded. Shared blocks overlap checkpoints; sizes are not additive.\n'
         exit 0
     fi
     CP=$STORE/$NAME; verify_checkpoint

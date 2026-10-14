@@ -39,6 +39,28 @@ Snapshots live at Btrfs top level `gentoo-checkpoints/<name>`. EFI archives live
 at `/boot/checkpoints/<name>`. Completion markers, filesystem identities,
 snapshot identities and EFI archive checksums are verified before restoration.
 
+`list` includes human-readable Btrfs `TOTAL`, `EXCLUSIVE`, and `SHARED` sizes
+for each checkpoint, using `btrfs filesystem du --summarize`. Total counts file
+extents referenced by the checkpoint; exclusive counts extents not shared with
+other files; shared counts shared extents referenced within the checkpoint,
+deduplicating overlapping shared extents in that set. Shared blocks can also be
+referenced by the live system or other checkpoints, so row sizes cannot be added
+to determine total snapshot overhead. Exclusive is a useful indication of unique
+file data, rather than an exact prediction of space reclaimed by deletion.
+
+This scans files and can take time on large checkpoints. It requires no quotas
+and includes legacy nested snapshots. `?` means measurement was unavailable.
+These are file extent figures, not exact physical disk usage: compression,
+filesystem metadata and RAID replication are not accounted for. EFI archives
+on the separate EFI partition are excluded.
+
+To measure a snapshot directly when its path is mounted:
+
+    btrfs filesystem du --summarize /path/to/snapshot
+
+If full Btrfs quotas are already enabled, `btrfs qgroup show /` provides per-
+subvolume referenced and exclusive accounting without walking every file.
+
 ## Recovery without the installed root
 
 The implementation lives at `/boot/agentoo/checkpoint.sh` on the EFI partition.
