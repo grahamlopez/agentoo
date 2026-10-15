@@ -7,10 +7,10 @@ umask 077
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'EOF'
-Usage: agentoo-checkpoint create LABEL [component flags] [--[no-]clean-distfiles]
-       agentoo-checkpoint list [--device DEVICE]
-       agentoo-checkpoint inspect NAME [--device DEVICE] [--efi-mount PATH]
-       agentoo-checkpoint restore NAME --device DEVICE [--efi-mount PATH] [component flags]
+Usage: agentoo checkpoint create LABEL [component flags] [--[no-]clean-distfiles]
+       agentoo checkpoint list [--device DEVICE]
+       agentoo checkpoint inspect NAME [--device DEVICE] [--efi-mount PATH]
+       agentoo checkpoint restore NAME --device DEVICE [--efi-mount PATH] [component flags]
 
 Positive --system --home --efi flags select exactly those components.
 Negative-only --no-system --no-home --no-efi flags subtract from defaults.
@@ -72,7 +72,7 @@ H=${H:-$HOME_DEFAULT}
 [ "$ACTION" != create ] || [ -z "$DEVICE" ] || die 'offline creation is deferred'
 CLEAN=${CLEAN:-$S}
 [ "$ACTION" != create ] || [ "$CLEAN" != 1 ] || [ "$S" = 1 ] || die 'cleaning requires system capture'
-[ "$(id -u)" = 0 ] || die 'run agentoo-checkpoint with sudo or as root'
+[ "$(id -u)" = 0 ] || die 'root required; use agentoo checkpoint or run this recovery script as root'
 for TOOL in btrfs findmnt mount umount flock mktemp sha256sum tar gzip awk sort cmp readlink stat pgrep; do
     command -v "$TOOL" >/dev/null || die "missing tool: $TOOL"
 done

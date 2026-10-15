@@ -124,7 +124,7 @@ def managed_entries(rules, tracked):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="agentoo permissions", description=__doc__)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--check", action="store_true", help="report only (default)")
     modes.add_argument("--fix", action="store_true", help="restore declared ownership and modes")

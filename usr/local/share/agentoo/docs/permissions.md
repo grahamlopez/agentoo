@@ -1,7 +1,7 @@
 # Managed file permissions
 
-`agentoo-permissions` checks without changing anything. Run
-`agentoo-permissions --fix` as root to restore ownership and modes declared in
+`agentoo permissions check` checks without changing anything. Run
+`agentoo permissions fix` as root to restore ownership and modes declared in
 `/etc/agentoo/permissions.conf`. Use `--root /mnt/gentoo` for a mounted target.
 The tool requires Python 3 and the agentoo Git repository. Both are available
 when the installer applies the policy after its configuration checkout.
@@ -70,14 +70,14 @@ repository's `core.hooksPath` to `/usr/local/share/agentoo/git-hooks`:
 - After checkout, merge, or rewrite/rebase: fix when running as root; otherwise check.
 - Before commit: check and block the commit if permissions or policy coverage fail.
 
-For an existing installation, run `agentoo-git setup-hooks` as root to fix
+For an existing installation, run `agentoo git setup-hooks` as root to fix
 permissions and enable the hooks. It refuses to replace a different configured
 hooks directory. Hooks guard both the `/` work tree and the installed Git
 database path, and are not enabled in development clones. Post-operation
 failures report problems but do not roll back Git changes. Run the checker after
 manual recovery; reset/restore and manual edits are not all covered by hooks.
 No background service or automatic privilege prompt is installed. To disable
-these hooks, use `agentoo-git git config --unset core.hooksPath`.
+these hooks, use `agentoo git config --unset core.hooksPath`.
 
 Run the focused checks from a development checkout with:
 

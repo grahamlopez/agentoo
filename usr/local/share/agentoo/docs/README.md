@@ -25,10 +25,9 @@ editing a tracked file changes the live configuration and appears in Git.
 │   └── 002-agentoo-setup-user.sh       # Create Graham’s account and access
 ├── usr/local/
 │   ├── bin/
-│   │   ├── agentoo-git                # Manage the live configuration work tree
-│   │   ├── agentoo-checkpoint         # Launcher for the EFI checkpoint tool
-│   │   └── agentoo-permissions        # Check or restore managed file permissions
+│   │   └── agentoo                    # Unified CLI; privilege handling and help
 │   └── share/agentoo/
+│       ├── commands/                 # Git, checkpoints, permissions, and secrets
 │       ├── docs/                     # Project documentation
 │       │   └── skills/qemu-nbd/       # QEMU/NBD procedures and recovery reference
 │       ├── kanban/

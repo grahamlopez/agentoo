@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly -a original_args=("$@")
+readonly commands=/usr/local/share/agentoo/commands
+usage() {
+    cat <<'HELP'
+Usage: agentoo <command> [options]
+
+Manage Agentoo system configuration, checkpoints, and secrets.
+
+Commands:
+  git          Run Git against the Agentoo system repository
+  checkpoint   Create, list, inspect, and restore system checkpoints
+  permissions  Check or repair managed ownership and permissions
+  secrets      Install secret files from Proton Pass
+  help         Show help for a command
+
+Repository:
+  git [<git-options>] <command> [args...]
+                         Run a Git command against the system repository
+  git setup-hooks        Enable permission management hooks
+  git enable-write       Switch origin to SSH for fetch and push
+
+Checkpoints:
+  checkpoint create LABEL
+                         Capture system, home, and EFI
+  checkpoint list        List checkpoints and storage usage
+  checkpoint inspect NAME
+                         Show metadata and verify saved components
+  checkpoint restore NAME --device DEVICE
+                         Restore from recovery media; preserve home by default
+
+Permissions:
+  permissions check      Report ownership and permission mismatches
+  permissions fix        Restore declared ownership and permissions
+
+Secrets:
+  secrets install --profile FILE --user USER CATEGORY...
+                         Install selected categories; use "all" for every row
+
+Options:
+  -h, --help             Show help
+
+Examples:
+  agentoo git status
+  sudo agentoo checkpoint create before-upgrade
+  sudo agentoo checkpoint list
+  agentoo permissions check
+  sudo agentoo permissions fix
+  sudo agentoo secrets install --profile FILE --user graham ssh github
+
+Help and permission checks run without elevation. Other operations request
+sudo authorization when needed. Secret installation confirms file replacement.
+
+Run 'agentoo help <command>' or 'agentoo <command> --help' for details.
+HELP
+}
+fail() { printf 'agentoo: %s\n' "$*" >&2; exit 2; }
+
+# Normalize help before any privilege check. Never inspect forwarded Git arguments.
+if [[ ${1:-} == help ]]; then
+    shift
+    if (( $# == 0 )); then usage; exit 0; fi
+    (( $# == 1 )) || fail 'usage: agentoo help [command]'
+    set -- "$1" --help
+fi
+case ${1:-} in
+    ''|-h|--help) usage; exit 0 ;;
+    git|checkpoint|permissions|secrets) command=$1; shift ;;
+    *) fail "unknown command: $1 (see 'agentoo --help')" ;;
+esac
+
+needs_root=1
+case $command in
+    git)
+        if (( $# == 0 )) || [[ ${1:-} == -h || ${1:-} == --help ]]; then
+            printf 'Usage: agentoo git [<git-options>] <command> [args...]\n       agentoo git {setup-hooks|enable-write}\n\nRuns Git against /var/lib/agentoo/repository.git with work tree /.\nOther Git arguments are forwarded unchanged.\n'
+            exit 0
+        fi
+        ;;
+    checkpoint)
+        case ${1:-} in
+            ''|-h|--help) exec sh /boot/agentoo/checkpoint.sh --help ;;
+            create|list|inspect|restore)
+                if [[ ${2:-} == -h || ${2:-} == --help ]]; then
+                    exec sh /boot/agentoo/checkpoint.sh --help
+                fi ;;
+            *) fail "unknown checkpoint command: $1" ;;
+        esac
+        ;;
+    permissions)
+        if [[ ${2:-} == -h || ${2:-} == --help ]]; then set -- --help; fi
+        case ${1:-} in
+            ''|-h|--help)
+                printf 'Usage: agentoo permissions {check|fix} [--root PATH]\n\ncheck reports mismatches without elevation; fix restores ownership and modes.\n--root selects a mounted target root (default: /).\n'
+                exit 0 ;;
+            check) needs_root=0; shift; set -- --check "$@" ;;
+            fix) shift; set -- --fix "$@" ;;
+            *) fail "unknown permissions command: $1" ;;
+        esac
+        ;;
+    secrets)
+        case ${1:-} in
+            ''|-h|--help) exec bash "$commands/secrets" --help ;;
+            install) shift ;;
+            *) fail "unknown secrets command: $1" ;;
+        esac
+        ;;
+esac
+
+# Subcommand help must not prompt for sudo, including secrets install --help.
+if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    needs_root=0
+fi
+if (( needs_root && EUID != 0 )); then
+    printf 'agentoo: %s requires root; requesting sudo authorization.\n' "$command" >&2
+    # Re-enter with the original public arguments, preserving quoting and boundaries.
+    exec sudo -- /usr/local/bin/agentoo "${original_args[@]}"
+fi
+case $command in
+    permissions) exec python3 "$commands/permissions.py" "$@" ;;
+    *) exec bash "$commands/$command" "$@" ;;
+esac

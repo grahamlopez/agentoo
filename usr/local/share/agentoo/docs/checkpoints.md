@@ -2,9 +2,9 @@
 
 As root on the booted target:
 
-    agentoo-checkpoint create terminal-env
-    agentoo-checkpoint list
-    agentoo-checkpoint inspect <exact-checkpoint-name>
+    agentoo checkpoint create terminal-env
+    agentoo checkpoint list
+    agentoo checkpoint inspect <exact-checkpoint-name>
 
 Keep package/configuration tools and other writers idle during capture. Labels
 receive a UTC timestamp and process ID; existing checkpoints are never overwritten.
@@ -19,7 +19,7 @@ Create and restore print a compact plan and require confirmation.
 
 - Positive flags select exactly the specified components: `--system`, `--home`, `--efi`.
 - Negative-only flags subtract from defaults: `--no-system`, `--no-home`, `--no-efi`.
-- Home-only capture: `agentoo-checkpoint create personal-work --home`.
+- Home-only capture: `agentoo checkpoint create personal-work --home`.
 - `--[no-]clean-distfiles` controls both distfile and binary package cleanup and
   applies only to create. Explicit cleaning requires system capture.
 - Conflicting flags and empty selections are rejected.

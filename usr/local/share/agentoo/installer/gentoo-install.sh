@@ -1516,9 +1516,9 @@ EOF
     checkout_configuration "$config_git_dir" "$MOUNT_ROOT"
   fi
   config_revision=$(run_privileged git --git-dir="$config_git_dir" rev-parse "$CONFIG_BRANCH^{commit}")
-  [[ -f $MOUNT_ROOT/usr/local/bin/agentoo-permissions && ! -L $MOUNT_ROOT/usr/local/bin/agentoo-permissions ]] \
-    || die 'configuration checkout lacks agentoo-permissions'
-  run_privileged python3 "$MOUNT_ROOT/usr/local/bin/agentoo-permissions" --root "$MOUNT_ROOT" --fix
+  [[ -f $MOUNT_ROOT/usr/local/share/agentoo/commands/permissions.py && ! -L $MOUNT_ROOT/usr/local/share/agentoo/commands/permissions.py ]] \
+    || die 'configuration checkout lacks the Agentoo permissions implementation'
+  run_privileged python3 "$MOUNT_ROOT/usr/local/share/agentoo/commands/permissions.py" --root "$MOUNT_ROOT" --fix
   esp_uuid=$(run_privileged findmnt -rn -o UUID --mountpoint "$MOUNT_ROOT/boot")
   [[ -n $esp_uuid ]] || die 'mounted ESP UUID is missing'
   printf '%s\n' "$esp_uuid" | run_privileged tee "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid" >/dev/null
@@ -1646,7 +1646,7 @@ system_update_chroot() {
   pending=$(pending_config_updates)
   [[ -z $pending ]] || die "rebuilds left configuration updates requiring review: $pending"
   git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ --no-pager diff --stat
-  printf '\nReview configuration changes with: agentoo-git diff\n'
+  printf '\nReview configuration changes with: agentoo git diff\n'
   printf 'CPU policy is stored in /etc/portage/package.use/00cpu-flags.\n'
   printf 'No dependency cleanup is performed in this phase.\n'
 }
@@ -1708,7 +1708,7 @@ install -d -m 700 "$archive_dir"
 dispatch-conf
 emerge --verbose "${PACKAGE_OPTIONS[@]}" @preserved-rebuild
 git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ --no-pager diff --stat
-agentoo-git diff
+agentoo git diff
 
 This phase stops before kernel installation and does not clean dependencies.
 A failed update leaves the target mounted so this phase can be resumed.
@@ -2118,7 +2118,7 @@ kernel_foundation_chroot() {
   fi
   printf 'After kernel updates, register the new version; retain a tested previous entry.\n'
   printf 'Custom EFI images use their own build/copy workflow, without make install.\n'
-  agentoo-git --no-pager diff --stat
+  agentoo git --no-pager diff --stat
 }
 
 # Present the kernel phase plan and verify the mounted target before installation.

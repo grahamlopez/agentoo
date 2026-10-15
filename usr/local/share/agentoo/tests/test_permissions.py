@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-MODULE = runpy.run_path(str(Path(__file__).resolve().parents[3] / 'bin/agentoo-permissions'))
+MODULE = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'commands/permissions.py'))
 
 
 class PermissionsTest(unittest.TestCase):
@@ -45,7 +45,7 @@ class PermissionsTest(unittest.TestCase):
     def repair(self):
         output = io.StringIO()
         # Exercise real chmod as an ordinary developer; ownership is unchanged.
-        with patch('sys.argv', ['agentoo-permissions', '--root', str(self.root), '--fix']), \
+        with patch('sys.argv', ['agentoo permissions', '--root', str(self.root), '--fix']), \
                 patch('os.geteuid', return_value=0), patch('os.fchown'), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
             result = MODULE['main']()
@@ -156,7 +156,7 @@ class PermissionsTest(unittest.TestCase):
     def test_check_reports_without_changes(self):
         managed = self.write('share/managed', mode=0o600)
         self.git('add', '.')
-        with patch('sys.argv', ['agentoo-permissions', '--root', str(self.root), '--check']), \
+        with patch('sys.argv', ['agentoo permissions', '--root', str(self.root), '--check']), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(MODULE['main'](), 1)
         self.assertEqual(managed.stat().st_mode & 0o777, 0o600)

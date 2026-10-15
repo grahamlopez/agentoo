@@ -3,18 +3,18 @@
 ## QEMU GitHub token
 
 The tracked `/etc/agentoo/secrets/qemu.conf` selects the Login item
-`agentoo/qemu-agentoo-github-token`. Its Username is your GitHub username and
+`agentoo/qemu-agentoo github-token`. Its Username is your GitHub username and
 Password is your repository-scoped personal access token. Run:
 
 ```sh
-sudo agentoo-secrets --profile /etc/agentoo/secrets/qemu.conf --user graham github
+sudo agentoo secrets install --profile /etc/agentoo/secrets/qemu.conf --user graham github
 ```
 
 The `github` method writes a root-owned mode `0600` credential file at
 `/var/lib/agentoo/secrets/github.credentials`, then configures the installed
 agentoo repository to use Git's built-in plaintext credential store for that
 repository's HTTPS URL. It sets an HTTPS push URL without changing the fetch
-URL. No custom helper or PIN prompt is installed. `agentoo-git push` can then
+URL. No custom helper or PIN prompt is installed. `agentoo git push` can then
 use the token. This command does not perform a push.
 
 ## Other file profiles
@@ -44,7 +44,7 @@ The Pi row is commented out until you supply a template matching your installed
 Pi version. References can use IDs instead of names to avoid duplicate names.
 
 ```sh
-sudo agentoo-secrets --profile /etc/agentoo/secrets/qemu.conf --user graham ssh github
+sudo agentoo secrets install --profile /etc/agentoo/secrets/qemu.conf --user graham ssh github
 ```
 
 Use `all` instead of category names to install every row. The script displays

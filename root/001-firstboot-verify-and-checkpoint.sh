@@ -1,7 +1,7 @@
 #!/bin/bash
 # Diagnose first boot, verify boot identities, then offer the standard checkpoint.
 # --verify-only runs diagnostics without capture preflight or cleanup.
-# Capture policy is owned by agentoo-checkpoint; restore is its recovery subcommand.
+# Capture policy is owned by agentoo checkpoint; restore is its recovery subcommand.
 set -Eeuo pipefail
 verify_only=0
 die() { printf 'Verification failed: %s\n' "$*" >&2; exit 1; }
@@ -108,4 +108,4 @@ for artifact in "/boot/EFI/Gentoo/kernel-$version.efi" "/boot/EFI/Gentoo/initram
 done
 [[ $(timedatectl show -p NTPSynchronized --value) == yes ]] || die 'Time is not synchronized yet; wait and retry.'
 [[ -z $(systemctl --failed --no-legend --plain --no-pager) ]] || die 'Failed systemd units remain.'
-exec /usr/local/bin/agentoo-checkpoint create fresh-install
+exec /usr/local/bin/agentoo checkpoint create fresh-install

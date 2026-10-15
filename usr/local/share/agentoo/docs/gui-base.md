@@ -15,15 +15,15 @@ the pull, since agentoo's live work tree is `/` and a pull changes configuration
 With package/configuration writers idle, as root:
 
 ```sh
-agentoo-git status --short
-agentoo-checkpoint create before-gui-base --no-clean-distfiles
-agentoo-checkpoint list
-agentoo-checkpoint inspect <exact-checkpoint-name>
+agentoo git status --short
+agentoo checkpoint create before-gui-base --no-clean-distfiles
+agentoo checkpoint list
+agentoo checkpoint inspect <exact-checkpoint-name>
 ```
 
 Confirm the checkpoint completed and retain its exact name. See
 [checkpoint and recovery procedures](checkpoints.md). Reconcile live edits,
-then pull the reviewed commit with `agentoo-git pull`.
+then pull the reviewed commit with `agentoo git pull`.
 
 ## Inspect and install
 

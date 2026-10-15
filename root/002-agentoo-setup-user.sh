@@ -53,7 +53,7 @@ packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git)
 emerge --ask --noreplace "${packages[@]}"
 # Package/configuration tools can rewrite shared files with root-only modes.
 # Restore the declared policy before running Git as the new account.
-/usr/local/bin/agentoo-permissions --fix
+/usr/local/bin/agentoo permissions fix
 shell=$(readlink -f "$(command -v zsh)") || die 'Zsh is unavailable.'
 grep -Fxq "$shell" /etc/shells || die 'Installed Zsh is not listed in /etc/shells.'
 [[ -f /etc/ssh/sshd_config.d/10-agentoo-graham.conf && ! -L /etc/ssh/sshd_config.d/10-agentoo-graham.conf ]] || die 'Managed SSH policy is missing; update the agentoo checkout.'
@@ -128,7 +128,7 @@ if [[ ! -e $identity_done ]]; then
 fi
 # Separate completion state also offers this step on machines that already
 # completed the personal identity setup. The repository settings apply when
-# agentoo-git runs directly as root or through sudo.
+# agentoo git runs directly as root or through sudo.
 agentoo_identity_done=/var/lib/agentoo/agentoo-git-identity.done
 if [[ ! -e $agentoo_identity_done ]]; then
   git_name=$default_git_name
@@ -143,13 +143,13 @@ if [[ ! -e $agentoo_identity_done ]]; then
     git_email=${value:-$git_email}
     for field in name email; do
       identity_variable=git_$field
-      value=$(/usr/local/bin/agentoo-git config --local --get "user.$field" || true)
-      [[ -n $value ]] || /usr/local/bin/agentoo-git config --local "user.$field" "${!identity_variable}"
+      value=$(/usr/local/bin/agentoo git config --local --get "user.$field" || true)
+      [[ -n $value ]] || /usr/local/bin/agentoo git config --local "user.$field" "${!identity_variable}"
     done
   else
     printf '\nAgentoo Git identity skipped. Later, run (edit the values as needed):\n'
-    printf '  agentoo-git config --local user.name %q\n' "$git_name"
-    printf '  agentoo-git config --local user.email %q\n' "$git_email"
+    printf '  agentoo git config --local user.name %q\n' "$git_name"
+    printf '  agentoo git config --local user.email %q\n' "$git_email"
   fi
   touch "$agentoo_identity_done"
 fi

@@ -5,11 +5,6 @@ readonly GIT_DIR=/var/lib/agentoo/repository.git
 readonly WORK_TREE=/
 readonly SSH_REMOTE=git@github.com:grahamlopez/agentoo.git
 
-if [[ $# -gt 0 ]] && (( EUID != 0 )); then
-  printf 'Agentoo manages root-owned system configuration; requesting sudo authorization.\n' >&2
-  exec sudo -- /usr/local/bin/agentoo-git "$@"
-fi
-
 git_config() {
   git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" "$@"
 }
@@ -25,7 +20,7 @@ case ${1:-} in
     existing=$(git_config config --get core.hooksPath || true)
     [[ -z $existing || $existing == "$hooks" ]] \
       || { printf 'refusing to replace existing hooksPath: %s\n' "$existing" >&2; exit 1; }
-    /usr/local/bin/agentoo-permissions --fix
+    /usr/local/bin/agentoo permissions fix
     git_config config core.hooksPath "$hooks"
     printf 'agentoo permission hooks enabled.\n'
     ;;
@@ -38,7 +33,7 @@ case ${1:-} in
     git_config "$@"
     ;;
   '')
-    printf 'usage: agentoo-git [git options] <git command or alias> [arguments...]\n       agentoo-git {enable-write|setup-hooks}\n' >&2
+    printf 'usage: agentoo git [git options] <git command or alias> [arguments...]\n       agentoo git {enable-write|setup-hooks}\n' >&2
     exit 2
     ;;
   *)
