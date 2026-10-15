@@ -102,3 +102,86 @@ source/scripts/config --file .config \
     --set-str CMDLINE "$cmdline"
 
 make olddefconfig
+
+
+
+
+Starting from distribution kernel
+
+
+mkdir 6.18.54-agentoo-max
+kernel_src=/usr/src/linux-6.18.54-gentoo
+kernel_build="$HOME/local/agentoo-build/kernel/6.18.54-agentoo-max"
+mkdir -p "$HOME/local/agentoo-build/kernel"
+mkdir -p "$kernel_build"
+make -C "$kernel_src" O="$kernel_build" defconfig 
+cp "$kernel_build/.config" "$kernel_build/defconfig.original"
+cp /usr/src/linux-6.18.54-gentoo-dist-bin/.config .
+make olddefconfig
+export KCFLAGS="-march=native -O2 -pipe"
+kernel_build=/home/graham/local/agentoo-build/kernel/6.18.54-agentoo-max
+gk_work=/home/graham/local/agentoo-build/genkernel-max
+mkdir -p "$gk_work"/{cache,tmp,output,modules}
+
+cmdline='root=UUID=a0d8c112-b1fd-4a55-8515-d5eb8f13b76d'
+cmdline+=' rootfstype=btrfs rootflags=subvol=@'
+cmdline+=' crypt_root=UUID=aace61a6-83ee-4825-b1e2-71d6fd3995ea'
+cmdline+=' ro root_trim=yes console=tty0 earlyprintk=efi,keep'
+cmdline+=' loglevel=7 ignore_loglevel'
+
+source/scripts/config --file .config \
+    --enable CMDLINE_BOOL \
+    --enable CMDLINE_OVERRIDE \
+    --set-str CMDLINE "$cmdline" \
+    --enable BLK_DEV_INITRD \
+    --set-str INITRAMFS_SOURCE \
+    '/home/graham/local/agentoo-build/genkernel/output/initramfs-6.18.54-gentoo-agentoo-max.cpio' \
+    --set-val INITRAMFS_ROOT_UID 0 \
+    --set-val INITRAMFS_ROOT_GID 0 \
+    --disable INITRAMFS_COMPRESSION_GZIP \
+    --disable INITRAMFS_COMPRESSION_BZIP2 \
+    --disable INITRAMFS_COMPRESSION_LZMA \
+    --disable INITRAMFS_COMPRESSION_XZ \
+    --disable INITRAMFS_COMPRESSION_LZO \
+    --disable INITRAMFS_COMPRESSION_LZ4 \
+    --disable INITRAMFS_COMPRESSION_ZSTD \
+    --enable INITRAMFS_COMPRESSION_NONE \
+    --set-str MODULE_SIG_KEY 'certs/signing_key.pem' \
+    --enable INITRAMFS_PRESERVE_MTIME
+
+make olddefconfig
+
+
+make -j12
+sudo make modules_install INSTALL_MOD_STRIP=1
+make -C "$kernel_build" INSTALL_MOD_PATH="$gk_work/modules" INSTALL_MOD_STRIP=1 modules_install
+
+genkernel \
+    --kerneldir=/usr/src/linux-6.18.54-gentoo \
+    --kernel-outputdir="$kernel_build" \
+    --cachedir="$gk_work/cache" \
+    --tmpdir="$gk_work/tmp" \
+    --logfile="$gk_work/genkernel.log" \
+    --install \
+    --bootdir="$gk_work/output" \
+    --kernel-modules-prefix="$gk_work/modules" \
+    --no-mountboot \
+    --no-bootloader \
+    --no-firmware-install \
+    --no-compress-initramfs \
+    --initramfs-filename=initramfs-6.18.54-gentoo-agentoo-max.cpio \
+    --luks \
+    initramfs
+
+make -j12
+
+
+cp arch/x86/boot/bzImage /boot/EFI/Gentoo/kernel-6.18.54-agentoo-max.efi
+
+kernel_esp=$(findmnt -rn -o SOURCE --mountpoint /boot)
+kernel_esp_disk="/dev/$(lsblk -dnro PKNAME "$kernel_esp")"
+kernel_esp_part=$(lsblk -dnro PARTN "$kernel_esp")
+lsblk -o PATH,TYPE,FSTYPE,PARTUUID,MOUNTPOINTS "$kernel_esp_disk"
+
+efibootmgr --create --disk "$kernel_esp_disk" --part "$kernel_esp_part" --label "Agentoo-max-6.18.54" --loader "\\EFI\\Gentoo\\kernel-6.18.54-agentoo-max.efi"
+
