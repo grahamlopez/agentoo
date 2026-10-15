@@ -38,10 +38,168 @@ the [shared configuration workflow](015-shared-kernel-configuration-workflow.md)
 Do not require a complete automation framework before establishing boot.
 
 Maintain the user-facing procedure in the [kernel build runbook](../../docs/kernel-build.md).
-The operator runs host commands; document verified results incrementally. The
+The operator runs host commands. Keep steps and expected checks in the runbook;
+record results, verification status and host findings in this card. The
 initial source version is 6.18.54, explicitly accepted after reviewing Gentoo's
-stable selection. Core prerequisites are recorded in `@kernel-dev`; installation
-and build remain pending. Defer perf until a specific measurement requires it.
+stable selection. Core prerequisites are recorded in `@kernel-dev`; the operator
+confirmed successful installation, including `gentoo-sources-6.18.54`, on
+2026-10-15. The operator verified `init/main.c` in
+`/usr/src/linux-6.18.54-gentoo` and `make kernelversion` reporting
+`6.18.54-gentoo`; `/usr/src/linux` still selects the distribution kernel's
+development tree. The operator generated `x86_64_defconfig` successfully in
+`~/local/agentoo-build/kernel/6.18.54-gentoo-thinktop` and saved the untouched
+`.config` as `defconfig.original`. `make mod2yesconfig` completed and its result
+was saved as `defconfig.builtin`: all 12 reported changes were `m` to `y`,
+covering EFIVAR_FS, netfilter components and X86_PKG_TEMP_THERMAL. No other
+changes were reported. The operator then disabled MODULES and DRM_NOUVEAU and
+ran `olddefconfig`, saving `defconfig.nomodules`. The diff reports MODULES
+changing to n and removal of module-related settings, an architecture helper
+and previously disabled tests; no enabled device driver is shown being removed.
+The operator confirmed no matches for `^CONFIG_.*=m$` and that the nouveau-state
+check passed. Required additions and build remain pending. Audit loaded modules
+as additive coverage evidence rather than applying `localyesconfig` pruning.
+Defer perf until a specific measurement requires it.
+
+## Initial Thinktop inventory
+
+The operator supplied PCI/USB driver and sensor output on 2026-10-15 using
+the runbook commands. Current bindings are evidence for additions to the shared
+configuration, not a complete capability list or a validated custom build.
+
+| Area | Observed hardware and bindings |
+| --- | --- |
+| Graphics | Intel `8086:7d51` uses i915; xe is an alternative listed module. NVIDIA `10de:2d19` has no bound driver; nouveau remains excluded. |
+| Storage | Two Samsung NVMe controllers `144d:a810` use nvme; Realtek SD reader `10ec:5261` uses rtsx_pci. |
+| Wireless | Intel CNVi `8086:7740` uses iwlwifi; USB `8087:0037` uses btusb. |
+| Audio | Intel cAVS `8086:7728` uses sof-audio-pci-intel-mtl, with snd_sof_pci_intel_mtl listed; snd_hda_intel is an alternative. Codec/topology/firmware dependencies still need inventory. |
+| Camera | Chicony `04f2:b83f` has uvcvideo interfaces and a usbhid interface; an application-specific interface is unbound. |
+| USB and docks | xhci_hcd/xhci_pci, PCIe ports and Thunderbolt bindings, including a Barlow Ridge Thunderbolt 5 bridge/controller topology. |
+| Platform | igen6_edac, processor_thermal_device_pci, intel_vsec, intel_vpu, intel_pmc_ssram_telemetry, intel_lpss_pci, mei_me, i2c_i801 and spi_intel_pci are listed for bound devices. |
+| Sensors | coretemp, spd5118 over I801 SMBus, both NVMe drives, ThinkPad, ACPI thermal/fan/battery, UCSI power and iwlwifi temperature readings are exposed. |
+
+Synaptics USB device `06cb:00f9` and PCI device `8086:774c` have no reported
+driver binding. Do not infer that an unbound device is unnecessary. Sensor
+presence records interface coverage, not validation of every reported value.
+The `Kernel modules` list includes alternatives; do not blindly enable every
+listed driver or prune to this host's currently loaded modules.
+
+The operator confirmed the working storage layout: `nvme1n1p2` is the LUKS
+container opened as `cryptroot`; Btrfs subvolume `@` is root, with `/home` also
+on that mapped filesystem. `nvme1n1p1` is the EFI filesystem at `/boot`. The
+other disk has a separate encrypted partition and is not the running root.
+Keep exact UUIDs in local embedding inputs. The current Dracut boot arguments
+include explicit root and LUKS UUIDs, mapper name, `rootfstype=btrfs`,
+`rootflags=subvol=@`, `ro`, a nouveau module blacklist and an external initrd
+path. Review initramfs-specific syntax, remove the external initrd reference,
+and omit the blacklist when nouveau is disabled at build time.
+
+`cryptsetup status cryptroot` confirms LUKS2, cipher `aes-xts-plain64`,
+a 512-bit combined XTS key, key location `keyring`, and 512-byte sectors.
+Record the corresponding built-in device-mapper, crypto and keyring requirements;
+key derivation/unlock behavior also depends on the initramfs userspace.
+
+The supplied loaded-module list extends the PCI/USB inventory with:
+
+- SOF/SoundWire and Cirrus CS42L43/CS35L56 codec, MFD, pinctrl, SPI, DSP and
+  regmap dependencies, plus HDA/HDMI audio. Map the full chain rather than only
+  the PCI audio controller.
+- `kvm`/`kvm_intel`, `tun`, VLAN `8021q` and supporting protocols, `uinput`,
+  FUSE and binfmt_misc. Loading alone is not the complete VM/VPN requirement.
+- I2C HID/ACPI, hid_multitouch, hid_sensor_hub, UCSI/Type-C, Meteor Lake
+  pinctrl, SD/MMC and Thunderbolt support beyond controller bindings.
+- CPU thermal/power monitoring, RAPL, uncore frequency, ThinkPad and Lenovo
+  WMI/firmware interfaces, SPD5118, Intel PMC/PMT and ACPI platform support.
+- Both i915 and xe are loaded, though i915 is the observed bound display driver.
+  `Used by 0` does not by itself establish whether a module is dispensable.
+
+The loaded-module audit and mapping to source Kconfig dependencies remain pending.
+
+The operator saved `kernel.running`, `config.running` and `modules.running`
+locally in the build directory. The new config already enables BLK_DEV_INITRD,
+EFI/EFI_STUB, EFI partition parsing, devtmpfs (including automatic mounting),
+device-mapper, KEYS and generic AES. The operator enabled BLK_DEV_NVME,
+BTRFS_FS, DM_CRYPT, CRYPTO_XTS and CRYPTO_AES_NI_INTEL and saved
+`config.root-storage`; the diff and subsequent inspection confirm all five
+resolved to y. Dependencies include NVME_CORE, additional crypto/checksum
+support, RAID6/XOR helpers and ZSTD compression. Comparing with `config.running`
+identified missing NVME_HWMON and BTRFS_FS_POSIX_ACL, with HWMON=y in both
+configurations. The operator enabled both and saved `config.storage-features`;
+the diff confirms exactly those two n-to-y changes. Display/input and remaining
+capability coverage are still pending.
+
+The display/input comparison confirms the core VT console, i915, evdev,
+i8042/AT keyboard, xHCI and generic USB HID paths are enabled. Missing settings
+include DRM fbdev/framebuffer console, xe, uinput, multitouch, ACPI I2C HID,
+DesignWare platform I2C and Meteor Lake pinctrl. The checklist's
+`INTEL_LPSS_PCI` was an incorrect symbol name; the source defines
+`MFD_INTEL_LPSS_PCI`. Absent child symbols require parent/dependency checks,
+not a presumption that the source lacks support. Source Kconfig inspection
+identified the PINCTRL, I2C_DESIGNWARE_CORE, I2C_HID and INPUT_MISC parent
+options and LPSS/common-clock dependencies. The operator applied the display/input
+additions and saved `config.display-input`; the diff confirms the requested
+paths resolved to y, including the fbdev default DRM client and framebuffer
+console, xe, uinput, multitouch, I2C HID, DesignWare platform I2C, LPSS and
+Meteor Lake pinctrl. Dependencies add common clocks, GPIO/pinconf support,
+DRM helpers and framebuffer infrastructure. Many newly visible child options
+remain n. Runtime display/input acceptance is pending.
+
+The wireless/Bluetooth comparison confirms WIRELESS, WLAN, WLAN_VENDOR_INTEL,
+CFG80211, MAC80211 and RFKILL already resolve to y. IWLWIFI, IWLMLD, IWLMVM,
+Bluetooth and its required USB/protocol/HID paths, and UHID are missing.
+The running config enables classic and LE Bluetooth, USB autosuspend and
+Broadcom/MediaTek/Realtek USB support in addition to Intel. Corresponding
+The operator applied the additions and saved `config.wireless-bluetooth`;
+the diff confirms all requested options resolved to y, including IWLMLD/IWLMVM,
+classic/LE Bluetooth, USB autosuspend/vendor protocols, HIDP, RFCOMM, BNEP
+and UHID. Dependencies include ECDH/ECC/KPP and Bluetooth vendor helpers.
+RFCOMM TTY and BNEP multicast/protocol filters remain n; compare these and
+other newly exposed capabilities with requirements before final acceptance.
+Wireless/Bluetooth runtime tests remain pending.
+
+The operator supplied firmware logs and CPU identification on 2026-10-15:
+
+- CPU signature `0x000c0652`, running microcode revision `0x00000122`. The log
+  reports the current revision; it does not establish that a new patch was
+  applied early. Verify the matching installed blob before embedding it.
+- Wi-Fi's `iwlwifi-bz-b0-fm-c0-c99.ucode` request failed with error -2; the
+  driver successfully loaded `iwlwifi-bz-b0-fm-c0-101.ucode`, version
+  `101.6ef20b19.0`. `iwl-debug-yoyo.bin` was also requested; necessity and
+  availability remain to be checked.
+- Graphics requests: `i915/mtl_dmc.bin`, `i915/mtl_guc_70.bin`,
+  `i915/mtl_huc_gsc.bin`, `i915/mtl_gsc_1.bin`.
+- Bluetooth requests: `intel/ibt-0093-0291.sfi` and `.ddc`, with firmware
+  download completion reported. Regulatory data requests: `regulatory.db`
+  and `regulatory.db.p7s`.
+- NPU request: `intel/vpu/vpu_37xx_v1.bin`.
+- Audio requests: `intel/sof-ipc4/arl/sof-arl.ri`, `sof-arl-openmodules.ri`
+  and `sof-arl-debug.ri` under the same directory; `cs42l43.bin`; and
+  topologies under `intel/sof-ace-tplg/`: the aggregate
+  `sof-arl-cs42l43-l2-cs35l56-l3-2ch.tplg` and function topologies
+  `sof-sdca-jack-id0.tplg`, `sof-sdca-1amp-id2.tplg`,
+  `sof-arl-dmic-2ch-id3.tplg`, `sof-hdmi-pcm5-id5.tplg`.
+- Amplifier requests under `cirrus/`: `cs35l56-b0-dsp1-misc-17aa2349.wmfw`,
+  plus `cs35l56-b0-dsp1-misc-17aa2349-amp1.wmfw`, `-amp2.wmfw`,
+  `-amp1.bin` and `-amp2.bin`.
+
+Firmware staging subsequently verified 22 raw firmware/microcode files totaling
+9,419,069 bytes under the local build directory's `firmware/`. The selection and
+provenance are retained in `firmware.list` and `firmware.manifest.json` (source,
+resolved symlink target, size and SHA-256). `config.firmware` records resolved
+`FW_LOADER=y`, `MICROCODE=y` and `EXTRA_FIRMWARE` embedding settings. No kernel
+image has been compiled or booted.
+
+The staged selection includes the successful Wi-Fi 101 firmware, matching PNVM,
+i915 firmware, Bluetooth SFI/DDC, regulatory data, NPU firmware, SOF firmware and
+topologies, CS42L43 firmware, generic CS35L56 firmware and per-amplifier calibration.
+`iucode_tool` selected `intel-ucode/06-c5-02` for signature `0x000c0652`, revision
+`0x122`, dated 2026-02-18; that raw microcode file is also staged.
+
+Six requested names were absent: Wi-Fi c99 and `iwl-debug-yoyo.bin`, SOF
+`sof-arl-openmodules.ri` and `sof-arl-debug.ri`, and the two per-amplifier `.wmfw`
+files. These are recorded in `firmware.absent-requests`; the supplied logs show
+successful loading using available main/fallback firmware. The selection remains
+subject to runtime validation, including peripherals not exercised by this boot.
+Early microcode loading and firmware completeness have not been demonstrated.
 
 ## Scope and preparation
 
@@ -91,9 +249,10 @@ live host disks for such tests.
 
 ## Milestone one Single binary boot
 
-- [ ] Select and record the source version and establish inspection prerequisites.
-- [ ] Save the default starting config and identify required built-in additions.
-- [ ] Convert default module selections with `make mod2yesconfig`, disable module
+- [x] Select and record the source version and establish inspection prerequisites.
+- [x] Save the default starting config.
+- [ ] Identify required built-in additions.
+- [x] Convert default module selections with `make mod2yesconfig`, disable module
   support and nouveau, and review dependency resolution for lost functionality.
 - [ ] Build an EFI kernel with embedded command line, initramfs and firmware;
   verify target-specific boot parameters, firmware and microcode, no loadable
@@ -131,3 +290,28 @@ the single-binary artifact and agreed functional coverage are demonstrated, with
 untested cases and any unresolved requirements clearly accounted for. Begin
 deliberate code removal under [kernel reduction](../Backlog/016-kernel-reduction-and-evidence.md)
 only after the relevant functional baseline is accepted.
+
+## Initramfs preparation
+
+Use dracut for the first baseline, then replace it with a custom initramfs as a
+separate tested change. The local `cmdline` file preserves the working root,
+Btrfs subvolume and LUKS arguments without the external initrd or nouveau
+blacklist. Boot arguments and initramfs settings have not yet been applied to
+the kernel configuration.
+
+An unprivileged dracut 112 run produced `initramfs.dracut.cpio.gz`, but logged
+`ldconfig might need uid=0 (root) for chroot()`. This archive is not accepted.
+Regenerate using the runbook's sudo command, inspect the contents, then apply
+embedding settings. No kernel compilation, installation or reboot occurred.
+
+The operator regenerated the archive with sudo. Inspection confirmed a
+22,730,925-byte gzip/newc archive with `/init`, a populated `etc/ld.so.cache`,
+systemd password-prompt/cryptsetup components and Btrfs tools. No `.ko` files,
+firmware payloads or `etc/crypttab` were found in its listing. Dracut module names
+such as `kernel-modules` identify generator components, not embedded `.ko` files.
+
+Applied command-line and archive embedding settings, saved as
+`config.boot-inputs` with `diff.boot-inputs`. `CMDLINE_BOOL`, `BLK_DEV_INITRD` and
+`RD_GZIP` resolve to y; `CMDLINE_OVERRIDE` remains disabled for boot-time debugging.
+Module support and nouveau remain disabled, with no `=m` selections. This is
+static preparation only; compilation, root-unlock and boot tests remain pending.
