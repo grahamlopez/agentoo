@@ -8,8 +8,14 @@ Status: Backlog
 Minimize kernel size, code surface and boot time while preserving required
 features and performance. Begin deliberate reduction after acceptance of the
 relevant [single-binary functional baseline](../Open/014-single-binary-kernel-baseline.md).
-Use the [layered configuration workflow](../Open/015-layered-kernel-configuration-workflow.md)
+Use the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
 to record and reproduce changes across hosts.
+
+Maintain one shared driver/capability configuration supporting all Agentoo hosts,
+with host-specific boot parameters, firmware and microcode embedded in each
+host's binary. A code reduction must preserve the union of host requirements;
+a driver unused on one host may be essential on another. Distinguish shared code
+removal from changes to a particular host's embedded payload.
 
 Nouveau exclusion and changes necessary for single-binary/built-in operation
 belong to the initial baseline. Do not present them as experimentally validated
@@ -33,8 +39,10 @@ reduction results.
   applicable conclusion when a regression appears.
 - Keep evidence scoped to the hosts, workloads and versions tested. Consider
   applicability when reusing a removal on another host or kernel version.
-- During capture review, the user chooses shared or host placement; relocation
-  remains available later. No separate promotion process is required.
+- During capture review, the user chooses changes to the shared configuration.
+  Review each removal against all hosts' recorded requirements and identify
+  untested hosts explicitly. No shared/host placement or promotion process is
+  required.
 
 ## Completion criteria
 
