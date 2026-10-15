@@ -1,0 +1,7 @@
+# Kernel sources and core hardware inspection tools.
+# Pin the source version per build; see agentoo/docs/kernel-build.md.
+sys-kernel/gentoo-sources
+sys-apps/usbutils
+sys-apps/pciutils
+sys-apps/dmidecode
+sys-apps/lm-sensors

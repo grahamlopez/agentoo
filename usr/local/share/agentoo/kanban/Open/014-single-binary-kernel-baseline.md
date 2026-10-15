@@ -37,6 +37,12 @@ and commands. Use that actual build and subsequent feature debugging to develop
 the [shared configuration workflow](015-shared-kernel-configuration-workflow.md).
 Do not require a complete automation framework before establishing boot.
 
+Maintain the user-facing procedure in the [kernel build runbook](../../docs/kernel-build.md).
+The operator runs host commands; document verified results incrementally. The
+initial source version is 6.18.54, explicitly accepted after reviewing Gentoo's
+stable selection. Core prerequisites are recorded in `@kernel-dev`; installation
+and build remain pending. Defer perf until a specific measurement requires it.
+
 ## Scope and preparation
 
 - Begin boot testing on Thinktop, then extend support and validation across

@@ -99,3 +99,6 @@ See [configuration details](../../../../../etc/agentoo/README.md) and the
 [installation runbook](../installer/QEMU-NBD-INSTALL.md).
 
 See [managed file permissions](permissions.md) for checks and Git automation.
+
+See [building a self-contained kernel](kernel-build.md) for the manual custom
+kernel runbook and its current verification status.
