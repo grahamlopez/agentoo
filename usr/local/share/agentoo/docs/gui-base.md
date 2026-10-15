@@ -89,7 +89,7 @@ editing `/etc/kernel/cmdline` alone does not change an existing entry.
 The kernel blacklist prevents module loading even if Nouveau is in the initramfs.
 
 After the tracked rule is present on the live system, create the test entry
-from a root Bash shell (`sudo bash`; `/boot` is private to root). This leaves
+from a root Bash shell (`sudo bash`) to register the EFI entry. This leaves
 BootOrder unchanged:
 
 ```bash

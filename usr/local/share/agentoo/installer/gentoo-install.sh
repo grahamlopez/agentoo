@@ -952,7 +952,7 @@ EOF
   MOUNTED_HOME=1
   # Match the boot-time FAT mask: permissions are mount-wide on EFI, including
   # the root-only recovery tool checked out there by config-foundation.
-  run_privileged mount -o umask=0077 "$EFI_PARTITION" "$MOUNT_ROOT/boot"
+  run_privileged mount -o fmask=0133,dmask=0022 "$EFI_PARTITION" "$MOUNT_ROOT/boot"
   MOUNTED_EFI=1
   run_privileged mkdir -p "$MOUNT_ROOT/boot/EFI"
 
@@ -1018,7 +1018,7 @@ confirm_expected_bootstrap_target_state() {
   local entry entries
   local -a unexpected=()
 
-  # Inspect as root: the ESP uses umask=0077 during installation and normal boot.
+  # Inspect as root so restrictive target directory permissions do not hide entries.
   # Capture find output with its exit status; process substitutions hide failures
   # and could misreport an unreadable target as empty or missing.
   entries=$(run_privileged find "$MOUNT_ROOT" -mindepth 1 -maxdepth 1 -print) \
@@ -2464,7 +2464,7 @@ firstboot_offline() {
 # Managed by gentoo-install first-boot-foundation.
 UUID=$root_uuid / btrfs noatime,compress=zstd:1,subvol=@ 0 0
 UUID=$root_uuid /home btrfs noatime,compress=zstd:1,subvol=@home 0 0
-UUID=$esp_uuid /boot vfat umask=0077 0 2
+UUID=$esp_uuid /boot vfat fmask=0133,dmask=0022 0 2
 EOF
   write_target_file "$root/etc/adjtime" <<'EOF'
 0.0 0 0.0
