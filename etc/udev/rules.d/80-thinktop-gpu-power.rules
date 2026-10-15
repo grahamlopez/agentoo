@@ -1,0 +1,5 @@
+# Thinktop (Lenovo subsystem 17aa:2349): permit runtime suspension of the
+# unused RTX 5060 Mobile and its upstream PCI bridge. This permits power
+# management; it does not by itself disable a driver or guarantee D3cold.
+ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{device}=="0x2d19", ATTR{subsystem_vendor}=="0x17aa", ATTR{subsystem_device}=="0x2349", ATTR{power/control}="auto"
+ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x7ecc", ATTR{subsystem_vendor}=="0x17aa", ATTR{subsystem_device}=="0x2349", ATTR{power/control}="auto"

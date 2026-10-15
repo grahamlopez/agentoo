@@ -1255,13 +1255,28 @@ cleanup_portage_foundation_failure() {
   exit "$exit_code"
 }
 
-# The repository supplies binrepos.conf without enabling binary consumption.
+# Use the official binhost configuration supplied by the Gentoo stage3.
 # Only installer commands opt in; use Gentoo's normal signing trust helper.
 prepare_install_binpkgs() {
   local root=${1:-/} profile
   (( INSTALL_BINPKGS )) || return 0
-  [[ -r ${root%/}/etc/portage/binrepos.conf/gentoobinhost.conf ]] \
-    || die 'binary installation requires the current agentoo binhost configuration; update the target configuration first'
+  [[ -r ${root%/}/etc/portage/binrepos.conf/gentoo.conf ]] \
+    || die 'binary installation requires the Gentoo stage3 binrepos.conf/gentoo.conf'
+  chroot "$root" /usr/bin/python3 - /etc/portage/binrepos.conf/gentoo.conf <<'PY' \
+    || die 'binary installation requires the signed official AMD64 23.0 stage3 binhost and its default cache path'
+import configparser
+import sys
+
+config = configparser.ConfigParser(interpolation=None)
+with open(sys.argv[1]) as source:
+    config.read_file(source)
+repo = config['gentoo']
+if (repo['sync-uri'].rstrip('/') !=
+        'https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64'
+        or not repo.getboolean('verify-signature', fallback=False)
+        or repo['location'] != '/var/cache/binhost/gentoo'):
+    sys.exit(1)
+PY
   profile=$(readlink "${root%/}/etc/portage/make.profile")
   [[ $profile == */23.0/desktop/systemd ]] \
     || die 'official install binhost requires the AMD64 23.0 desktop/systemd profile'
@@ -1409,8 +1424,8 @@ locale-gen
 eselect locale set en_US.utf8
 env-update
 
-The configuration repository supplies the official AMD64 23.0 x86-64 binhost
-in /etc/portage/binrepos.conf/gentoobinhost.conf, with signature verification.
+The Gentoo stage3 supplies the official AMD64 23.0 x86-64 binhost
+in /etc/portage/binrepos.conf/gentoo.conf, with signature verification.
 It is available for explicit emerge --getbinpkg use but is not enabled by
 default. --install-binpkgs opts in only for installer package operations.
 

@@ -244,7 +244,7 @@ if [ "$ACTION" = create ]; then
         done
         [ "$(portageq envvar DISTDIR)" = /var/cache/distfiles ] || die 'custom distfile layout requires --no-clean-distfiles'
         [ "$(portageq envvar PKGDIR)" = /var/cache/binpkgs ] || die 'custom binary package layout requires --no-clean-distfiles'
-        for CACHE in /var/cache/distfiles /var/cache/binpkgs; do
+        for CACHE in /var/cache/distfiles /var/cache/binpkgs /var/cache/binhost; do
             DIR=$TOP/@$CACHE
             [ ! -L "$DIR" ] || die "unsafe package cache symlink: $CACHE"
             if [ -e "$DIR" ]; then
@@ -267,7 +267,7 @@ if [ "$ACTION" = create ]; then
     mkdir -p "$STORE"; CP=$STORE/$NAME; mkdir "$CP"
     printf 'Capture incomplete\n' > "$CP/INCOMPLETE"
     if [ "$CLEAN" = 1 ]; then
-        for CACHE in /var/cache/distfiles /var/cache/binpkgs; do
+        for CACHE in /var/cache/distfiles /var/cache/binpkgs /var/cache/binhost; do
             DIR=$TOP/@$CACHE
             [ ! -d "$DIR" ] || find "$DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- '{}' +
         done

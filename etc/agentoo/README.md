@@ -44,7 +44,7 @@ After required verification succeeds, a short plan asks whether to remove
 cached distfiles and binary packages and capture the fresh-install checkpoint. Declining leaves
 installation files unchanged. Each attempt has a unique timestamp; existing
 checkpoints are never overwritten. The helper is specialized for the installer's
-root/home layout and ordinary `/var/cache/{distfiles,binpkgs}` caches, not a general
+root/home layout and ordinary `/var/cache/{distfiles,binpkgs,binhost}` caches, not a general
 scheduled application-backup tool.
 
 Snapshots and the manifest live in `gentoo-checkpoints/<name>` at the Btrfs top

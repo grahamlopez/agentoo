@@ -1,6 +1,10 @@
 # Minimal Hyprland base
 
-The initial base selects Hyprland 0.56.2, Kitty, PipeWire, and WirePlumber.
+The base selects Hyprland from hyproverlay, Kitty, PipeWire, and WirePlumber.
+Hyprland and its listed overlay dependencies accept testing release updates
+without exact version pins. Unkeyworded live ebuilds and package masks remain
+excluded by the normal Portage policy. Preview updates after syncing; new
+dependencies may require additional package-specific keyword decisions.
 Launch it explicitly from a normal user's TTY login with `start-hyprland`.
 There is no automatic startup, greeter, UWSM, XWayland, launcher, panel,
 notification daemon, portal, wallpaper daemon, or screen locker. Suspend and
@@ -57,6 +61,82 @@ After the plan is satisfactory:
 ```sh
 emerge --ask --verbose @gui-base
 ```
+
+### Thinktop video acceleration
+
+On thinktop, install `@gui-base-thinktop` instead of `@gui-base`. This set
+includes the shared base plus Intel's VA-API media driver and `vainfo`:
+
+```sh
+emerge --ask --verbose @gui-base-thinktop
+```
+
+If `@gui-base` is already recorded in world_sets, installing the thinktop set
+also records its host additions; the shared base remains included either way.
+Keep `VIDEO_CARDS="intel"`. Intel video decoding uses the separate media
+driver, rather than Mesa's `vaapi` feature. Identify the Intel render node via
+`/sys/class/drm/renderD*/device/vendor` (`0x8086`), then verify it with
+`vainfo --display drm --device /dev/dri/renderD129` (adjust the node if needed).
+Check Firefox's `about:support` and video playback after installation.
+
+### Thinktop NVIDIA power experiment
+
+The unused NVIDIA GPU currently reaches D3cold with Nouveau. To test doing
+without that driver, boot a separate, temporary EFI entry with the existing
+kernel/initramfs and command line plus `module_blacklist=nouveau`. Keep the
+working entry unchanged for rollback. Thinktop uses direct EFI registration:
+editing `/etc/kernel/cmdline` alone does not change an existing entry.
+The kernel blacklist prevents module loading even if Nouveau is in the initramfs.
+
+After the tracked rule is present on the live system, create the test entry
+from a root Bash shell (`sudo bash`; `/boot` is private to root). This leaves
+BootOrder unchanged:
+
+```bash
+(
+    set -eu
+    gpu_test_version=$(uname -r)
+    gpu_test_esp=$(findmnt -rn -o SOURCE --mountpoint /boot)
+    gpu_test_disk="/dev/$(lsblk -dnro PKNAME "$gpu_test_esp")"
+    gpu_test_part=$(lsblk -dnro PARTN "$gpu_test_esp")
+    gpu_test_cmdline=$(cat /etc/kernel/cmdline)
+    test -s "/boot/EFI/Gentoo/kernel-$gpu_test_version.efi"
+    test -s "/boot/EFI/Gentoo/initramfs-$gpu_test_version.img"
+    sudo efibootmgr --create-only --disk "$gpu_test_disk" --part "$gpu_test_part" \
+        --label "Gentoo thinktop GPU-off test" \
+        --loader "\\EFI\\Gentoo\\kernel-$gpu_test_version.efi" \
+        --unicode "$gpu_test_cmdline module_blacklist=nouveau initrd=\\EFI\\Gentoo\\initramfs-$gpu_test_version.img"
+)
+```
+
+Select that entry manually from the firmware boot menu for the test boot.
+To remove the experiment, identify its number using `efibootmgr`, then run
+`sudo efibootmgr --bootnum NNNN --delete-bootnum` for that test entry only.
+
+The tracked udev rule permits runtime power management on the exact Lenovo
+NVIDIA device and upstream bridge. It does not remove the device from PCI.
+After deploying the rule, reboot into the test entry and inspect:
+
+```sh
+cat /proc/cmdline
+lsmod | rg nouveau
+readlink /sys/bus/pci/devices/0000:01:00.0/driver
+cat /sys/bus/pci/devices/0000:01:00.0/power/control
+cat /sys/bus/pci/devices/0000:01:00.0/power/runtime_status
+cat /sys/bus/pci/devices/0000:01:00.0/power_state
+cat /sys/bus/pci/devices/0000:00:01.0/power/runtime_status
+```
+
+Expect no Nouveau module or GPU driver binding, `auto`, `suspended`, `D3cold`,
+and a suspended bridge. An unbound GPU's runtime status alone is insufficient:
+verify the actual power state and compare idle battery discharge under the
+same conditions. Repeat after suspend/resume and with external displays.
+GPU-wired display outputs may become unavailable. If it remains powered or
+display/resume behavior regresses, boot the unchanged entry. Do not remove
+Nouveau from the kernel build until this experiment passes.
+
+PCI sysfs `remove` only removes the device from Linux's device list; it does
+not guarantee power-off. See the [kernel PCI sysfs documentation](https://docs.kernel.org/PCI/sysfs-pci.html).
 
 Review configuration-protected files with `dispatch-conf`. Keep agentoo defaults
 when an incoming file only restores an upstream example; assess substantive
@@ -328,8 +408,10 @@ Repository preparation on 2026-10-14 used Gentoo commit
 `b2e7344722289a04ec5ccab6957a83597cd13048`. A pretend check with the desktop/systemd
 profile, Intel video selection, and isolated configuration/cache selected
 Hyprland 0.56.2, Kitty 0.48.2, PipeWire 1.6.8, and WirePlumber 0.5.15.
-Ten exact overlay keyword exceptions sufficed; no shared Gentoo library needed
-testing acceptance. Re-run the plan on thinktop after sync: installed packages,
+Ten exact overlay keyword exceptions sufficed for that initial check; no shared
+Gentoo library needed testing acceptance. These exceptions now apply across
+release versions of the same overlay packages. Re-run the plan on thinktop
+after sync: installed packages,
 local overrides, and repository updates can change it.
 
 All previous keyword exceptions were reviewed. The four retained original common

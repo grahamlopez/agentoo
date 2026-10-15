@@ -14,5 +14,4 @@ INPUT_DEVICES="evdev libinput"
 QEMU_SOFTMMU_TARGETS="x86_64"
 QEMU_USER_TARGETS="x86_64"
 
-# splitdebug retains the glibc symbols used by tools such as Valgrind.
-FEATURES="parallel-fetch splitdebug"
+FEATURES="parallel-fetch"

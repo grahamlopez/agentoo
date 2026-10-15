@@ -1,17 +1,16 @@
-# Reviewed together for Hyprland 0.56.2; numbered releases only, scoped to overlay.
-# Exact versions make future release/dependency changes require another review.
-=gui-wm/hyprland-0.56.2::hyproverlay ~amd64
+# Allow release updates, scoped to the selected packages and overlay.
+# Testing keywords do not accept unkeyworded live ebuilds or override masks.
+gui-wm/hyprland::hyproverlay ~amd64
 
 # Required by the selected compositor and its dependency graph.
-=gui-libs/hyprutils-0.14.2::hyproverlay ~amd64
-=dev-libs/hyprlang-0.6.8::hyproverlay ~amd64
-=dev-util/hyprwayland-scanner-0.4.6::hyproverlay ~amd64
-=gui-libs/hyprcursor-0.1.13-r1::hyproverlay ~amd64
-=dev-libs/hyprland-protocols-0.7.1::hyproverlay ~amd64
-=gui-libs/aquamarine-0.15.1::hyproverlay ~amd64
-=gui-libs/hyprwire-0.3.1::hyproverlay ~amd64
-=dev-libs/hyprgraphics-0.5.1-r1::hyproverlay ~amd64
+gui-libs/hyprutils::hyproverlay ~amd64
+dev-libs/hyprlang::hyproverlay ~amd64
+dev-util/hyprwayland-scanner::hyproverlay ~amd64
+gui-libs/hyprcursor::hyproverlay ~amd64
+dev-libs/hyprland-protocols::hyproverlay ~amd64
+gui-libs/aquamarine::hyproverlay ~amd64
+gui-libs/hyprwire::hyproverlay ~amd64
+dev-libs/hyprgraphics::hyproverlay ~amd64
 
-# Hyprland headers require glaze >=7,<8 even with hyprpm disabled.
-# Gentoo currently has no 7.x release; use the overlay's numbered compatibility build.
-=dev-cpp/glaze-7.0.2::hyproverlay ~amd64
+# Hyprland dependency constraints select the required glaze release.
+dev-cpp/glaze::hyproverlay ~amd64

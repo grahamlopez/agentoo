@@ -7,6 +7,5 @@ FFLAGS="${COMMON_FLAGS}"
 RUSTFLAGS="${RUSTFLAGS} -C target-cpu=arrowlake"
 
 PORTAGE_TMPDIR="/dev/shm"
-PORTAGE_TMPFS="/dev/shm"
 MAKEOPTS="-j12"
 VIDEO_CARDS="intel"

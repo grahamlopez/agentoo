@@ -29,11 +29,13 @@ with ordinary directories inside them. Nested subvolumes are refused because a
 root snapshot does not include their contents. Agentoo's documented systemd
 directory policy prevents the optional storage services from introducing these.
 
-Cleanup empties `/var/cache/distfiles` and `/var/cache/binpkgs`, including the
-configured `gentoobinhost` download cache inside the latter. Missing caches are
+Cleanup empties `/var/cache/distfiles`, `/var/cache/binpkgs`, and
+`/var/cache/binhost`, including the Gentoo stage3's default downloaded binary
+cache at `/var/cache/binhost/gentoo`. Missing caches are
 skipped. Custom `DISTDIR` or `PKGDIR` paths require `--no-clean-distfiles`;
-symlinked cache paths and mounts inside either cache are refused before deletion.
-Keep any additional binhost caches inside `/var/cache/binpkgs` to include them.
+symlinked cache paths and mounts inside any cache are refused before deletion.
+Keep any additional binhost caches inside `/var/cache/binpkgs` or
+`/var/cache/binhost` to include them.
 
 Snapshots live at Btrfs top level `gentoo-checkpoints/<name>`. EFI archives live
 at `/boot/checkpoints/<name>`. Completion markers, filesystem identities,
