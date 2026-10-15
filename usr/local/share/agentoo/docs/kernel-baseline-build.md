@@ -32,6 +32,12 @@ kernel_build=/home/graham/local/agentoo-build/kernel/6.18.54-agentoo-mgl
 gk_work=/home/graham/local/agentoo-build/genkernel
 mkdir -p "$gk_work"/{cache,tmp,output,modules}
 
+make localmodconfig
+populate CONFIG_CMDLINE="root=UUID=<uuid of /dev/mapper/root> crypt_root=UUID=<uuid of /dev/nvme0n1p2> ro root_trim=yes panic=10"
+enable CONFIG_CMDLINE_OVERRIDE
+make necessary things built-in and not modules (see .config progression)
+  - so far I know DM_CRYPT can be either built-in or a module (in the initrd)
+
 cp .config .config-with-initramfs
 vim .config # remove initramfs source
 make olddefconfig
@@ -70,3 +76,29 @@ lsblk -o PATH,TYPE,FSTYPE,PARTUUID,MOUNTPOINTS "$kernel_esp_disk"
 
 efibootmgr --create --disk "$kernel_esp_disk" --part "$kernel_esp_part" --label "Agentoo-mgl-6.18.54" --loader "\\EFI\\Gentoo\\kernel-6.18.54-agentoo-mgl.efi"
 
+
+
+Fixing non-bootable system
+
+cmdline='root=UUID=a0d8c112-b1fd-4a55-8515-d5eb8f13b76d'
+cmdline+=' rootfstype=btrfs rootflags=subvol=@'
+cmdline+=' crypt_root=UUID=aace61a6-83ee-4825-b1e2-71d6fd3995ea'
+cmdline+=' ro root_trim=yes console=tty0 earlyprintk=efi,keep'
+cmdline+=' loglevel=7 ignore_loglevel'
+
+source/scripts/config --file .config \
+    --enable SYSFB_SIMPLEFB \
+    --enable DRM_SIMPLEDRM \
+    --enable DRM_FBDEV_EMULATION \
+    --enable FRAMEBUFFER_CONSOLE \
+    --enable CRYPTO_XTS \
+    --enable CMDLINE_BOOL \
+    --enable CMDLINE_OVERRIDE \
+    --enable NET \
+    --enable BLK_DEV_INITRD \
+    --set-str INITRAMFS_SOURCE \
+    '/home/graham/local/agentoo-build/genkernel/output/initramfs-6.18.54-gentoo-agentoo-mgl.cpio' \
+    --enable INITRAMFS_COMPRESSION_NONE \
+    --set-str CMDLINE "$cmdline"
+
+make olddefconfig
