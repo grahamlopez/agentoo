@@ -67,7 +67,7 @@ or it still shows `0B`, stop; do not run the installer.
 ```bash
 cd /home/graham/Projects/agentoo
 ./usr/local/share/agentoo/installer/gentoo-install.sh \
-  --disk /dev/nbd0 --target-host qemu --install-binpkgs \
+  --disk /dev/nbd0 --target-host qemu \
   --qemu-vars /home/graham/VMs/agentic-gentoo/OVMF_VARS.4m.fd
 ```
 
@@ -264,3 +264,8 @@ is the fallback after local boot fails.
 Unlock and boot the guest first. The boot command forwards host port 2222 to
 guest port 22. In the guest, check `systemctl status sshd`; from the host use
 `ssh -p 2222 graham@127.0.0.1` after creating and authorizing that account.
+
+Installation prefers signed official binaries with matching USE flags, building
+unmatched packages from source. Add `--no-install-binpkgs` for source-only
+installation, including when resuming a phase. Ordinary post-install package
+operations remain source-based. Every invocation requires `--target-host`.

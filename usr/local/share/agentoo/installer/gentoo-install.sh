@@ -4,7 +4,7 @@
 #
 # Download and run this single file; no local repository checkout is needed:
 #   curl -fL https://raw.githubusercontent.com/grahamlopez/agentoo/main/usr/local/share/agentoo/installer/gentoo-install.sh -o gentoo-install.sh
-#   bash ./gentoo-install.sh --disk /dev/REPLACE_WITH_TARGET_DISK [options]
+#   bash ./gentoo-install.sh --disk /dev/REPLACE_WITH_TARGET_DISK --target-host generic [options]
 # Keep the downloaded file available: child chroot phases copy this same script.
 # Stage3 and the target configuration are fetched during installation.
 #
@@ -51,7 +51,6 @@ readonly GENTOO_REPOSITORY_URL='https://github.com/gentoo-mirror/gentoo.git'
 readonly GENTOO_REPOSITORY_SIGNING_FINGERPRINT='EF9538C9E8E64311A52CDEDFA13D0EF1914E7A72'
 readonly DEFAULT_CONFIG_SOURCE='https://github.com/grahamlopez/agentoo.git'
 readonly DEFAULT_CONFIG_BRANCH='main'
-readonly DEFAULT_TARGET_HOST='generic'
 readonly DEFAULT_TIMEZONE='America/New_York'
 readonly DEFAULT_LOCALE='en_US.UTF-8'
 
@@ -64,12 +63,12 @@ EFI_SIZE=${EFI_SIZE:-$DEFAULT_EFI_SIZE}
 MOUNT_ROOT=${MOUNT_ROOT:-/mnt/gentoo}
 CONFIG_SOURCE=${CONFIG_SOURCE:-$DEFAULT_CONFIG_SOURCE}
 CONFIG_BRANCH=${CONFIG_BRANCH:-$DEFAULT_CONFIG_BRANCH}
-TARGET_HOST=${TARGET_HOST:-$DEFAULT_TARGET_HOST}
+TARGET_HOST='' # Only an explicit command-line option selects the target.
 TARGET_TIMEZONE=${TARGET_TIMEZONE:-$DEFAULT_TIMEZONE}
 TARGET_LOCALE=${TARGET_LOCALE:-$DEFAULT_LOCALE}
 MODE=apply
 ASSUME_YES=0
-INSTALL_BINPKGS=0
+INSTALL_BINPKGS=1
 RAM_BUILDS=1
 PACKAGE_OPTIONS=(--usepkg=n --getbinpkg=n)
 BINARY_INSTALL_OPTIONS=()
@@ -97,7 +96,7 @@ PHASE_ORDER=(disk-setup stage3-bootstrap portage-foundation system-update kernel
 
 usage() {
   cat <<EOF
-Usage: $PROGRAM --disk DEVICE [options]
+Usage: $PROGRAM --disk DEVICE --target-host NAME [options]
 
 Install the selected Gentoo phases.  The current milestone prepares an
 encrypted Btrfs disk, bootstraps the verified stage3, and establishes the
@@ -106,15 +105,17 @@ the distribution kernel for direct EFI boot, then configures first boot.
 
 Required:
   --disk DEVICE              Whole block device to erase, for example /dev/nvme0n1
+  --target-host NAME         Configuration target: generic, qemu, thinktop, or startop.
 
 Options:
   --dry-run                  Print plans and perform no changes.
   --yes                      Automatically continue through ordinary phase and
                               destructive-action confirmations.  This never
                               supplies, skips, or infers secret input.
-  --install-binpkgs          Prefer signed official binaries during installation,
+  --install-binpkgs          Prefer signed official binaries during installation (default),
                               respecting USE flags; compile unmatched packages.
                               Source builds remain the post-install default.
+  --no-install-binpkgs       Build installation packages from source.
   --no-ram-builds            Build in /var/tmp instead of the default /dev/shm.
                               This never changes post-install build storage.
   --verbose                  Print technical notes and detailed phase output.
@@ -127,8 +128,6 @@ Options:
                               (default: $CONFIG_SOURCE).
   --config-branch BRANCH     Configuration branch to install
                               (default: $CONFIG_BRANCH).
-  --target-host NAME         Configuration target: generic, qemu, thinktop, or startop
-                              (default: $TARGET_HOST).
   --hostname NAME            Target hostname; defaults to named target-host, prompts
                               for generic/qemu (or preserves existing hostname).
   --cpu-flags FLAGS          Explicit CPU_FLAGS_X86 flags for another target;
@@ -150,8 +149,9 @@ Options:
 
 Environment overrides mirror these options: TARGET_DISK, LUKS_NAME,
 BTRFS_LABEL, EFI_SIZE, MOUNT_ROOT, CONFIG_SOURCE,
-CONFIG_BRANCH, TARGET_HOST, TARGET_TIMEZONE, TARGET_LOCALE, TARGET_CPU_FLAGS,
+CONFIG_BRANCH, TARGET_TIMEZONE, TARGET_LOCALE, TARGET_CPU_FLAGS,
 TARGET_MICROCODE, TARGET_HOSTNAME, QEMU_VARS, and QEMU_VARS_TEMPLATE.
+--target-host must be supplied explicitly; TARGET_HOST is not inherited.
 SOF audio firmware is selected by the target's agentoo fragments.
 
 Safety model:
@@ -318,6 +318,7 @@ parse_args() {
       --dry-run) MODE=dry-run ;;
       --yes) ASSUME_YES=1 ;;
       --install-binpkgs) INSTALL_BINPKGS=1 ;;
+      --no-install-binpkgs) INSTALL_BINPKGS=0 ;;
       --no-ram-builds) RAM_BUILDS=0 ;;
       --verbose) VERBOSE=1 ;;
       --phase)
@@ -432,7 +433,8 @@ parse_args() {
 validate_arguments() {
   local -a errors=()
   local option value normalized
-  valid_target_host "$TARGET_HOST" || errors+=("--target-host '$TARGET_HOST' is unknown; choose generic, qemu, thinktop, or startop. Use --hostname for a custom machine name.")
+  [[ -n $TARGET_HOST ]] || errors+=("--target-host NAME is required; choose generic, qemu, thinktop, or startop.")
+  [[ -z $TARGET_HOST ]] || valid_target_host "$TARGET_HOST" || errors+=("--target-host '$TARGET_HOST' is unknown; choose generic, qemu, thinktop, or startop. Use --hostname for a custom machine name.")
   case $TARGET_MICROCODE in
     auto|intel|amd|none) ;;
     *) errors+=("--microcode must be auto, intel, amd, or none.") ;;
@@ -1256,7 +1258,7 @@ cleanup_portage_foundation_failure() {
 }
 
 # Use the official binhost configuration supplied by the Gentoo stage3.
-# Only installer commands opt in; use Gentoo's normal signing trust helper.
+# Only installer commands enable binaries; use Gentoo's normal signing trust helper.
 prepare_install_binpkgs() {
   local root=${1:-/} profile
   (( INSTALL_BINPKGS )) || return 0
@@ -1427,7 +1429,8 @@ env-update
 The Gentoo stage3 supplies the official AMD64 23.0 x86-64 binhost
 in /etc/portage/binrepos.conf/gentoo.conf, with signature verification.
 It is available for explicit emerge --getbinpkg use but is not enabled by
-default. --install-binpkgs opts in only for installer package operations.
+ordinary post-install operations. Installation prefers signed binaries by default;
+--no-install-binpkgs selects source-only installer package operations.
 
 This phase validates the effective Portage configuration and repository but
 does not update @world. That update belongs after all common and host-specific
@@ -1566,7 +1569,7 @@ EOF
   unset PORTAGE_REPOSITORY_GPG_HOME
 
   run_chroot_phase portage --internal-portage-chroot --target-host "$TARGET_HOST" \
-    --timezone "$TARGET_TIMEZONE" --locale "$TARGET_LOCALE"
+    --timezone "$TARGET_TIMEZONE" --locale "$TARGET_LOCALE" "${BINARY_INSTALL_OPTIONS[@]}"
   trap - ERR EXIT
 
   log 'Portage foundation installed'
@@ -1679,8 +1682,8 @@ Install tools and synchronize repositories
 
 Install target-side Git and CPU detection tools using the selected package
 policy, synchronize repositories, and read Gentoo news before approving the
-initial world update. PACKAGE_OPTIONS disables binaries by default; with
---install-binpkgs it enables downloads and requires matching USE flags and
+initial world update. PACKAGE_OPTIONS enables binary downloads by default
+(--no-install-binpkgs disables them) and requires matching USE flags and
 unchanged dependencies. Packages without suitable binaries build from source.
 Gentoo getuto prepares signing trust before binary-enabled package operations.
 
@@ -2703,6 +2706,13 @@ main() {
   if (( INSTALL_BINPKGS )); then
     PACKAGE_OPTIONS=(--usepkg=y --getbinpkg=y --binpkg-respect-use=y --binpkg-changed-deps=y)
     BINARY_INSTALL_OPTIONS=(--install-binpkgs)
+  else
+    BINARY_INSTALL_OPTIONS=(--no-install-binpkgs)
+  fi
+  if (( INTERNAL_PORTAGE_CHROOT || INTERNAL_UPDATE_CHROOT || INTERNAL_KERNEL_CHROOT || INTERNAL_FIRSTBOOT_OFFLINE )); then
+    valid_target_host "$TARGET_HOST" || die '--target-host must explicitly select generic, qemu, thinktop, or startop'
+  else
+    validate_arguments
   fi
   if (( RAM_BUILDS )); then
     require_command findmnt
@@ -2727,7 +2737,6 @@ main() {
     portage_foundation_chroot
     return
   fi
-  validate_arguments
   if (( INSTALL_BINPKGS )); then
     log 'Package policy: prefer signed binaries with matching USE flags; otherwise build from source'
   else

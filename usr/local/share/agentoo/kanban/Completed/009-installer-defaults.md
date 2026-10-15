@@ -1,7 +1,8 @@
 # Prefer binary packages and require an explicit installation target
 
 Created: 2026-10-13
-Status: Backlog
+Status: Completed
+Completed: 2026-10-14
 
 ## Requested changes
 
@@ -34,3 +35,18 @@ target mutation; explicit supported targets and argument-free help must work.
 Help and documented examples must agree with the implemented defaults.
 
 Related: [007 installer and post-boot simplification](../Completed/007-installer-postboot-simplification.md).
+
+## Implementation and validation
+
+- Installation now prefers signed official binaries by default, retaining USE and
+  dependency matching, signature verification, getuto, and source fallback.
+  `--no-install-binpkgs` selects source-only transactions; both policies propagate
+  explicitly to child phases. Post-install Portage defaults are unchanged.
+- Every installation invocation, including dry runs and internal phases, requires
+  an explicit supported `--target-host`. Environment values cannot select it.
+  Existing installed-target comparisons remain in resumed phase paths.
+- Updated help, standalone curl usage, QEMU example, and inline policy notes.
+- Bash syntax validation passed. All 18 Python unit tests passed, including new
+  installer fixtures for help, missing/invalid/environment-only targets, all four
+  supported names, transaction options, and package-policy child reentry.
+  Fixtures do not perform a real disk installation or package download.
