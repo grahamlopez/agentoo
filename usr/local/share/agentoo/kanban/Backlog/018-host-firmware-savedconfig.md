@@ -67,4 +67,4 @@ Kernel firmware embedding remains part of the kernel build procedure.
 - [ ] Document the user-facing maintenance and recovery procedure and record
   test evidence and any limits to coverage.
 
-Related: [kernel reduction and evidence](016-kernel-reduction-and-evidence.md).
+Historical context (retired; operator-managed): [kernel reduction and evidence](../Completed/016-kernel-reduction-and-evidence.md).

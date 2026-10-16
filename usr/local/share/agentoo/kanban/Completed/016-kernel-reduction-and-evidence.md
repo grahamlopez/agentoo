@@ -1,9 +1,19 @@
 # Reduce kernel code using test and usage evidence
 
 Created: 2026-10-14
-Status: Backlog
+Status: Retired — operator will perform kernel reduction manually
+Closed: 2026-10-16
 
-## Objective and prerequisites
+## Closure and disposition
+
+Retired at the operator's request on 2026-10-16. Kernel reduction will be
+performed manually by the operator and is no longer tracked as project work.
+This closure does not claim that the experiments or completion criteria below
+were implemented or validated. Retain the original scope as historical context.
+The [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
+remains separate work for operationalizing custom single-binary kernel builds.
+
+## Historical objective and prerequisites
 
 Minimize kernel size, code surface and boot time while preserving required
 features and performance. Begin deliberate reduction after acceptance of the

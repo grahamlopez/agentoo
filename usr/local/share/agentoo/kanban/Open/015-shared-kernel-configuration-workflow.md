@@ -114,4 +114,4 @@ Avoid treating absent devices or unused capabilities as proof of dispensability.
 - [ ] Document the demonstrated workflow and automate the repetitive operations
   without concealing decisions or replacing ordinary kernel tools.
 
-Related: [kernel reduction and evidence](../Backlog/016-kernel-reduction-and-evidence.md).
+Historical context (retired; operator-managed): [kernel reduction and evidence](../Completed/016-kernel-reduction-and-evidence.md).

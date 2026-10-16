@@ -30,9 +30,9 @@ historical evidence only. Recheck them against the source, configuration and
 initramfs used by any new build; do not treat pending steps as current operating
 instructions. Keep the distribution boot path available. Card
 [15](../Open/015-shared-kernel-configuration-workflow.md) remains separate workflow
-work; [16](../Backlog/016-kernel-reduction-and-evidence.md) still requires an
-actually accepted functional baseline before reduction. Successful boot and
-closure alone do not establish full functional acceptance.
+work. [Card 16](../Completed/016-kernel-reduction-and-evidence.md) was retired on
+2026-10-16 because the operator will perform reduction manually. Successful boot
+and closure alone do not establish full functional acceptance.
 
 ## Historical objective and agreed starting point
 
@@ -319,7 +319,7 @@ working system and keep passphrase-entry time separate where practical.
 Record boot results and feature acceptance separately. Complete this card when
 the single-binary artifact and agreed functional coverage are demonstrated, with
 untested cases and any unresolved requirements clearly accounted for. Begin
-deliberate code removal under [kernel reduction](../Backlog/016-kernel-reduction-and-evidence.md)
+deliberate code removal under [kernel reduction](../Completed/016-kernel-reduction-and-evidence.md)
 only after the relevant functional baseline is accepted.
 
 ## Initramfs preparation
