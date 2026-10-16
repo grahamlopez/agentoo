@@ -1,9 +1,40 @@
 # Establish the single binary kernel baseline
 
 Created: 2026-10-14
-Status: Open
+Status: Closed — successful custom-kernel boot; original approach superseded
+Closed: 2026-10-16
 
-## Objective and agreed starting point
+## Closure and disposition
+
+Closed at the operator's request. On 2026-10-16 the operator confirmed that
+the system is currently running a successfully booted custom kernel. This
+supersedes the earlier preparation-only status recorded below. The original
+defconfig-first approach and runbook did not provide the successful procedure.
+
+Successful boot is confirmed by the operator; the exact running release, artifact
+hash, module state, embedded-input verification, early microcode loading and
+full functional acceptance have not been recorded here. Do not infer these
+additional checks from boot success alone.
+
+The unsuccessful `docs/kernel-build.md` runbook has been removed. The replacement
+[distribution-config build notes](../../docs/kernel-baseline-build.md) record a
+different starting point: rebuild from the distribution kernel configuration,
+use genkernel for the initramfs, and approach removal of modules separately.
+Those notes capture the replacement approach and remain work in progress;
+operator-confirmed boot success does not establish that every documented step
+or all original single-binary requirements have been validated. This closes the defconfig-first
+experiment rather than prescribing it for subsequent work.
+
+Retain the inventory, configuration checkpoints and firmware findings below as
+historical evidence only. Recheck them against the source, configuration and
+initramfs used by any new build; do not treat pending steps as current operating
+instructions. Keep the distribution boot path available. Card
+[15](../Open/015-shared-kernel-configuration-workflow.md) remains separate workflow
+work; [16](../Backlog/016-kernel-reduction-and-evidence.md) still requires an
+actually accepted functional baseline before reduction. Successful boot and
+closure alone do not establish full functional acceptance.
+
+## Historical objective and agreed starting point
 
 Establish a working single-binary boot before deliberately reducing kernel code.
 Start with `make defconfig` in a selected, pinned `gentoo-sources` tree, then
@@ -34,10 +65,10 @@ treating another host's configuration as Thinktop's configuration.
 
 Build the bootable baseline manually first, retaining the configuration, inputs
 and commands. Use that actual build and subsequent feature debugging to develop
-the [shared configuration workflow](015-shared-kernel-configuration-workflow.md).
+the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md).
 Do not require a complete automation framework before establishing boot.
 
-Maintain the user-facing procedure in the [kernel build runbook](../../docs/kernel-build.md).
+The now-removed `docs/kernel-build.md` was the user-facing procedure for this experiment.
 The operator runs host commands. Keep steps and expected checks in the runbook;
 record results, verification status and host findings in this card. The
 initial source version is 6.18.54, explicitly accepted after reviewing Gentoo's
@@ -283,7 +314,7 @@ that cannot satisfy built-in operation. Do not silently drop a requirement or
 re-enable nouveau to resolve one. Compare performance and boot behavior with the
 working system and keep passphrase-entry time separate where practical.
 
-## Completion and follow-up
+## Original completion criteria (not met)
 
 Record boot results and feature acceptance separately. Complete this card when
 the single-binary artifact and agreed functional coverage are demonstrated, with

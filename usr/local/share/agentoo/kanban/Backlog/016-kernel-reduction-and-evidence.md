@@ -7,7 +7,7 @@ Status: Backlog
 
 Minimize kernel size, code surface and boot time while preserving required
 features and performance. Begin deliberate reduction after acceptance of the
-relevant [single-binary functional baseline](../Open/014-single-binary-kernel-baseline.md).
+relevant [single-binary functional baseline](../Completed/014-single-binary-kernel-baseline.md).
 Use the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
 to record and reproduce changes across hosts.
 

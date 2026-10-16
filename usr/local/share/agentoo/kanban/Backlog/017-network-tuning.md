@@ -16,5 +16,5 @@ as relevant to those workloads. Record the conditions, measurements, changes and
 restoration procedure.
 
 Required network drivers, firmware, VPN protocols and virtualization networking
-features remain within [kernel functional acceptance](../Open/014-single-binary-kernel-baseline.md).
+features remain within [kernel functional acceptance](../Completed/014-single-binary-kernel-baseline.md).
 Separating tuning does not remove these requirements from the shared kernel.

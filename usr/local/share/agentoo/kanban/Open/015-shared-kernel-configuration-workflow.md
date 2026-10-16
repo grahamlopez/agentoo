@@ -10,7 +10,7 @@ the union of their required hardware drivers and capabilities. Do not introduce
 host-specific driver fragments or a shared/host relocation workflow. This
 decision, agreed on 2026-10-15, replaces the earlier layered proposal.
 Develop the workflow against the real
-[single-binary baseline](014-single-binary-kernel-baseline.md), initially using
+[single-binary baseline](../Completed/014-single-binary-kernel-baseline.md), initially using
 manual operations to establish what the tooling needs to do.
 
 The durable configuration lives in Git. A generated, complete `.config` remains

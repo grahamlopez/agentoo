@@ -11,7 +11,7 @@ the selection repeatable for other hosts through the existing explicit
 `/etc/agentoo/target-host` policy. This does not introduce host-specific kernel
 driver configurations.
 
-Follow the [single-binary kernel baseline](../Open/014-single-binary-kernel-baseline.md)
+Follow the [single-binary kernel baseline](../Completed/014-single-binary-kernel-baseline.md)
 and its verified firmware manifest. Reuse that inventory as evidence rather
 than blocking the initial kernel build on installed-firmware trimming. Firmware
 embedded in a kernel and firmware retained by a package are separate selections.

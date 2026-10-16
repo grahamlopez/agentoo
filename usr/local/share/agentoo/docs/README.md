@@ -100,5 +100,8 @@ See [configuration details](../../../../../etc/agentoo/README.md) and the
 
 See [managed file permissions](permissions.md) for checks and Git automation.
 
-See [building a self-contained kernel](kernel-build.md) for the manual custom
-kernel runbook and its current verification status.
+See the [custom kernel build notes](kernel-baseline-build.md) for the current
+work-in-progress distribution-config approach. These are not yet a validated
+runbook. [Card 14](../kanban/Completed/014-single-binary-kernel-baseline.md)
+records the operator-confirmed successful custom-kernel boot, the superseded
+defconfig-first experiment, and the remaining unverified acceptance checks.
