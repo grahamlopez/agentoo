@@ -5,6 +5,8 @@
 
 ## set up user-owned kernel build environment
 
+edit out EXTRAVERSION from /usr/src/linux*/Makefile
+
 build_label="agentoo-baseline"
 kernel_src=/usr/src/linux-6.18.54-gentoo
 kernel_build="${HOME}/local/agentoo-build/kernel/6.18.54-${build_label}"
@@ -62,6 +64,8 @@ make -C "${kernel_build}" INSTALL_MOD_PATH="${genkernel_build}/modules" INSTALL_
 
 ## build initramfs
 
+(with modules)
+
 genkernel \
     --kerneldir=/usr/src/linux-6.18.54-gentoo \
     --kernel-outputdir="${kernel_build}" \
@@ -79,6 +83,24 @@ genkernel \
     --luks \
     initramfs
 
+(without modules)
+
+genkernel \
+    --kerneldir=/usr/src/linux-6.18.54-gentoo \
+    --kernel-outputdir="${kernel_build}" \
+    --cachedir="${genkernel_build}/cache" \
+    --tmpdir="${genkernel_build}/tmp" \
+    --logfile="${genkernel_build}/genkernel.log" \
+    --install \
+    --bootdir="${genkernel_build}/output" \
+    --no-ramdisk-modules \
+    --no-mountboot \
+    --no-bootloader \
+    --no-firmware-install \
+    --no-compress-initramfs \
+    --initramfs-filename="initramfs-6.18.54-${build_label}.cpio" \
+    --luks \
+    initramfs
 
 ## rebuild kernel to embed initramfs
 
