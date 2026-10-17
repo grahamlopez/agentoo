@@ -172,15 +172,22 @@ requiring that graphical target; add session management only for an observed nee
 Run these commands as the desktop user after verifying their user manager:
 
 ```sh
-systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
+systemctl --user enable --now pipewire.service pipewire-pulse.socket wireplumber.service
 systemctl --user status pipewire.socket pipewire-pulse.socket wireplumber.service
 wpctl status
 ```
 
 These are real, local systemd enablement links managed by systemd, not copied
 user dotfiles. To choose the same default for every user, root may instead use
-`systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service`;
+`systemctl --global enable pipewire.service pipewire-pulse.socket wireplumber.service`;
 activate and verify the units from each normal user login. No lingering is needed.
+
+Enable `pipewire.service` at user login; its unit also enables `pipewire.socket`.
+Enabling only the sockets delays PipeWire and WirePlumber initialization until
+the first client connects. On thinktop this produced an empty first
+`wpctl status` and a mic LED transition when audio initialized. Starting the
+service at login avoids that client-triggered startup, though device discovery
+is still asynchronous. The LED before user login is kernel/firmware behavior.
 
 If inspection finds an existing PulseAudio daemon or pipewire-media-session,
 review and disable that user's competing units before starting the new stack.

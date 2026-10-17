@@ -266,3 +266,55 @@ rule to `RUN{builtin}+="keyboard"`, deferring application until assignments are
 complete. Deployment and an actual ioctl readback, followed by reboot validation,
 are required before considering persistence fixed. `read-mic-map.py` discovers
 the ThinkPad input device and reads the map without changing it.
+
+### Reboot persistence verified (2026-10-16)
+
+After deployment of the corrected `RUN{builtin}` rule, a targeted change event
+and read-only ioctl check returned 248 (`KEY_MICMUTE`). The user then rebooted
+and ran only `read-mic-map.py`, without a manual correction or trigger; it again
+returned 248. This verifies boot persistence of the real-root workaround on
+thinktop. The earlier 190/F20 reboot result concerned the superseded IMPORT
+version. Actual microphone mute toggling through Hyprland and its indicator
+remain to be confirmed; keymap persistence alone is not action validation.
+
+### Microphone action and LED/default-source finding
+
+The user confirmed F4 toggles the PipeWire default-source mute state, but
+reported that its LED is on after boot, goes off after a press, and does not
+subsequently track toggles. Inspection found `platform::micmute` brightness 0
+with the correct `audio-micmute` trigger selected; `SND_CTL_LED=y` and the ALSA
+mic LED mode is `follow-mute`.
+
+Crucially, PipeWire's default source was the virtual ALSA Loopback source
+(`alsa_input.platform-snd_aloop.0.analog-stereo`), not the physical microphone.
+Thus the earlier mute-state toggle alone did not validate physical microphone
+muting. Selected the detected built-in SOF `HiFi__Mic__source` as the default
+using `wpctl set-default` (session object ID 63; IDs are not persistent).
+Physical microphone mute and LED tracking require a fresh user test, as does
+default-source persistence after reboot. Initial LED-on behavior remains
+unexplained; no custom LED writes or synchronization service were introduced.
+
+The user subsequently confirmed that F4 mutes/unmutes the correct physical
+microphone and the F4 LED follows the mute setting. This validates the current
+default-source selection and existing kernel LED trigger without an LED-specific
+workaround. Default-source persistence after reboot remains to be checked;
+the microphone keymap's reboot persistence was already verified above.
+
+### First-client audio initialization explained
+
+Across further reboots, the user observed the F4 LED turning on during SOF
+initialization before disk unlock and staying on until the first `wpctl status`.
+That first command showed no sources/sinks; a second command showed them.
+Service inspection confirmed PipeWire sockets enabled at user login but
+`pipewire.service` disabled; WirePlumber was enabled under PipeWire's service.
+Boot journal times showed sockets listening at 23.66 seconds and PipeWire plus
+WirePlumber starting at 81.45 seconds. This supports first-client socket
+activation and asynchronous device enumeration, rather than a missing key event.
+The LED transition coincides with audio initialization; the exact pre-login
+hardware mute state has not been measured.
+
+Enabled `pipewire.service` for graham's user login and updated the GUI runbook
+to enable the service explicitly (its unit also enables its socket). Subsequent
+login startup, first-status enumeration and LED behavior remain to be verified.
+This change starts audio at user login, not before disk unlock, and adds no LED
+override or initramfs modification.

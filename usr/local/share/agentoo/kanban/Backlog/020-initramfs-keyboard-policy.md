@@ -18,7 +18,11 @@ It matches only the ThinkPad Extra Buttons input device on Lenovo product
 `21TDCTO1WW`, then sets scan `0x1a` to `micmute` after the standard keyboard
 rules. This is model-scoped rather than serial-number-scoped. Repository rule
 validation and reboot persistence are recorded on card 019; the runtime correction
-was already verified separately.
+was already verified separately. The corrected rule uses `RUN{builtin}` to apply
+the mapping after property assignments; the initial IMPORT version did not work.
+On 2026-10-16 the user deployed the corrected rule, verified keycode 248, rebooted,
+and verified 248 again with a read-only ioctl check and no manual correction or
+trigger. Real-root workaround persistence is therefore verified on thinktop.
 
 ## Revisit during custom initramfs work
 
