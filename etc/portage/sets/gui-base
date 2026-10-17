@@ -3,3 +3,5 @@ gui-wm/hyprland::hyproverlay
 x11-terms/kitty
 media-video/pipewire
 media-video/wireplumber
+# Privileged ALSA/UCM initialization, mixer-state handling, and diagnostic tools.
+media-sound/alsa-utils

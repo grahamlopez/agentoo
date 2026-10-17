@@ -318,3 +318,51 @@ to enable the service explicitly (its unit also enables its socket). Subsequent
 login startup, first-status enumeration and LED behavior remain to be verified.
 This change starts audio at user login, not before disk unlock, and adds no LED
 override or initramfs modification.
+
+### Speaker mute LED diagnosis and runtime validation
+
+The user confirmed F1 toggled PipeWire output mute but its LED never lit.
+The selected output was the built-in SOF Speaker sink, not Loopback or an
+external output. `platform::mute` already selected `audio-mute`, and ALSA's
+speaker LED mode was `follow-mute`, but every card's speaker LED control list
+was empty.
+
+The installed UCM configuration for `cs42l43-spk+cs35l56` contains SetLED
+attachments in FixedBootSequence for `cs42l43 Speaker Digital Switch` and
+the amplifier speaker switches. Read-only ALSA enumeration confirmed these
+controls on thinktop: IDs 39, 76 and 79 for the digital switch, AMP1 and AMP2
+respectively (IDs are observations, not stable configuration inputs).
+
+The user ran session-local `hotkey-investigation/attach-speaker-led.py`, which
+discovers the SOF card and attaches those three controls by name through
+`/sys/class/sound/ctl-led/speaker/cardN/attach`. The user confirmed that F1's
+LED then follows speaker mute. This is a runtime association test, not an
+installed persistent fix; it changes neither volume/mute nor the LED trigger.
+
+The normal UCM attachments are privileged sysfs writes; WirePlumber runs as
+the desktop user. Initial inspection found no installed alsactl executable,
+ALSA system services, or `/var/lib/alsa` directory. Missing privileged ALSA/UCM
+initialization is a lead, not yet a proven root cause. Investigate the intended
+Gentoo ALSA initialization path before adding a custom LED service or rule.
+Persistence and post-resume LED behavior remain unverified.
+
+The follow-up package inspection confirmed `media-sound/alsa-utils` is absent.
+Upstream alsactl performs UCM FixedBootSequence initialization, and its packaged
+udev restore rules invoke it for sound-card events. Gentoo's ebuild installs
+the udev rules and systemd units. Added alsa-utils to `@gui-base` as the normal
+ALSA initialization/tooling dependency, rather than introducing a custom LED
+service. Dependency resolution selected alsa-utils 1.2.16 and libsamplerate
+0.2.2 without keyword changes; the sandboxed pretend command subsequently failed
+while updating Portage news metadata, so this was not a fully successful emerge
+check. Installation and fresh-boot validation of automatic LED attachments remain
+pending; do not count the manual runtime attachment as proof of the package fix.
+
+The user subsequently installed alsa-utils 1.2.16, rebooted without the manual
+attachment script, and confirmed F1 LED tracking works. Post-boot inspection
+found speaker LED controls 79 and 76 attached automatically. `alsa-restore.service`
+completed; `alsa-state.service` correctly skipped because its opt-in configuration
+file was absent. First-run logs reported no saved asound.state and generic
+initialization for Loopback/VirMIDI; the physical card's UCM directory was created
+at `/var/lib/alsa/card2.conf.d`. This validates the normal packaged initialization
+path for thinktop's F1 LED. No custom persistent speaker LED rule/service is
+required. Suspend/resume and other-host acceptance remain separate checks.

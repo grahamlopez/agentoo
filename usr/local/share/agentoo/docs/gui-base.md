@@ -197,6 +197,18 @@ PulseAudio protocol server; `pulseaudio` USE supplies libpulse integration.
 ALSA clients use PipeWire through `pipewire-alsa`. Do not install a second audio
 server or add an autostart launcher alongside systemd.
 
+`@gui-base` also includes `media-sound/alsa-utils` for alsactl's privileged
+ALSA/UCM initialization and mixer-state handling, plus diagnostic tools. This
+is separate from the PipeWire audio server. UCM boot sequences can associate
+hardware mute LEDs with ALSA controls through root-only sysfs attributes;
+user-session WirePlumber alone cannot perform those writes. On thinktop,
+manually applying the installed UCM's speaker LED associations restored F1 LED
+tracking. After installing alsa-utils and rebooting, the user confirmed automatic
+F1 LED tracking; the packaged startup path attached the amplifier controls without
+the manual script. Verify this on other targets before adding custom LED
+workarounds. Inspect `alsa-restore.service`, `alsa-state.service` and the packaged
+udev rules rather than enabling both state-management schemes blindly.
+
 ### Check services and devices
 
 Run all audio commands below as the normal desktop user inside Kitty, without
@@ -281,8 +293,8 @@ aplay -D default /tmp/mic-test.wav
 
 Confirm the default ALSA device uses the installed PipeWire ALSA configuration
 and your recording plays. Avoid `-D hw:...`, which bypasses the compatibility
-path. If `aplay` is absent, the optional diagnostic package is
-`media-sound/alsa-utils`; install it as root with
+path. If `aplay` is absent on an installation predating the updated `@gui-base`,
+install `media-sound/alsa-utils` as root with
 `emerge --ask media-sound/alsa-utils`, then run the tests as the normal user.
 
 ### Check recovery and diagnose failures
