@@ -1,7 +1,8 @@
 # Override the embedded genkernel initramfs's legacy scan 0x1a -> F20 mapping.
 # Remove after validating corrected initramfs policy without this workaround.
 # See kanban/Backlog/020-initramfs-keyboard-policy.md.
+# Defer the builtin until assignments finish: IMPORT runs before ENV assignments.
 ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", \
   ATTRS{name}=="ThinkPad Extra Buttons", \
   ATTR{[dmi/id]sys_vendor}=="LENOVO", ATTR{[dmi/id]product_name}=="21TDCTO1WW", \
-  ENV{KEYBOARD_KEY_1a}="micmute", IMPORT{builtin}="keyboard"
+  ENV{KEYBOARD_KEY_1a}="micmute", RUN{builtin}+="keyboard"

@@ -252,3 +252,17 @@ Removal after corrected initramfs validation is tracked by
 is unchanged.
 
 This card is tracking documentation; tooling must not apply it automatically.
+
+### First reboot test and rule correction
+
+After the user installed the real-root rule and rebooted into v0.2, udev's
+device database contained `KEYBOARD_KEY_1a=micmute`, but a read-only
+`EVIOCGKEYCODE` check still returned 190 (F20). Property presence and rule-match
+validation did not establish that the actual keymap was changed.
+
+Verbose `udevadm test` showed that `IMPORT{builtin}="keyboard"` is evaluated
+before the `ENV{KEYBOARD_KEY_1a}` assignment within the same rule. Changed the
+rule to `RUN{builtin}+="keyboard"`, deferring application until assignments are
+complete. Deployment and an actual ioctl readback, followed by reboot validation,
+are required before considering persistence fixed. `read-mic-map.py` discovers
+the ThinkPad input device and reads the map without changing it.
