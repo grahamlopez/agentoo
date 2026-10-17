@@ -50,8 +50,8 @@ Examples:
   sudo agentoo permissions fix
   sudo agentoo secrets install --profile FILE --user graham ssh github
 
-Help and permission checks run without elevation. Other operations request
-sudo authorization when needed. Secret installation confirms file replacement.
+Help runs without elevation. All other operations request sudo authorization
+when needed. Secret installation confirms file replacement.
 
 Run 'agentoo help <command>' or 'agentoo <command> --help' for details.
 HELP
@@ -93,9 +93,9 @@ case $command in
         if [[ ${2:-} == -h || ${2:-} == --help ]]; then set -- --help; fi
         case ${1:-} in
             ''|-h|--help)
-                printf 'Usage: agentoo permissions {check|fix} [--root PATH]\n\ncheck reports mismatches without elevation; fix restores ownership and modes.\n--root selects a mounted target root (default: /).\n'
+                printf 'Usage: agentoo permissions {check|fix} [--root PATH]\n\ncheck reports mismatches; fix restores ownership and modes. Both request sudo when needed.\n--root selects a mounted target root (default: /).\n'
                 exit 0 ;;
-            check) needs_root=0; shift; set -- --check "$@" ;;
+            check) shift; set -- --check "$@" ;;
             fix) shift; set -- --fix "$@" ;;
             *) fail "unknown permissions command: $1" ;;
         esac

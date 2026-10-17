@@ -31,6 +31,7 @@ class CliTest(unittest.TestCase):
     def test_help_never_requests_sudo(self):
         for args in [[], ['help'], ['help', 'git'], ['checkpoint', '--help'],
                      ['checkpoint', 'restore', '--help'], ['permissions', 'fix', '--help'],
+                     ['permissions', 'check', '--help'], ['help', 'permissions'],
                      ['secrets', 'install', '--help']]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
@@ -42,6 +43,8 @@ class CliTest(unittest.TestCase):
     def test_privileged_commands_reenter_with_exact_arguments(self):
         for args in [('git', 'commit', '-m', 'two words; $HOME'),
                      ('checkpoint', 'list'), ('permissions', 'fix'),
+                     ('permissions', 'check'),
+                     ('permissions', 'check', '--root', '/a b'),
                      ('secrets', 'install', '--profile', '/a b', '--user', 'graham', 'ssh')]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
@@ -50,10 +53,11 @@ class CliTest(unittest.TestCase):
                                  ['--', '/usr/local/bin/agentoo', *args])
                 self.assertIn('requires root; requesting sudo authorization.', result.stderr)
 
-    def test_check_does_not_escalate_or_accept_fix_override(self):
-        result = self.run_cli('permissions', 'check', '--fix')
+    def test_check_does_not_accept_fix_override(self):
+        result = subprocess.run(
+            ['python3', str(COMMANDS / 'permissions.py'), '--check', '--fix'],
+            text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn('requesting sudo', result.stderr)
         self.assertIn('not allowed with argument', result.stderr)
 
     def test_unknown_command_does_not_escalate(self):

@@ -1,7 +1,8 @@
 # Managed file permissions
 
-`agentoo permissions check` checks without changing anything. Run
-`agentoo permissions fix` as root to restore ownership and modes declared in
+`agentoo permissions check` checks without changing anything. Both `check` and
+`fix` request sudo authorization when needed to read the system repository and
+protected managed paths. Run `agentoo permissions fix` to restore ownership and modes declared in
 `/etc/agentoo/permissions.conf`. Use `--root /mnt/gentoo` for a mounted target.
 The tool requires Python 3 and the agentoo Git repository. Both are available
 when the installer applies the policy after its configuration checkout.
@@ -54,6 +55,11 @@ On managed systems the tool uses `/var/lib/agentoo/repository.git` with the
 target root as its work tree. In a development checkout or temporary test
 repository it uses the target root's `.git`. A missing repository is an error;
 there is no fallback to recursively managing local files.
+
+The EFI partition uses `fmask=0133,dmask=0022`, so `boot/agentoo/`
+uses file mode `0644` and directory mode `0755`. FAT does not store Unix
+permission bits. Checkpoint scripts are invoked through `sh` and are tracked
+without an executable bit.
 
 ## Safety and hooks
 
