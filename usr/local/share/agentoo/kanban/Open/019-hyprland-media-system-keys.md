@@ -125,6 +125,25 @@ absence remains unexplained; do not claim that the microphone correction fixed
 all missing events. Fn variants were exercised, but Fn-lock toggling, every
 firmware-managed function and post-resume behavior remain unverified.
 
+### Simultaneous raw/libinput comparison
+
+On the same v0.2 boot, after the runtime microphone correction, the user ran
+`compare-libinput.py`. It stopped keyd and opened raw evdev and libinput readers
+simultaneously on the same three physical devices, without an exclusive grab or
+additional keymap change. The full special row and Fn+F1–F12 were pressed once.
+Both readers reported identical key press/release sequences: all special keys
+except F8, ordinary F1–F12, and the additional wake-up event before F1.
+Thus libinput is not currently filtering the missing keys; the earlier omissions
+are not reproduced. This does not isolate the effect of reboot, prior device
+state or the mic correction on the original failure. Do not claim that reboot
+alone fixed it or that the mic correction fixes other keys.
+
+Evidence: session-local directory
+`/home/graham/local/agentoo/hotkey-investigation/compare-6.18.54-agentoo-v0.2-20261016-214701/`,
+containing `raw.txt` and `libinput.txt`. The comparison script restores previously
+active keyd and returns capture ownership to the invoking sudo user. A future
+reboot test before any manual correction is still needed for persistence.
+
 ### Confirmed initramfs keymap discrepancy
 
 The v0.2 configuration is retained in
@@ -215,5 +234,21 @@ Next steps:
 - Validate actual actions, mute indicators, screenshots, bounds/repetition,
   device changes, reboot persistence and suspend/resume. Captured events alone
   do not establish that any user-facing action succeeded.
+
+### Persistent real-root workaround prepared (2026-10-16)
+
+Added `/etc/udev/rules.d/90-thinktop-micmute.rules` to the repository. It matches
+input event devices named ThinkPad Extra Buttons only when DMI vendor is LENOVO
+and product is `21TDCTO1WW`. On add/change it overrides scan `0x1a` to `micmute`
+and invokes udev's keyboard builtin after the standard rules. Other models and
+other input devices are unaffected; another identical model would also match.
+
+`udevadm verify` passed. `udevadm test --extra-rules-dir=...` against the current
+ThinkPad device matched this rule and reported `KEYBOARD_KEY_1a=micmute`.
+The file is not yet installed in the live `/etc/udev/rules.d`; root installation,
+rule reload and a cold-boot test without the manual correction remain pending.
+Removal after corrected initramfs validation is tracked by
+[card 020](../Backlog/020-initramfs-keyboard-policy.md). Embedded audio firmware
+is unchanged.
 
 This card is tracking documentation; tooling must not apply it automatically.
