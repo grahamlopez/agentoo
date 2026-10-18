@@ -46,7 +46,8 @@ Desktop and power:
                          Adjust perceived brightness by 5%
   screenshot {full|region}
                          Save a capture under ~/Downloads/Screenshots
-  power                  Show battery draw, runtime, health, and CPU settings
+  power                  Show charge, battery wattage, and estimated runtime
+  power show-all         Show detailed battery and CPU power settings
 
 Options:
   -h, --help             Show help

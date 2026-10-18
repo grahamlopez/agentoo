@@ -12,7 +12,11 @@ current user. Arbitrary Git commands also run as the current user: use explicit
 root even for reads that traverse protected files or access its database.
 Secrets confirm selected file replacements before Proton login.
 
-`agentoo power` reports each battery's charge, charging/discharging wattage,
+`agentoo power` prints a brief status such as `97% -- 4.8 W -- ~18h 26m`.
+Charging/full batteries show their status in place of discharge runtime.
+Multiple batteries get a labeled line each.
+
+`agentoo power show-all` reports each battery's charge, charging/discharging wattage,
 estimated discharge runtime, and health, plus CPU governor, energy preference,
 and platform profile where available. Battery wattage is not wall power;
 unavailable kernel measurements are labeled explicitly.

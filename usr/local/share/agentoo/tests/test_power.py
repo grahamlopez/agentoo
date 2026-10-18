@@ -4,7 +4,8 @@ import runpy
 import tempfile
 import unittest
 
-values = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'commands/power.py'))['battery_values']
+module = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'commands/power.py'))
+values = module['battery_values']
 
 
 class PowerTest(unittest.TestCase):
@@ -31,3 +32,17 @@ class PowerTest(unittest.TestCase):
         self.assertEqual(self.check_values({}), (None, None, None))
         self.assertEqual(self.check_values(dict(status='Discharging', power_now=0,
             energy_now=40000000)), (0, None, None))
+
+    def test_brief_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            device = Path(directory)
+            fields = dict(capacity=97, status='Discharging', power_now=4800000,
+                          energy_now=88480000)
+            for name, value in fields.items():
+                (device / name).write_text(str(value))
+            self.assertEqual(module['brief'](device), '97% -- 4.8 W -- ~18h 26m')
+            (device / 'status').write_text('Charging')
+            self.assertEqual(module['brief'](device), '97% -- 4.8 W -- charging')
+            for path in device.iterdir():
+                path.unlink()
+            self.assertEqual(module['brief'](device), 'unavailable -- unavailable -- unavailable')

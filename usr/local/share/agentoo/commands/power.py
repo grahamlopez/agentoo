@@ -42,8 +42,25 @@ def battery_values(device):
     return watts, hours, health
 
 
+def brief(device):
+    watts, hours, _ = battery_values(device)
+    capacity = read(device / 'capacity')
+    charge = f'{capacity}%' if capacity else 'unavailable'
+    rate = f'{abs(watts):.1f} W' if watts is not None else 'unavailable'
+    if hours is not None:
+        minutes = round(hours * 60)
+        remaining = f'~{minutes // 60}h {minutes % 60:02d}m'
+    else:
+        status = read(device / 'status')
+        remaining = status.lower() if status in ('Charging', 'Full', 'Not charging') else 'unavailable'
+    return f'{charge} | {rate} | {remaining}'
+
+
 def main():
-    argparse.ArgumentParser(prog='agentoo power', description=__doc__).parse_args()
+    parser = argparse.ArgumentParser(prog='agentoo power', description=__doc__)
+    parser.add_argument('action', nargs='?', choices=['show-all'],
+                        help='show detailed battery and CPU power information (default: brief battery status)')
+    args = parser.parse_args()
     supplies = Path('/sys/class/power_supply')
     batteries = []
     sources = []
@@ -53,6 +70,13 @@ def main():
                 batteries.append(device)
         elif read(device / 'online') is not None:
             sources.append((device.name, read(device / 'online') == '1'))
+    if args.action is None:
+        if not batteries:
+            print('Battery: unavailable')
+        for device in batteries:
+            prefix = f'{device.name}: ' if len(batteries) > 1 else ''
+            print(prefix + brief(device))
+        return
     online = [name for name, active in sources if active]
     source = ', '.join(online) if online else ('Battery' if any(read(b / 'status') == 'Discharging' for b in batteries) else 'Unavailable')
     print(f'Power source: {source}')
