@@ -4,6 +4,37 @@ Created: 2026-10-16
 Status: Open
 Opened: 2026-10-16
 
+## Current status (2026-10-18)
+
+The card remains Open. User-reported working on thinktop:
+
+- F1 speaker mute and its LED; normal ALSA startup restores LED associations.
+- F2/F3 speaker volume.
+- F4 physical microphone mute and its LED; the model-scoped udev keymap fix
+  survives reboot, the correct default microphone is selected, and PipeWire
+  starts at user login.
+- F5/F6 brightness with acpilight from @laptop and video-group access.
+- F9 full-screen capture and F10 region capture through grim/slurp from
+  @gui-desktop, saving files under ~/Downloads/Screenshots. Thinktop's tracked
+  XF86Launch7 alias is selected automatically by the existing target-host file.
+
+Remaining keys and decisions:
+
+| Key | Remaining work |
+| --- | --- |
+| F7 | Choose and implement display-layout switching or a display configuration tool. |
+| F8 (Mode) | Trace ACPI/platform-profile behavior; neither tested kernel emitted a keyboard event. |
+| F11 (Phone Link) | Choose a Linux action and verify the final XKB symbol before binding. |
+| F12 (star) | Choose and bind a custom action. |
+
+Inventory additional desired special keys/Fn combinations (keyboard backlight,
+sleep, playback controls, etc.). Full repeat/bounds, Fn-lock, external-device,
+multi-output capture, cancellation, and suspend/resume coverage remains pending
+unless explicitly recorded below. Do not equate event captures or isolated helper
+checks with physical validation. The future initramfs correction and removal of
+the mic-mute udev workaround are tracked separately by
+[card 020](../Backlog/020-initramfs-keyboard-policy.md).
+
 ## Objective and current state
 
 Make the physical keyboard's media and system function keys work reliably in
@@ -449,3 +480,10 @@ than the F16 keysym. Changed thinktop.lua to bind XF86Launch7 and corrected the
 runbook. Earlier references to binding F16 describe the superseded implementation;
 Linux keycode names are not necessarily the resulting Hyprland/XKB symbols.
 Physical acceptance after deploying this correction remains pending.
+
+The user deployed the XF86Launch7 correction, reloaded Hyprland and confirmed
+physical F10 works. Together with the earlier F9 confirmation, this establishes
+reported full-screen and region-capture shortcut operation on thinktop. Screenshot
+content/dimensions across multiple outputs, cancellation and failed-capture cleanup
+on the physical session remain separate checks; cancellation/cleanup were covered
+by the helper's isolated checks above.
