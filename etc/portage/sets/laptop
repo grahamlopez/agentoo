@@ -1,0 +1,3 @@
+# Laptop hardware utilities; independent of @gui-base and optional on desktops.
+# Display/keyboard backlight utility, including packaged video-group udev rules.
+sys-power/acpilight

@@ -381,10 +381,35 @@ creating a previously absent optional file.
 | Super+1…0 / Super+Shift+1…0 | Workspace 1…10 / move window there |
 | Super+left/right mouse drag | Move / resize |
 | Audio volume, mute, mic-mute keys | WirePlumber controls |
+| Display brightness up/down keys | acpilight, 5 points on its perceived scale; repeats while held |
 
 Caps Lock acts as Control, matching the shared console keymap. The background
-is plain dark gray. No brightness utility or display-specific workaround is
-selected in this base.
+is plain dark gray.
+
+### Laptop brightness
+
+Laptop utilities live in the independent `@laptop` set, initially containing
+`sys-power/acpilight`; keep future sensor/power utilities here when selected.
+Do not require this set on desktops. As root, install `emerge --ask @laptop`
+and add each intended desktop user to `video` with `usermod -aG video USER`.
+Log out completely and log back in for group membership to take effect.
+The package supplies backlight udev permissions; reboot after first installation
+or reload rules and trigger the backlight add event before testing.
+
+Despite its command name `xbacklight`, acpilight uses sysfs and needs neither X
+nor sudo in the key bindings. Shared bindings use standard brightness key symbols,
+not laptop F-key positions. `agentoo-backlight` selects a single display backlight
+under `/sys/class/backlight`, quietly does nothing if none exists, and refuses an
+ambiguous selection when multiple devices exist. A host override can replace the
+bindings with `agentoo-backlight up CONTROLLER` and `down CONTROLLER`.
+Keyboard LEDs are never selected as a display fallback.
+
+Adjustments use acpilight's perceived scale in steps of 5, bounded by the utility
+to 0–100 on that scale (minimum raw level 1, not panel-off). Inspect controllers
+with `xbacklight -list`; run `agentoo-backlight down` and `up` as the normal user
+before testing the physical keys. Confirm visible changes, held-key repetition,
+usable minimum and maximum levels, and recovery after suspend/resume. A low
+resolution or unsuitable panel curve may need a host-specific adjustment.
 
 ## Physical acceptance on thinktop
 

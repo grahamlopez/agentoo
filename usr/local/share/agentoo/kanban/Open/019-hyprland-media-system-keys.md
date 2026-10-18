@@ -366,3 +366,27 @@ initialization for Loopback/VirMIDI; the physical card's UCM directory was creat
 at `/var/lib/alsa/card2.conf.d`. This validates the normal packaged initialization
 path for thinktop's F1 LED. No custom persistent speaker LED rule/service is
 required. Suspend/resume and other-host acceptance remain separate checks.
+
+### Shared brightness bindings prepared (2026-10-18)
+
+Agreed to shared standard-key bindings, host-specific exceptions and a separate
+`@laptop` utility set. Added `sys-power/acpilight` to that new set, rather than
+adding an overlay for brightnessctl or requiring laptop utilities on desktops.
+Gentoo's stable acpilight 1.2-r5 installs the xbacklight command and video-group
+udev permissions. It requires no X server. User membership in video and package
+installation remain deployment steps, not changes made during repository work.
+
+Shared Lua binds XF86MonBrightnessUp/Down to `agentoo-backlight up/down` with
+repetition. The helper selects only display backlights, does nothing when none
+exist, and requires explicit controller selection if more than one exists.
+It invokes acpilight in perceived-brightness steps of 5, with minimum raw level
+1, and permits host bindings to name a controller. Thinktop currently exposes
+one panel device, intel_backlight; no controller name is hard-coded in shared
+configuration. The runbook describes installation, permissions and validation.
+
+Shell/Lua syntax and diff whitespace checks passed. Isolated helper checks with
+mock controllers verified no-panel behavior, one-panel command arguments,
+ambiguous-device refusal, explicit selection and invalid-name rejection.
+No physical brightness adjustment or installed Hyprland parser validation has
+been performed yet. Deploy/install, reload Hyprland, and test normal-user access,
+visible steps, held-key repeat, bounds and suspend/resume before acceptance.
