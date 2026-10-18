@@ -432,8 +432,9 @@ starts a background service. Cancellation or capture failure leaves no image.
 Region selection is live, not a frozen preview. Test these commands from a normal
 user's Hyprland terminal after installing the updated set, then test the keys.
 
-Thinktop's physical F9 emits Print Screen; its F10 becomes F16 through keyd.
-The tracked `/etc/xdg/hypr/hosts/thinktop.lua` adds that F16 region alias and is
+Thinktop's physical F9 emits Print Screen; its F10 becomes Linux KEY_F16 through
+keyd, then XF86Launch7 in the default evdev XKB map. The tracked
+`/etc/xdg/hypr/hosts/thinktop.lua` binds that XF86Launch7 region alias and is
 loaded automatically when the existing target-host assignment names thinktop.
 Reload Hyprland after deployment. Other hosts use Print Screen,
 Shift+Print Screen or the standard region-capture symbol unless a demonstrated

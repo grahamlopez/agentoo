@@ -441,3 +441,11 @@ hyprland-host.lua selector is no longer read. Shell text is never executed and
 host names cannot traverse paths. Lua syntax and mocked selection checks passed
 for thinktop, generic/missing fragments, absent selector and invalid path input.
 Deploy/reload and physical F10 acceptance remain pending.
+
+After deployment, the F16 binding was confirmed loaded with no configuration
+errors, but physical F10 still did nothing. The installed default evdev XKB
+symbols map `<FK16>` (XKB code 194, Linux KEY_F16 186) to XF86Launch7 rather
+than the F16 keysym. Changed thinktop.lua to bind XF86Launch7 and corrected the
+runbook. Earlier references to binding F16 describe the superseded implementation;
+Linux keycode names are not necessarily the resulting Hyprland/XKB symbols.
+Physical acceptance after deploying this correction remains pending.
