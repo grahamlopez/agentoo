@@ -382,6 +382,8 @@ creating a previously absent optional file.
 | Super+left/right mouse drag | Move / resize |
 | Audio volume, mute, mic-mute keys | WirePlumber controls |
 | Display brightness up/down keys | acpilight, 5 points on its perceived scale; repeats while held |
+| Print Screen | PNG capture of all outputs |
+| Shift+Print Screen / region-capture key | Select a rectangular region; Escape cancels |
 
 Caps Lock acts as Control, matching the shared console keymap. The background
 is plain dark gray.
@@ -412,6 +414,34 @@ with `xbacklight -list`; run `agentoo-backlight down` and `up` as the normal use
 before testing the physical keys. Confirm visible changes, held-key repetition,
 usable minimum and maximum levels, and recovery after suspend/resume. A low
 resolution or unsuitable panel curve may need a host-specific adjustment.
+
+### Screenshots
+
+`@gui-desktop` extends `@gui-base` with desktop conveniences, initially
+`gui-apps/grim` and `gui-apps/slurp`. Install it with
+`sudo emerge --ask @gui-desktop`; keep `@gui-base` as the minimal graphics/audio
+foundation and `@laptop` as an independent hardware-utility set. Run
+`agentoo-screenshot full` to capture all outputs in one image, or
+`agentoo-screenshot region` to drag a rectangle. Files are saved under
+`~/Downloads/Screenshots`, created on demand, with timestamped unique PNG names
+and owner-only file permissions. The helper neither copies to the clipboard nor
+starts a background service. Cancellation or capture failure leaves no image.
+Region selection is live, not a frozen preview. Test these commands from a normal
+user's Hyprland terminal after installing the updated set, then test the keys.
+
+Thinktop's physical F9 emits Print Screen; its F10 becomes F16 through keyd.
+The tracked `/etc/xdg/hypr/hosts/thinktop.lua` adds that F16 region alias. Select
+it using the existing local `/etc/agentoo/hyprland-host.lua` mechanism described
+above, preserving any existing selector content. On a host without a selector,
+create that root-owned, mode-0644 file containing:
+
+```lua
+require("/etc/xdg/hypr/hosts/thinktop.lua")
+```
+
+Reload Hyprland after creating the selector. Other hosts use Print Screen,
+Shift+Print Screen or the standard region-capture symbol unless a demonstrated
+input quirk requires a host alias. Do not bind ordinary F10 universally.
 
 ## Physical acceptance on thinktop
 

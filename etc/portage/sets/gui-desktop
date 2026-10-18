@@ -1,0 +1,5 @@
+# Desktop conveniences above the minimal graphics/audio base.
+@gui-base
+# File-only Wayland screenshots and interactive region selection.
+gui-apps/grim
+gui-apps/slurp

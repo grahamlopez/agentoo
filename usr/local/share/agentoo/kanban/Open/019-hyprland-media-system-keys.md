@@ -397,3 +397,31 @@ reported physical key-to-brightness operation. Held-key repetition, minimum and
 maximum usability, reboot persistence and suspend/resume have not been explicitly
 confirmed. User setup now installs acct-group/video and includes video membership
 on initial account creation and append-only reruns; fresh login remains required.
+
+### Screenshot bindings prepared (2026-10-18)
+
+The user selected file-only screenshots in `~/Downloads/Screenshots`, grim for
+capture, slurp for region selection, and a standalone `agentoo-screenshot`
+helper rather than extending the administrative `agentoo` command. wl-copy and
+wl-paste are installed, but no clipboard manager/history is configured and the
+helper does not use the clipboard. Added stable Gentoo grim/slurp to @gui-base.
+
+The helper supports full (all outputs) and region modes, creates the destination
+on demand, reserves unique timestamped PNG filenames with owner-only permissions,
+and removes unsuccessful captures. Cancelling selection cannot fall through to
+full-screen capture. Selection is live, with no freeze-preview dependency.
+Shared bindings cover Print, Shift+Print and XF86SelectiveScreenshot. A new
+thinktop host fragment binds keyd's F16 alias; the existing local host selector
+must explicitly include it after deployment. No selector was created on the
+live system during repository preparation.
+
+Shell/Lua syntax, whitespace and isolated helper checks passed, including full
+and region invocations, filename uniqueness, spaces in HOME, file permissions,
+cancellation and capture-failure cleanup. Installed Hyprland parser checks,
+package installation and physical screenshot/content/shortcut testing remain
+pending. Active-window capture remains a separate unimplemented scope item.
+
+The user clarified that @gui-base must remain the bare graphics foundation.
+Created @gui-desktop extending @gui-base and moved grim/slurp into it. This
+supersedes their initial placement in @gui-base. Screenshot dependency messages
+and installation instructions now name @gui-desktop; @laptop remains independent.

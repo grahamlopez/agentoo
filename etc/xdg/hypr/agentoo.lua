@@ -40,3 +40,7 @@ hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURC
 -- Standard key meanings; laptops install @laptop for acpilight.
 hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("agentoo-backlight up"), { repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("agentoo-backlight down"), { repeating = true })
+
+hl.bind("Print", hl.dsp.exec_cmd("agentoo-screenshot full"))
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd("agentoo-screenshot region"))
+hl.bind("XF86SelectiveScreenshot", hl.dsp.exec_cmd("agentoo-screenshot region"))
