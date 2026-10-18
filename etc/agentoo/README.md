@@ -154,6 +154,21 @@ uses `@gui-base`, shared Lua defaults under `/etc/xdg/hypr/`, and explicit TTY
 launch. Read its installation and physical validation procedure before applying
 it on a target.
 
+### Kitty host defaults
+
+Kitty loads `/etc/xdg/kitty/kitty.conf` before user configuration. Its native
+`geninclude` runs `/usr/local/share/agentoo/kitty/host-config.py` when configuration
+is loaded, including on startup and reload. The helper reads
+`/etc/agentoo/target-host` as data and outputs the selected
+`/etc/xdg/kitty/hosts/<name>.conf` fragment. Missing selectors or host fragments
+leave Kitty's defaults in effect; malformed selectors and other read errors are
+reported. The helper must be executable, as recorded in the permissions policy.
+
+Thinktop sets `font_size 10.0`. Other hosts retain Kitty's default size.
+User configuration, such as `~/.config/kitty/kitty.conf`, takes precedence;
+remove a local `font_size` override to inherit the managed host setting.
+No home configuration file, launch wrapper, or generated host include is needed.
+
 ## Optional systemd features and snapshot boundaries
 
 - /srv, /var/lib/machines, and /var/lib/portables use ordinary directories.
