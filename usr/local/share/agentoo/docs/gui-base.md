@@ -391,7 +391,9 @@ is plain dark gray.
 Laptop utilities live in the independent `@laptop` set, initially containing
 `sys-power/acpilight`; keep future sensor/power utilities here when selected.
 Do not require this set on desktops. As root, install `emerge --ask @laptop`
-and add each intended desktop user to `video` with `usermod -aG video USER`.
+The user setup script `/root/002-agentoo-setup-user.sh` installs the packaged
+`video` group and adds Graham on initial setup and reruns. For existing users
+without rerunning setup, use `usermod -aG video USER` as root.
 Log out completely and log back in for group membership to take effect.
 The package supplies backlight udev permissions; reboot after first installation
 or reload rules and trigger the backlight add event before testing.

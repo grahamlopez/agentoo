@@ -43,12 +43,12 @@ validate_identity() {
 }
 validate_identity
 printf '\n┌─ User setup ─────────────────────────────────────┐\n'
-printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup; interrupted runs resume\n│ Packages      Zsh, sudo, OpenSSH, Git\n└──────────────────────────────────────────────────┘\n'
+printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage, video\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup; interrupted runs resume\n│ Packages      Zsh, sudo, OpenSSH, Git, video group\n└──────────────────────────────────────────────────┘\n'
 read -r -p 'Proceed with user setup? [y/N] ' answer
 [[ $answer == y || $answer == Y || $answer == yes ]] || { echo 'User setup declined; no account or package changes made.'; exit 0; }
 printf '\nPaste one SSH public key (empty to skip). Label: agentoo:graham:ssh-login\n'
 read -r -p 'SSH public key: ' public_key
-packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git)
+packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git acct-group/video)
 # Show Portage's dependency/build plan and obtain its own confirmation.
 emerge --ask --noreplace "${packages[@]}"
 # Package/configuration tools can rewrite shared files with root-only modes.
@@ -78,13 +78,14 @@ if [[ -n $public_key ]]; then
   ssh-keygen -lf "$key_file" >/dev/null || die 'Invalid SSH public key; no account changes made.'
 fi
 validate_identity
+getent group video >/dev/null || die 'Required video group is missing after installing acct-group/video.'
 getent group "$account" >/dev/null || groupadd --gid "$gid" "$account"
 if ! getent passwd "$account" >/dev/null; then
-  useradd --uid "$uid" --gid "$account" --groups wheel,portage --shell "$shell" --home-dir "$home" --no-create-home "$account"
+  useradd --uid "$uid" --gid "$account" --groups wheel,portage,video --shell "$shell" --home-dir "$home" --no-create-home "$account"
   install -d -m 0700 -o "$uid" -g "$gid" "$home"
 else
   # Preserve existing supplementary groups and home contents on subsequent runs.
-  usermod --append --groups wheel,portage --shell "$shell" "$account"
+  usermod --append --groups wheel,portage,video --shell "$shell" "$account"
   [[ -d $home ]] || install -d -m 0700 -o "$uid" -g "$gid" "$home"
 fi
 password_status=$(passwd -S "$account")
@@ -178,4 +179,4 @@ fi
 visudo -c
 sudo -l -U "$account"
 printf '\n┌─ User setup complete ─────────────────────────────┐\n│ Console login  Account password\n│ Sudo           Account password required\n│ SSH login      %s\n└──────────────────────────────────────────────────┘\n' "$ssh_status"
-printf '\nTest a new Graham login, then run: sudo -k; sudo -i\nKeep your root console open until that succeeds.\n'
+printf '\nTest a new Graham login, then run: sudo -k; sudo -i\nKeep your root console open until that succeeds.\nSupplementary group changes require a fresh login to take effect.\n'

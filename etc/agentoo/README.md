@@ -58,11 +58,12 @@ replacing the active root. Checkpoints share the disk with the original data.
 ## User setup
 
 After verifying/checkpointing, run `/root/002-agentoo-setup-user.sh` interactively.
-It installs Zsh, sudo, and OpenSSH, creates or validates `graham` with UID/GID 1000, a private
-primary group and supplementary `wheel,portage`, and prompts for an account
+It installs Zsh, sudo, OpenSSH, Git, and the packaged `video` group, creates or validates `graham` with UID/GID 1000, a private
+primary group and supplementary `wheel,portage,video`, and prompts for an account
 password when none is usable and an optional SSH public key. Reruns preserve a
 usable password and resume the optional Git identity choice after interruption. Conflicting identities stop setup; existing
-home contents and supplementary groups are preserved. No skeleton dotfiles are copied.
+home contents and supplementary groups are preserved. A fresh login is required
+for supplementary group changes to take effect. No skeleton dotfiles are copied.
 After installing packages, setup reapplies Agentoo's file permission policy so
 shared Git configuration remains readable when configuring Graham's identity.
 Setup separately offers a Git identity for Agentoo commits as root, stored in

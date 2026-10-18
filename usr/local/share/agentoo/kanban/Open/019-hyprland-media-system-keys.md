@@ -390,3 +390,10 @@ ambiguous-device refusal, explicit selection and invalid-name rejection.
 No physical brightness adjustment or installed Hyprland parser validation has
 been performed yet. Deploy/install, reload Hyprland, and test normal-user access,
 visible steps, held-key repeat, bounds and suspend/resume before acceptance.
+
+The user subsequently confirmed the brightness keys work on thinktop after
+resolving acpilight installation and video-group access. This establishes
+reported physical key-to-brightness operation. Held-key repetition, minimum and
+maximum usability, reboot persistence and suspend/resume have not been explicitly
+confirmed. User setup now installs acct-group/video and includes video membership
+on initial account creation and append-only reruns; fresh login remains required.
