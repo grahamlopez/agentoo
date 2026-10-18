@@ -25,6 +25,9 @@ its EFI registration command with the full device path required by its firmware.
 `target-host` is intentionally local state rather than a tracked file because
 its value differs between installations. It contains the Portage-compatible
 assignment `GENTOO_TARGET_HOST="name"` so `make.conf` can source it directly.
+Hyprland also reads that assignment as data and automatically loads the tracked
+`/etc/xdg/hypr/hosts/name.lua` fragment when present; no separate Hyprland host
+selector is required.
 
 Kernel firmware requirements use shell assignment fragments under
 `/etc/agentoo/kernel-firmware.d/`: the installer reads `00-common` first,

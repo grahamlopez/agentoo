@@ -12,8 +12,19 @@ local function include_optional(path)
     end
 end
 
--- Local host selector: require only the host fragment explicitly chosen here.
-include_optional("/etc/agentoo/hyprland-host.lua")
+-- Reuse the installer-managed host selection; no second selector is needed.
+-- Parse its documented assignment as data, never execute shell contents.
+local selector = "/etc/agentoo/target-host"
+local file, message, code = io.open(selector, "r")
+if file then
+    local contents = file:read("*a")
+    file:close()
+    local host = contents:match('^%s*GENTOO_TARGET_HOST%s*=%s*"([%w_-]+)"%s*$')
+    assert(host, selector .. ': expected GENTOO_TARGET_HOST="name"')
+    include_optional("/etc/xdg/hypr/hosts/" .. host .. ".lua")
+elseif code ~= 2 then
+    error(message)
+end
 
 -- Personal settings follow shared and host settings; this is a real local file.
 local config_home = os.getenv("XDG_CONFIG_HOME")

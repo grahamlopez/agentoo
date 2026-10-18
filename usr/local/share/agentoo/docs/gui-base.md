@@ -337,16 +337,19 @@ Hyprland 0.56.2 with hyprutils 0.14.2 discovers
 is required. The shared entry loads, in order:
 
 1. `/etc/xdg/hypr/agentoo.lua`: tracked universal defaults and bindings.
-2. `/etc/agentoo/hyprland-host.lua`: optional, untracked explicit host selector.
+2. `/etc/xdg/hypr/hosts/NAME.lua`, when present, selected automatically by the
+   existing installer-managed `/etc/agentoo/target-host`.
 3. `$XDG_CONFIG_HOME/hypr/agentoo-local.lua`, or
    `~/.config/hypr/agentoo-local.lua`: optional real personal override.
 
-No host fragment is selected initially: monitors use preferred modes and auto
-placement/scaling. When hardware testing establishes a need, add a small tracked
-Lua fragment under `/etc/xdg/hypr/hosts/` and select it explicitly with a real
-local `/etc/agentoo/hyprland-host.lua` containing, for example,
-`require("/etc/xdg/hypr/hosts/thinktop.lua")`. Create the referenced fragment first.
-This selector is independent of the shell-format Portage `target-host` file.
+Monitors use preferred modes and auto placement/scaling by default. Host-specific
+exceptions belong in tracked `/etc/xdg/hypr/hosts/NAME.lua` fragments. The shared
+entry reads the documented `GENTOO_TARGET_HOST="name"` assignment from
+`/etc/agentoo/target-host` as data and loads that host's fragment if present.
+The installer already creates this one local host identity; no separate Hyprland
+selector or manual include is needed. Missing selectors/fragments retain shared
+defaults; malformed selectors produce a configuration error. The former
+`/etc/agentoo/hyprland-host.lua` selector is no longer read and may be removed.
 Personal scalar settings applied last override earlier values; bindings and
 monitor rules have their own semantics, so check duplicates when extending them.
 
@@ -430,16 +433,9 @@ Region selection is live, not a frozen preview. Test these commands from a norma
 user's Hyprland terminal after installing the updated set, then test the keys.
 
 Thinktop's physical F9 emits Print Screen; its F10 becomes F16 through keyd.
-The tracked `/etc/xdg/hypr/hosts/thinktop.lua` adds that F16 region alias. Select
-it using the existing local `/etc/agentoo/hyprland-host.lua` mechanism described
-above, preserving any existing selector content. On a host without a selector,
-create that root-owned, mode-0644 file containing:
-
-```lua
-require("/etc/xdg/hypr/hosts/thinktop.lua")
-```
-
-Reload Hyprland after creating the selector. Other hosts use Print Screen,
+The tracked `/etc/xdg/hypr/hosts/thinktop.lua` adds that F16 region alias and is
+loaded automatically when the existing target-host assignment names thinktop.
+Reload Hyprland after deployment. Other hosts use Print Screen,
 Shift+Print Screen or the standard region-capture symbol unless a demonstrated
 input quirk requires a host alias. Do not bind ordinary F10 universally.
 

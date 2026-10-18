@@ -425,3 +425,19 @@ The user clarified that @gui-base must remain the bare graphics foundation.
 Created @gui-desktop extending @gui-base and moved grim/slurp into it. This
 supersedes their initial placement in @gui-base. Screenshot dependency messages
 and installation instructions now name @gui-desktop; @laptop remains independent.
+
+### Automatic host selection correction (2026-10-18)
+
+The user reported F9 capturing successfully but F10 doing nothing. Live binding
+inspection showed no F16 binding: thinktop.lua was deployed but the previously
+documented second, local Hyprland selector did not exist. The user clarified that
+configuration changes must be tracked and take effect automatically on deployment.
+Replaced the separate selector mechanism with parsing the existing installer-owned
+`/etc/agentoo/target-host` assignment and including the matching tracked host
+fragment when present. Thinktop already selects `GENTOO_TARGET_HOST="thinktop"`.
+No new local file or manual include is required. Personal overrides still load
+last; generic hosts without fragments keep shared defaults. The obsolete
+hyprland-host.lua selector is no longer read. Shell text is never executed and
+host names cannot traverse paths. Lua syntax and mocked selection checks passed
+for thinktop, generic/missing fragments, absent selector and invalid path input.
+Deploy/reload and physical F10 acceptance remain pending.
