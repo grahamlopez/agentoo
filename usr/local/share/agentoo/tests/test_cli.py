@@ -41,6 +41,15 @@ class CliTest(unittest.TestCase):
                 self.assertIn('usage:', result.stdout.lower())
 
     def test_git_arguments_run_without_sudo(self):
+        commands = self.root / 'commands'
+        commands.mkdir()
+        repository = self.root / 'repository.git'
+        repository.mkdir()
+        (repository / 'HEAD').write_text('ref: refs/heads/main\n')
+        (commands / 'git').write_text((COMMANDS / 'git').read_text().replace(
+            '/var/lib/agentoo/repository.git', str(repository)))
+        (commands / 'require-root').write_text((COMMANDS / 'require-root').read_text())
+        self.entry.write_text(self.entry.read_text().replace(str(COMMANDS), str(commands)))
         fake_git = self.root / 'git'
         fake_git.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
         fake_git.chmod(0o755)

@@ -6,6 +6,11 @@ readonly WORK_TREE=/
 readonly SSH_REMOTE=git@github.com:grahamlopez/agentoo.git
 
 git_config() {
+  if (( EUID != 0 )) && [[ -d $GIT_DIR && ! -r $GIT_DIR/HEAD ]]; then
+    printf 'agentoo: cannot read %s/HEAD; system repository metadata requires root.\n' "$GIT_DIR" >&2
+    printf 'Run this system repository operation with sudo agentoo git ...\n' >&2
+    return 1
+  fi
   git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" "$@"
 }
 
