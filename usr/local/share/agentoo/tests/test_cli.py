@@ -32,26 +32,32 @@ class CliTest(unittest.TestCase):
         for args in [[], ['help'], ['help', 'git'], ['checkpoint', '--help'],
                      ['checkpoint', 'restore', '--help'], ['permissions', 'fix', '--help'],
                      ['permissions', 'check', '--help'], ['help', 'permissions'],
-                     ['secrets', 'install', '--help']]:
+                     ['secrets', 'install', '--help'], ['help', 'power'],
+                     ['help', 'backlight'], ['help', 'screenshot']]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn('requesting sudo', result.stderr)
-                self.assertIn('Usage:', result.stdout)
+                self.assertIn('usage:', result.stdout.lower())
 
-    @unittest.skipIf(os.geteuid() == 0, 'requires an ordinary user')
-    def test_privileged_commands_reenter_with_exact_arguments(self):
-        for args in [('git', 'commit', '-m', 'two words; $HOME'),
-                     ('checkpoint', 'list'), ('permissions', 'fix'),
-                     ('permissions', 'check'),
-                     ('permissions', 'check', '--root', '/a b'),
-                     ('secrets', 'install', '--profile', '/a b', '--user', 'graham', 'ssh')]:
-            with self.subTest(args=args):
-                result = self.run_cli(*args)
-                self.assertEqual(result.returncode, 37)
-                self.assertEqual(result.stdout.splitlines(),
-                                 ['--', '/usr/local/bin/agentoo', *args])
-                self.assertIn('requires root; requesting sudo authorization.', result.stderr)
+    def test_git_arguments_run_without_sudo(self):
+        fake_git = self.root / 'git'
+        fake_git.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+        fake_git.chmod(0o755)
+        result = self.run_cli('git', 'commit', '-m', 'two words; $HOME')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-3:],
+                         ['commit', '-m', 'two words; $HOME'])
+        self.assertNotIn('requesting sudo', result.stderr)
+
+    def test_operation_requests_sudo_with_exact_arguments(self):
+        fake_id = self.root / 'id'
+        fake_id.write_text('#!/bin/sh\necho 1000\n')
+        fake_id.chmod(0o755)
+        result = self.run_cli('git', 'enable-write')
+        self.assertEqual(result.returncode, 37, result.stderr)
+        self.assertEqual(result.stdout.splitlines(),
+                         ['--', 'bash', str(COMMANDS / 'git'), 'enable-write'])
 
     def test_check_does_not_accept_fix_override(self):
         result = subprocess.run(

@@ -9,9 +9,11 @@ git_config() {
   git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" "$@"
 }
 
+source "$(dirname "$0")/require-root"
+
 case ${1:-} in
   setup-hooks)
-    (( EUID == 0 )) || { printf 'setup-hooks requires root\n' >&2; exit 1; }
+    require_root "git setup-hooks" bash "$0" "$@"
     [[ $(git_config rev-parse --show-toplevel) == / ]] || exit 1
     hooks=/usr/local/share/agentoo/git-hooks
     for hook in pre-commit post-checkout post-merge post-rewrite; do
@@ -25,6 +27,7 @@ case ${1:-} in
     printf 'agentoo permission hooks enabled.\n'
     ;;
   enable-write)
+    require_root "git enable-write" bash "$0" "$@"
     git_config remote set-url origin "$SSH_REMOTE"
     printf 'origin now uses SSH for fetch and push: %s\n' "$SSH_REMOTE"
     ;;

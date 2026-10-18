@@ -1,0 +1,34 @@
+#!/bin/sh
+# Interactive Wayland captures, saved to files only.
+set -eu
+case "${1-}" in -h|--help) echo 'Usage: agentoo screenshot {full|region} (saved under ~/Downloads/Screenshots)'; exit 0 ;; esac
+if [ "$#" -ne 1 ]; then
+    echo "Usage: agentoo screenshot full|region" >&2
+    exit 2
+fi
+case "$1" in
+    full) ;;
+    region) ;;
+    *) echo "Usage: agentoo screenshot full|region" >&2; exit 2 ;;
+esac
+command -v grim >/dev/null || { echo "Install @gui-desktop for grim" >&2; exit 1; }
+if [ "$1" = region ]; then
+    command -v slurp >/dev/null || { echo "Install @gui-desktop for slurp" >&2; exit 1; }
+    # A cancelled selection must never fall through to a full-screen capture.
+    geometry=$(slurp) || exit "$?"
+    [ -n "$geometry" ] || exit 1
+fi
+directory=${HOME:?HOME is required}/Downloads/Screenshots
+umask 077
+mkdir -p "$directory"
+output=$(mktemp --suffix=.png "$directory/Screenshot-$(date +%Y%m%d-%H%M%S)-XXXXXX")
+trap 'rm -f -- "$output"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+if [ "$1" = region ]; then
+    grim -g "$geometry" "$output"
+else
+    grim "$output"
+fi
+trap - EXIT INT TERM HUP
+printf '%s\n' "$output"

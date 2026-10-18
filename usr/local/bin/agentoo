@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly -a original_args=("$@")
 readonly commands=/usr/local/share/agentoo/commands
 usage() {
     cat <<'HELP'
 Usage: agentoo <command> [options]
 
-Manage Agentoo system configuration, checkpoints, and secrets.
+Manage Agentoo system configuration and desktop utilities.
 
 Commands:
   git          Run Git against the Agentoo system repository
   checkpoint   Create, list, inspect, and restore system checkpoints
   permissions  Check or repair managed ownership and permissions
   secrets      Install secret files from Proton Pass
+  backlight    Adjust display brightness
+  screenshot   Capture all displays or a selected region
+  power        Show battery and CPU power status
   help         Show help for a command
 
 Repository:
@@ -39,6 +41,13 @@ Secrets:
   secrets install --profile FILE --user USER CATEGORY...
                          Install selected categories; use "all" for every row
 
+Desktop and power:
+  backlight {up|down} [CONTROLLER]
+                         Adjust perceived brightness by 5%
+  screenshot {full|region}
+                         Save a capture under ~/Downloads/Screenshots
+  power                  Show battery draw, runtime, health, and CPU settings
+
 Options:
   -h, --help             Show help
 
@@ -50,8 +59,9 @@ Examples:
   sudo agentoo permissions fix
   sudo agentoo secrets install --profile FILE --user graham ssh github
 
-Help runs without elevation. All other operations request sudo authorization
-when needed. Secret installation confirms file replacement.
+Operations request sudo only when needed. Arbitrary Git commands run as the
+current user; use sudo explicitly for protected repository writes.
+Secret installation confirms file replacement.
 
 Run 'agentoo help <command>' or 'agentoo <command> --help' for details.
 HELP
@@ -67,11 +77,10 @@ if [[ ${1:-} == help ]]; then
 fi
 case ${1:-} in
     ''|-h|--help) usage; exit 0 ;;
-    git|checkpoint|permissions|secrets) command=$1; shift ;;
+    git|checkpoint|permissions|secrets|backlight|screenshot|power) command=$1; shift ;;
     *) fail "unknown command: $1 (see 'agentoo --help')" ;;
 esac
 
-needs_root=1
 case $command in
     git)
         if (( $# == 0 )) || [[ ${1:-} == -h || ${1:-} == --help ]]; then
@@ -109,16 +118,8 @@ case $command in
         ;;
 esac
 
-# Subcommand help must not prompt for sudo, including secrets install --help.
-if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-    needs_root=0
-fi
-if (( needs_root && EUID != 0 )); then
-    printf 'agentoo: %s requires root; requesting sudo authorization.\n' "$command" >&2
-    # Re-enter with the original public arguments, preserving quoting and boundaries.
-    exec sudo -- /usr/local/bin/agentoo "${original_args[@]}"
-fi
 case $command in
     permissions) exec python3 "$commands/permissions.py" "$@" ;;
+    power) exec python3 "$commands/power.py" "$@" ;;
     *) exec bash "$commands/$command" "$@" ;;
 esac

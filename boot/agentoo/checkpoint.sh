@@ -21,6 +21,7 @@ Creation is online-only. Restore requires recovery media and unmounted targets.
 List scans Btrfs file extents for total, exclusive and shared sizes (EFI excluded).
 EOF
 }
+parse_args() {
 ACTION=${1:-}
 case "$ACTION" in --help|-h|'') usage; exit 0;; create|list|inspect|restore) shift;; *) die "unknown command: $ACTION";; esac
 NAME=
@@ -72,7 +73,12 @@ H=${H:-$HOME_DEFAULT}
 [ "$ACTION" != create ] || [ -z "$DEVICE" ] || die 'offline creation is deferred'
 CLEAN=${CLEAN:-$S}
 [ "$ACTION" != create ] || [ "$CLEAN" != 1 ] || [ "$S" = 1 ] || die 'cleaning requires system capture'
-[ "$(id -u)" = 0 ] || die 'root required; use agentoo checkpoint or run this recovery script as root'
+}
+parse_args "$@"
+if [ "$(id -u)" != 0 ]; then
+    printf 'agentoo: checkpoint requires root; requesting sudo authorization.\n' >&2
+    exec sudo -- sh "$0" "$@"
+fi
 for TOOL in btrfs findmnt mount umount flock mktemp sha256sum tar gzip awk sort cmp readlink stat pgrep; do
     command -v "$TOOL" >/dev/null || die "missing tool: $TOOL"
 done

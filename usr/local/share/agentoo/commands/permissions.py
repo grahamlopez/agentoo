@@ -18,7 +18,7 @@ def validate_relative(relative):
     return parts
 
 
-def open_path(root, relative, directory=False):
+def open_path(root, relative, directory=False, metadata=False):
     """Walk using directory descriptors; reject symlinks in every component."""
     parts = validate_relative(relative)
     fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -28,7 +28,7 @@ def open_path(root, relative, directory=False):
                             dir_fd=fd)
             os.close(fd)
             fd = child
-        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+        flags = (os.O_PATH if metadata else os.O_RDONLY) | os.O_NOFOLLOW | os.O_NONBLOCK
         if directory:
             flags |= os.O_DIRECTORY
         leaf = os.open(parts[-1], flags, dir_fd=fd)
@@ -123,6 +123,11 @@ def managed_entries(rules, tracked):
     return entries, problems
 
 
+def elevate():
+    print('agentoo: permissions requires root; requesting sudo authorization.', file=sys.stderr, flush=True)
+    os.execvp('sudo', ['sudo', '--', sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
 def main():
     parser = argparse.ArgumentParser(prog="agentoo permissions", description=__doc__)
     modes = parser.add_mutually_exclusive_group()
@@ -134,13 +139,13 @@ def main():
     if not root.is_dir():
         parser.error("target root must be a directory")
     if args.fix and os.geteuid() != 0:
-        parser.error("--fix requires root; no automatic elevation is performed")
+        elevate()
     rules = load_policy(root)
     entries, problems = managed_entries(rules, tracked_files(root))
     changes = []
     for (relative, directory), expected in sorted(entries.items()):
         try:
-            fd = open_path(root, relative, directory)
+            fd = open_path(root, relative, directory, metadata=True)
             try:
                 current = os.fstat(fd)
             finally:
@@ -150,6 +155,10 @@ def main():
                 changes.append((relative, directory, expected, (current.st_dev, current.st_ino)))
                 print(f"MISMATCH /{relative}: {actual[0]}:{actual[1]} {actual[2]:04o}"
                       f" -> {expected[0]}:{expected[1]} {expected[2]:04o}")
+        except PermissionError:
+            if os.geteuid() != 0:
+                elevate()
+            raise
         except (ValueError, OSError) as error:
             problems.append(f"/{relative}: {error}")
     if problems:
@@ -177,6 +186,11 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except PermissionError as error:
+        if os.geteuid() != 0:
+            elevate()
+        print(f"ERROR {error}", file=sys.stderr)
+        sys.exit(1)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f"ERROR {error}", file=sys.stderr)
         sys.exit(1)

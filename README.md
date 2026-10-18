@@ -4,10 +4,18 @@ An opinionated Gentoo distribution. See the
 [project structure and configuration philosophy](usr/local/share/agentoo/docs/README.md)
 and [development board](usr/local/share/agentoo/kanban/README.md).
 
-Use `agentoo --help` for the unified system CLI. Commands include `agentoo git`,
-`agentoo checkpoint`, `agentoo permissions check|fix`, and `agentoo secrets install`.
-Help runs directly; all other operations announce and request
-sudo authorization when invoked without root privileges. Git runs in root's
-context. Secrets still confirm selected file replacements before Proton login.
-The secrets implementation is kept in `usr/local/share/agentoo/commands/secrets`;
-the entry point only handles command dispatch and elevation.
+Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
+secrets, display backlight, screenshots, and power status.
+Operations request sudo only when needed; help and desktop utilities run as the
+current user. Arbitrary Git commands also run as the current user: use explicit
+`sudo agentoo git ...` for protected system repository writes. Git may require
+root even for reads that traverse protected files or access its database.
+Secrets confirm selected file replacements before Proton login.
+
+`agentoo power` reports each battery's charge, charging/discharging wattage,
+estimated discharge runtime, and health, plus CPU governor, energy preference,
+and platform profile where available. Battery wattage is not wall power;
+unavailable kernel measurements are labeled explicitly.
+
+The old `agentoo-backlight` and `agentoo-screenshot` names remain compatibility
+wrappers. Screenshot files go to `~/Downloads/Screenshots`.

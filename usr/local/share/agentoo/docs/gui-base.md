@@ -405,15 +405,15 @@ or reload rules and trigger the backlight add event before testing.
 
 Despite its command name `xbacklight`, acpilight uses sysfs and needs neither X
 nor sudo in the key bindings. Shared bindings use standard brightness key symbols,
-not laptop F-key positions. `agentoo-backlight` selects a single display backlight
+not laptop F-key positions. `agentoo backlight` selects a single display backlight
 under `/sys/class/backlight`, quietly does nothing if none exists, and refuses an
 ambiguous selection when multiple devices exist. A host override can replace the
-bindings with `agentoo-backlight up CONTROLLER` and `down CONTROLLER`.
+bindings with `agentoo backlight up CONTROLLER` and `down CONTROLLER`.
 Keyboard LEDs are never selected as a display fallback.
 
 Adjustments use acpilight's perceived scale in steps of 5, bounded by the utility
 to 0–100 on that scale (minimum raw level 1, not panel-off). Inspect controllers
-with `xbacklight -list`; run `agentoo-backlight down` and `up` as the normal user
+with `xbacklight -list`; run `agentoo backlight down` and `up` as the normal user
 before testing the physical keys. Confirm visible changes, held-key repetition,
 usable minimum and maximum levels, and recovery after suspend/resume. A low
 resolution or unsuitable panel curve may need a host-specific adjustment.
@@ -424,8 +424,8 @@ resolution or unsuitable panel curve may need a host-specific adjustment.
 `gui-apps/grim` and `gui-apps/slurp`. Install it with
 `sudo emerge --ask @gui-desktop`; keep `@gui-base` as the minimal graphics/audio
 foundation and `@laptop` as an independent hardware-utility set. Run
-`agentoo-screenshot full` to capture all outputs in one image, or
-`agentoo-screenshot region` to drag a rectangle. Files are saved under
+`agentoo screenshot full` to capture all outputs in one image, or
+`agentoo screenshot region` to drag a rectangle. Files are saved under
 `~/Downloads/Screenshots`, created on demand, with timestamped unique PNG names
 and owner-only file permissions. The helper neither copies to the clipboard nor
 starts a background service. Cancellation or capture failure leaves no image.

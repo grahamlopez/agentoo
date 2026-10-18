@@ -1,7 +1,6 @@
 #!/bin/sh
 # Recovery media can invoke the EFI implementation directly with sh.
 set -eu
-[ "$(id -u)" = 0 ] || { echo 'agentoo: checkpoint requires root; use agentoo checkpoint.' >&2; exit 1; }
 tool=/boot/agentoo/checkpoint.sh
 [ "$(findmnt -rn --uniq -o TARGET --target /boot)" = /boot ] &&
 [ "$(findmnt -rn --uniq -o FSTYPE --target /boot)" = vfat ] &&
