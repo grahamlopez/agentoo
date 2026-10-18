@@ -1,12 +1,26 @@
 # Make Hyprland media and system function keys work
 
 Created: 2026-10-16
-Status: Open
+Status: Completed (current scope; remaining keys deferred)
 Opened: 2026-10-16
+Completed: 2026-10-18
+
+## Closure decision
+
+The user closed this card with the currently needed controls working on thinktop.
+F7, F8, F11, F12 and additional special keys/Fn combinations will be implemented
+as needed rather than blocking closure. The original completion checklist below
+is retained as investigation scope, not a claim that every item passed.
+
+Preserve the key-event inventory, keyd/XKB translations, initramfs/udev findings,
+ALSA LED initialization, PipeWire startup/default-device findings, shared/host
+configuration arrangement and reported physical results as reference for other
+hosts. No other-host acceptance or unreported repeat/bounds/resume tests are
+implied. The initramfs follow-up remains open separately on card 020.
 
 ## Current status (2026-10-18)
 
-The card remains Open. User-reported working on thinktop:
+At closure, user-reported working on thinktop:
 
 - F1 speaker mute and its LED; normal ALSA startup restores LED associations.
 - F2/F3 speaker volume.

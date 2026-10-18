@@ -5,7 +5,7 @@ Status: Backlog
 
 ## Context
 
-The [Hyprland function-key investigation](../Open/019-hyprland-media-system-keys.md)
+The [Hyprland function-key investigation](../Completed/019-hyprland-media-system-keys.md)
 found that thinktop's v0.2 embedded genkernel initramfs hardware database maps
 ThinkPad microphone scan code `0x1a` to `F20`. The kernel driver defaults to
 `MICMUTE`; the live system's database does not override that scan code.
