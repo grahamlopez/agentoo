@@ -43,6 +43,7 @@ Nerd Font groups repeat identical icons in three fixed contexts: spaced (room
 to expand), adjacent (no separating cells), and bounded (`|icon|`, single-cell
 fit). Kitty can enlarge symbols into following spaces, so compare the same
 context across fonts; a size difference between contexts is expected.
+The timer symbol `⏲` (U+23F2) is tested under Unicode, outside the Nerd icons.
 Detailed codepoint tables are hidden by default; add `--codepoints` to terminal
 tests (`--columns` accepts 1–6 table columns to fit 80 columns).
 Firefox keeps codepoints in expandable details. `width` supplies terminal
