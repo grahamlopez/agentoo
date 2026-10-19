@@ -1,180 +1,169 @@
 # Fonts
 
-`agentoo fonts` reports font configuration. It never installs or activates fonts
-implicitly. Use `agentoo help fonts` for commands and command-specific `--help`
-for options. For example, `agentoo fonts preview --help` describes preview
-arguments, target-specific options, defaults, and acceptance behavior.
-`agentoo fonts test` defaults to the full `all` collection and
-prints in the current terminal. Detection recognizes Kitty and Linux console;
-inside tmux it checks attached client terminal types rather than inherited Kitty
-variables. Ambiguous or other terminals (including SSH) still receive visual
-tests without needing a target. Firefox previews always require
-`--target firefox`. Configuration commands require an identifiable supported
-target or an explicit `--target`. Python 3 and fontconfig tools are required. Kitty previews need
-Kitty; console operations need kbd's `setfont`; HTML opening detects `firefox` or Gentoo’s `firefox-bin` launcher.
+Agentoo provides installed-font diagnostics, Kitty previews and selection, and a
+read-only Firefox comparison. Portage owns installation and removal. Python 3 and
+fontconfig are required; Kitty operations require `kitty` and `kitten`. Firefox
+opening detects `firefox` or Gentoo's `firefox-bin`.
 
 ```sh
-agentoo fonts status --target kitty
-agentoo fonts status --target console
-agentoo fonts status --target firefox
-agentoo fonts test all --target console
-agentoo fonts test greek --target kitty
-agentoo fonts test all --target firefox
-agentoo fonts test kaomoji --target firefox --no-open --output /tmp/kaomoji.html
-agentoo fonts coverage 'Liberation Mono' --suite greek
-agentoo fonts explain 'ᾧ' --font 'Liberation Mono'
-agentoo fonts list --available
+agentoo fonts                         # resolved default Kitty settings
+agentoo fonts list                   # installed families and styles
+agentoo fonts list ubuntu
 agentoo fonts list --nerd
-agentoo fonts install ubuntu-sans-mono
-agentoo fonts preview 'UbuntuSansMono Nerd Font' --target kitty --size 12 --style Medium
-agentoo fonts set 'UbuntuSansMono Nerd Font' --target kitty --size 12 --style Medium
-agentoo fonts size 11 --target kitty
-agentoo fonts choose --target kitty
-agentoo fonts install terminus
-agentoo fonts preview ter-v24n --target console
+agentoo fonts test                   # samples in the current terminal, including tmux/SSH
+agentoo fonts test greek
+agentoo fonts test confusables
+agentoo fonts test nerd --codepoints --columns 4
+agentoo fonts preview                # current configuration, separate Kitty window
+agentoo fonts preview 'Liberation Mono' --size 11
+agentoo fonts set                    # native chooser, then adjustment preview
+agentoo fonts set 'Liberation Mono' --size 11 --style Regular
 ```
-
-The shared visual collection includes Greek and polytonic Greek in precomposed
-and decomposed forms, combining accents/breathings/iota subscripts, Braille,
-thin/heavy/double box drawing, Unicode symbols, Nerd Font icons, emoji sequences,
-and kaomoji. Samples use labeled groups designed for an 80-column terminal,
-including side-by-side precomposed/combining Greek and thin/heavy/double borders.
-Nerd Font groups repeat identical icons in three fixed contexts: spaced (room
-to expand), adjacent (no separating cells), and bounded (`|icon|`, single-cell
-fit). Kitty can enlarge symbols into following spaces, so compare the same
-context across fonts; a size difference between contexts is expected.
-The timer symbol `⏲` (U+23F2) is tested under Unicode, outside the Nerd icons.
-Detailed codepoint tables are hidden by default; add `--codepoints` to terminal
-tests (`--columns` accepts 1–6 table columns to fit 80 columns).
-Firefox keeps codepoints in expandable details. `width` supplies terminal
-dimensions and rulers. Printed samples
-are not automated success checks. `coverage` checks the distinct sample
-codepoints against one fontconfig-selected face; it cannot validate shaping,
-ligatures, fallback appearance, emoji sequences, or real application rendering.
-The matched face is always shown so fontconfig substitution is visible.
-
-## Read-only fontconfig diagnostics
-
-`agentoo fonts status` includes enabled system rules from
-`eselect fontconfig list`, falling back to `/etc/fonts/conf.d` when unavailable.
-It reports potential conflicts among known hinting, antialiasing, subpixel,
-LCD-filter, and bitmap presets. These are review hints: rule order and local
-configuration determine the effective result. Custom `FONTCONFIG_FILE` and
-`FONTCONFIG_PATH` environments are called out explicitly.
-
-```sh
-agentoo fonts doctor
-agentoo fonts doctor --suite kaomoji
-agentoo fonts doctor --suite greek
-```
-
-Doctor reports installed diagnostic tools, generic font matches, visible face
-counts, font directories, actually loaded rules via `fc-conflist` when available,
-sample codepoints with no visible font coverage, and representative character
-coverage candidates. `--suite` defaults to all. Fontconfig sees the environment
-of the invoking process, which may differ from a sandboxed browser. A visible
-font covering a codepoint does not guarantee Firefox uses it or that combining
-marks/emoji sequences render well. Doctor never enables/disables rules, refreshes
-caches, installs fonts, or modifies application preferences. The Linux console
-uses a separate font mechanism.
 
 ## Installation
 
-The small catalog uses the latest official Nerd Fonts GitHub release. User
-installation is under `$XDG_DATA_HOME/fonts/agentoo` (default
-`~/.local/share/fonts/agentoo`); `--system` uses `/usr/local/share/fonts/agentoo`
-and requests sudo as needed. `--variant standard|mono|propo` defaults to
-standard. Symbols-only archives are installed together. Upstream SHA-256 asset
-digests or release checksum files are verified when provided; otherwise the
-command explicitly reports that no upstream checksum was available. Licenses
-are retained, and a manifest records the downloaded version and hash.
-Reinstallation replaces the same managed catalog entry/variant. Installation
-never changes application configuration. Removal prompts and only removes a
-manifest-bearing Agentoo directory. Check active selections before removing.
-`noto-cjk`, `noto-emoji`, and `unifont` are also available as Gentoo system
-packages for broader fallback coverage. Package installation requests privileges
-and uses Portage confirmation regardless of the user-font default.
-Terminus installation uses `emerge --ask media-fonts/terminus-font`; manage
-package removal with Portage. Nerd Font TTF/OTF files are not console PSF fonts.
+The Agentoo overlay provides five versioned Nerd Font packages:
 
-## Kitty and console
+- `media-fonts/ubuntu-sans-mono-nerd`
+- `media-fonts/ubuntu-mono-nerd`
+- `media-fonts/jetbrains-mono-nerd`
+- `media-fonts/fira-code-nerd`
+- `media-fonts/liberation-mono-nerd` (upstream family: Literation Mono)
 
-Kitty changes affect only the real user `agentoo-fonts.conf` fragment and its
-include in the user `kitty.conf`. Existing system settings, symbol maps and
-other includes are preserved. Reload Kitty's configuration or open a new window
-after applying. Later settings or launch-time overrides can supersede the
-fragment. The native chooser edits this same fragment.
-
-Kitty preview opens a separate window with a temporary font override and the
-sample collection. Press `a` to save, `r`/Escape/Ctrl+C to close without saving.
-Console preview temporarily saves the active font/map, displays samples, then
-waits indefinitely for those same keys. It restores the snapshot before saving
-an accepted selection. Ordinary interruption restores too; forced process kill
-or power loss cannot run cleanup. Console preview must run interactively; use
-`--console /dev/ttyN` to identify a console explicitly from another terminal.
-No tmux settings are changed. Console persistence changes only FONT in
-`/etc/vconsole.conf`.
-
-There is no persistent undo history or backup collection. Each applied change
-prints a shell-quoted revert command. Keep that command if needed. When no
-console FONT was configured previously, the printed command resets to the boot
-default and clears FONT; it cannot recreate an unidentified manually loaded
-font after the temporary snapshot has been deleted. Do not remove a font needed
-by a revert command.
-
-## Firefox
+Each offers `normal`, `mono`, and `proportional` USE flags; `mono` is enabled by
+default and at least one is required. These select icon sizing, not the width of
+the Latin programming font. Upstream archives bundle the variants, so flags trim
+installed files rather than download size. Only the named family is installed:
+Liberation's Sans/Serif and JetBrains' separate NL family are excluded.
 
 ```sh
-agentoo fonts preview 'Noto Sans' --target firefox
-agentoo fonts fallback show --target firefox --role monospace --script x-western
-agentoo fonts fallback add 'Symbols Nerd Font' --target firefox --role monospace --script x-western
-agentoo fonts fallback add 'Noto Sans' --target firefox --role sans-serif --script x-unicode
-agentoo fonts set 'Liberation Mono' --target firefox --role monospace
+emerge --ask media-fonts/jetbrains-mono-nerd::agentoo
+# In /etc/portage/package.use/fonts, for example:
+# media-fonts/jetbrains-mono-nerd normal mono -proportional
 ```
 
-The local HTML page compares existing generic fonts with an adjustable candidate
-stack and size. It includes a fallback mode, codepoints, and all the shared
-samples. Firefox does not automatically use arbitrary system fonts for private-use Nerd icons.
-When Symbols Nerd Font Mono or Symbols Nerd Font is installed, tests initialize
-the candidate side with that family after the generic font. Otherwise both sides
-start with the generic font. Explicit previews use the requested candidate.
-The generic-only side remains a diagnostic comparison; success on the candidate
-side does not enable Nerd icons elsewhere in Firefox.
-The page does not mutate preferences. After inspecting, close Firefox and return
-to the terminal: `a` saves the command-line family/role/script; `r`/Escape/Ctrl+C
-leaves preferences unchanged. HTML control adjustments are visual only and do
-not change the selection saved by the CLI. Use `preview --fallback` to accept
-as a fallback instead of changing the primary font. `--no-open` only generates
-the page and never prompts or applies settings. Inspect actual rendered fonts
-with Firefox Inspector's Fonts panel; CSS stacks and fontconfig candidates alone
-cannot establish which font rendered each character. HTML previews are stored
-in a single cache file unless `--output` supplies another path. No local server
-or extension is needed.
+These packages carry `~amd64` and `~arm64` keywords, accepted by Agentoo in
+`/etc/portage/package.accept_keywords/common`. On other systems, accept the
+appropriate testing keyword before installation. All download hashes are pinned in
+Portage manifests. Original licenses are retained. Use normal Portage operations
+to upgrade, change variants, or remove fonts. Installation never selects a font.
 
-Persistent Firefox settings require the selected profile to be closed.
-`--profile NAME` selects explicitly; the installation-default profile is used
-only when unambiguous. `set` changes `font.name.ROLE.SCRIPT`; `fallback` edits
-`font.name-list.ROLE.SCRIPT` while leaving primary font preferences alone.
-Default role/script are monospace/x-western. Changes take effect on next start.
-Exact font-pref revert commands use the `preference` subcommand and update both
-user.js and persisted prefs.js when clearing a preference. Existing unrelated
-preferences are preserved.
+Gentoo's `media-fonts/symbols-nerd-font` supplies standalone Nerd symbols and is
+already a Kitty dependency. Unifont and Noto Emoji provide broad Unicode and
+color emoji coverage. A patched primary font is optional in Kitty. Restart
+applications after installing fonts if their discovery state is stale.
 
-Fallback changes are script/role specific, not a universal Unicode switch. An
-explicit list replaces that preference's built-in list; it cannot guarantee that
-a website, privacy setting, or already-present primary glyph will use the new
-font. Keep Latin reference text visible and test actual problem pages. The tool
-does not force website fonts, change browser chrome, disable privacy protection,
-or install user-wide fontconfig rules. Nerd Font icons require compatible PUA
-codepoints; Unicode support alone does not establish Nerd Font coverage.
+## Kitty preview and selection
 
-References: [Nerd Fonts releases](https://github.com/ryanoasis/nerd-fonts/releases),
-[Firefox font preferences](https://github.com/mozilla-firefox/firefox/blob/main/modules/libpref/init/all.js),
-[Firefox Fonts inspector](https://firefox-source-docs.mozilla.org/devtools-user/page_inspector/how_to/edit_fonts/).
+`set` without a family launches the native `kitten choose-fonts` against a
+**temporary copy** of the user's font fragment. The chooser reads the current
+fragment and supplies its native family, face, feature, and variable-axis UI.
+The result continues into the same adjustment preview used by `preview`.
+Chooser completion alone never saves the real configuration.
+
+The dedicated preview window loads normal system/user Kitty configuration plus
+the temporary fragment. Existing symbol maps and fallback policy therefore
+remain in effect. It runs outside tmux, including when invoked from tmux.
+Preview represents the default launch configuration, not existing instances'
+command-line overrides or unsaved runtime adjustments.
+
+Controls:
+
+- `+` / `-`: point size in half-point steps, bounded to 4–96.
+- `h` / `l`: decrease/increase cell width.
+- `j` / `k`: decrease/increase cell height.
+- `r`: reset size and spacing to the preview's starting values.
+- `s`: save the selection and close.
+- `q`, Escape, Ctrl+C, or closing the window: discard temporary changes.
+
+Spacing retains the original unit (percent, pixels, or points). Changes alter
+the cell geometry, not the glyph's aspect ratio; tight cells can clip glyphs.
+Only adjusted spacing properties are rewritten. Samples show confusables,
+ligatures, density rulers, Greek including combining forms, symbols, Braille,
+borders, Nerd icons in three spacing contexts, emoji sequences, and kaomoji.
+Scroll to inspect long collections or use `--suite` to focus on one.
+
+Run `preview` twice and tile the resulting OS windows for side-by-side font or
+size comparisons. Tmux panes share their terminal's font and cannot provide
+independent font selections.
+
+A save updates only `~/.config/kitty/agentoo-fonts.conf` (respecting
+`XDG_CONFIG_HOME`) and adds its include to user `kitty.conf` if missing. Existing
+unrelated settings and `symbol_map` entries are preserved. Explicit `set FONT`
+checks that the installed family/style can be selected by Kitty instead of
+silently accepting a substituted family. If the fragment changed during the
+preview, saving stops rather than overwriting that newer change.
+
+Saving sends Kitty's native reload signal to **all Kitty processes owned by the
+current user**. It does not change other users' configurations. Instances using
+custom config files or launch-time overrides can retain their own settings; the
+command reports this limitation. Reloading also applies other pending edits in
+each instance's configuration. No global remote-control permission is needed;
+only the isolated preview enables remote control on its private temporary socket.
+
+Every save prints an exact fragment revert command using `kitty-config --value`;
+keep it if needed. Reverting reloads all of the user's Kitty instances too.
+There is no persistent backup history. Configure fallback overrides using native
+Kitty `symbol_map` syntax in the fragment or another user include. Automatic
+fallback remains the default; Agentoo does not create global fontconfig policy.
+
+## Agent diagnostics
+
+```sh
+agentoo fonts doctor
+agentoo fonts doctor --suite greek --json
+agentoo fonts doctor --text 'ಠ ⠋ ᾧ 😀'
+agentoo fonts doctor --render --suite nerd --output /tmp/nerd-render.log
+agentoo fonts coverage 'Liberation Mono' --suite greek
+agentoo fonts explain 'ᾧ' --font 'Liberation Mono'
+```
+
+Doctor reports enabled and actually loaded fontconfig rules, potential conflicts,
+custom fontconfig environment, visible faces/files and Portage owners, installed
+font package versions/USE flags, effective generic matches including rendering
+properties, and sample-codepoint coverage. It also asks Kitty to resolve its
+normal configuration using Kitty's own parser: selected faces/files, include
+paths, symbol maps, ligatures/features, cell geometry, composition, and drawing
+settings. This helper uses Kitty's Python API; failures are reported without
+hiding the remaining diagnostics. It can execute existing Kitty `geninclude`
+scripts just as a normal launch does.
+
+`--text` adds Unicode names, categories, combining classes, normalization forms,
+covering families, and representative fontconfig matches for the exact problem.
+`--json` exposes the same evidence in structured form. Coverage and fontconfig
+matches do not prove actual rendering, shaping, correct private-use icons, or
+emoji composition. Kitty itself draws some terminal symbols.
+
+`--render` explicitly opens a fresh diagnostic Kitty window with fallback
+tracing. It cannot save settings. Close it with `q`; the captured trace records
+runtime fallback decisions for those samples, not every existing Kitty window.
+An omitted `--output` creates a unique trace file in the temporary directory.
+Doctor does not install fonts, refresh caches, or alter rendering rules.
+
+## Firefox preview
+
+```sh
+agentoo fonts preview --target firefox
+agentoo fonts preview 'Symbols Nerd Font Mono' --target firefox --suite nerd
+agentoo fonts test all --target firefox --no-open --output /tmp/fonts.html
+```
+
+The local HTML page compares a generic font with an adjustable candidate stack,
+size, and fallback order. Tests start with an installed Symbols Nerd Font after
+the generic font on the candidate side when available. Firefox requires an
+explicit compatible font for private-use Nerd icons; success on the candidate
+side does not enable icons elsewhere in the browser. Use Inspector → Fonts to
+identify actual rendered fonts. Browser previews do not reproduce Kitty's
+rendering. They never edit Firefox preferences or prompt to accept a selection.
+
+Console configuration, Firefox preference editing, and the custom font downloader
+have been removed. Existing console/browser settings and old user-installed font
+files are left untouched; inspect old installations before removing them manually.
 
 ## Development checks
 
 ```sh
 python3 -m unittest discover -s usr/local/share/agentoo/fonts/tests -v
-python3 usr/local/share/agentoo/commands/fonts.py test all --target firefox --no-open --output /tmp/fonts.html
+python3 usr/local/share/agentoo/commands/fonts.py doctor --json
+python3 usr/local/share/agentoo/commands/fonts.py preview --target firefox --no-open --output /tmp/fonts.html
 ```

@@ -217,3 +217,15 @@ Check shell syntax, Portage dependency metadata, and install/removal messages,
 including suppression during replacement. On Gentoo, run package QA and emerge
 the dependency packages, then install upstream clients as a normal user and check
 versions and sandbox operation. Do not run upstream installers from Portage phases.
+
+## Nerd Fonts
+
+Five `media-fonts/*-nerd` packages provide Ubuntu Sans Mono, Ubuntu Mono,
+JetBrains Mono, Fira Code, and Liberation Mono (Literation Mono) from pinned
+upstream Nerd Fonts releases. `normal`, `mono` (default), and `proportional` USE
+flags select installed variants. At least one variant is required. The shared
+`agentoo-nerd-font` eclass installs only each ebuild's exact family prefix and
+retains the archive's licenses; Gentoo continues to own standalone symbols.
+
+See [font usage and diagnostics](../docs/fonts.md) for commands and selection.
+These packages install fonts only, with no application configuration changes.

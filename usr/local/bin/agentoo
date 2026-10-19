@@ -16,7 +16,7 @@ Commands:
   backlight    Adjust display brightness
   screenshot   Capture all displays or a selected region
   power        Show battery and CPU power status
-  fonts        Test, install, preview, and select fonts
+  fonts        Diagnose, preview, and select installed fonts
   help         Show help for a command
 
 Repository:
@@ -51,16 +51,17 @@ Desktop and power:
   power show-all         Show detailed battery and CPU power settings
 
 Fonts:
-  fonts doctor [--suite SUITE]
-                         Read-only fontconfig policy and coverage diagnostics
-  fonts test [SUITE]      Show all visual samples by default in the current terminal
-  fonts test --target firefox
-                         Open the shared samples in Firefox
-  fonts list --available Show the installation catalog
-  fonts preview FONT --target {kitty|console|firefox}
-                         Try an installed font; accept or revert interactively
+  fonts doctor [--suite SUITE] [--text TEXT] [--json]
+                         Report discovery, matching, rendering policy, and Kitty settings
+  fonts doctor --render  Open a fresh Kitty sample window with fallback tracing
+  fonts test [SUITE]      Print visual samples in the current terminal
+  fonts preview [FONT]   Adjust size and cell spacing in a dedicated Kitty window
+  fonts preview --target firefox
+                         Open a read-only browser comparison
+  fonts set [FONT]       Choose interactively, or apply an explicit selection
+  fonts list [FILTER]    List installed font families and styles
   fonts <subcommand> --help
-                         Explain every argument, target scope, and default
+                         Explain arguments and options
 
 Options:
   -h, --help             Show help

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Agentoo font diagnostics, installation and target configuration."""
+"""Installed-font diagnostics, Kitty selection, and read-only browser previews."""
 import argparse
-import configparser
-import hashlib
-import html
+import contextlib
 import io
+import fcntl
+import html
 import json
 import os
 from pathlib import Path
@@ -12,22 +12,16 @@ import re
 import shlex
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
 import termios
 import tty
 import unicodedata
-import urllib.request
-import zipfile
 
 DATA = Path(__file__).resolve().parent.parent / 'fonts'
-CATALOG = {'ubuntu-sans-mono': 'UbuntuSans', 'ubuntu-mono': 'UbuntuMono',
-           'jetbrains-mono': 'JetBrainsMono', 'fira-code': 'FiraCode',
-           'liberation-mono': 'LiberationMono', 'symbols': 'NerdFontsSymbolsOnly'}
-PACKAGES = {'terminus': 'media-fonts/terminus-font', 'noto-cjk': 'media-fonts/noto-cjk',
-            'noto-emoji': 'media-fonts/noto-emoji', 'unifont': 'media-fonts/unifont'}
-ROLES = ('monospace', 'sans-serif', 'serif')
+ROLES = ('monospace', 'sans-serif', 'serif', 'emoji')
 
 def run(*args, **kw):
     return subprocess.run([str(x) for x in args], check=True, **kw)
@@ -62,45 +56,6 @@ def shell(*args):
 
 def undo(*args):
     print('To revert: ' + shell('agentoo', 'fonts', *args))
-
-def target(a):
-    if a.target != 'auto':
-        return a.target
-    # Visual tests can always print to the invoking terminal, including over SSH.
-    # Configuration commands must identify a supported local target reliably.
-    testing = getattr(a, 'command', None) == 'test'
-    if os.environ.get('SSH_CONNECTION'):
-        if testing:
-            return 'terminal'
-        raise ValueError('SSH cannot select your local terminal; specify --target')
-    term = os.environ.get('TERM', '')
-    if os.environ.get('TMUX'):
-        # Inherited KITTY_WINDOW_ID can belong to the terminal which started
-        # the server, rather than the client currently viewing this session.
-        try:
-            session = subprocess.run(
-                ['tmux', 'display-message', '-p', '-t', os.environ.get('TMUX_PANE', ''), '#{session_id}'],
-                check=True, capture_output=True, text=True, timeout=2).stdout.strip()
-            clients = subprocess.run(
-                ['tmux', 'list-clients', '-t', session, '-F', '#{client_termname}'],
-                check=True, capture_output=True, text=True, timeout=2).stdout.splitlines()
-            terms = set(clients) - {''}
-            if len(terms) != 1:
-                raise ValueError('tmux clients have ambiguous terminal types')
-            term = terms.pop()
-        except (OSError, subprocess.SubprocessError, ValueError):
-            if testing:
-                return 'terminal'
-            raise ValueError('cannot identify tmux client; specify --target kitty|console|firefox') from None
-    elif os.environ.get('KITTY_WINDOW_ID'):
-        return 'kitty'
-    if term == 'linux':
-        return 'console'
-    if term == 'xterm-kitty':
-        return 'kitty'
-    if testing:
-        return 'terminal'
-    raise ValueError('cannot identify target; specify --target kitty|console|firefox')
 
 def samples(suite):
     data = json.loads((DATA / 'samples.json').read_text())
@@ -161,252 +116,6 @@ def browser_test(a, font=None):
         run(launcher, path.as_uri())
 
 
-def profile(a):
-    bases = [config_home()/'mozilla/firefox', Path.home()/'.mozilla/firefox']
-    choices = []
-    defaults = set()
-    for base in bases:
-        ini = configparser.ConfigParser()
-        ini.read(base/'profiles.ini')
-        for sec in ini.sections():
-            if sec.startswith('Install') and ini.has_option(sec, 'Default'):
-                defaults.add((base/ini[sec]['Default']).resolve())
-            if sec.startswith('Profile'):
-                p = Path(ini[sec]['Path'])
-                if ini[sec].get('IsRelative', '1') == '1':
-                    p = base/p
-                choices.append((ini[sec]['Name'], p.resolve()))
-    if a.profile:
-        matches = [p for n,p in choices if n == a.profile or str(p) == a.profile]
-    else:
-        matches = [p for n,p in choices if p in defaults] or [p for n,p in choices]
-    matches = list(dict.fromkeys(matches))
-    if len(matches) != 1:
-        raise ValueError('select --profile NAME: ' + ', '.join(n for n,p in choices))
-    return matches[0]
-
-def prefs(path):
-    result = {}
-    for file in ('prefs.js', 'user.js'):
-        for m in re.finditer(r'user_pref\(("(?:[^"\\]|\\.)*"),\s*("(?:[^"\\]|\\.)*"|true|false|[0-9]+)\);', read(path/file)):
-            result[json.loads(m[1])] = json.loads(m[2])
-    return result
-
-def firefox_pref(a, key, value):
-    p = profile(a)
-    # Firefox holds this symlink for the lifetime of a profile on Linux.
-    if (p/'lock').is_symlink() or (p/'.parentlock').is_symlink():
-        raise ValueError(f'close Firefox using {p} before changing preferences')
-    before = prefs(p).get(key)
-    file = p/'user.js'
-    text = read(file)
-    pattern = r'^user_pref\(' + re.escape(json.dumps(key)) + r',.*\);\s*$'
-    text = re.sub(pattern, '', text, flags=re.M).rstrip()
-    if value is None:
-        # Also clear persisted prefs.js so removing user.js does not leave an old value.
-        pf = p/'prefs.js'
-        write(pf, re.sub(pattern, '', read(pf), flags=re.M))
-    else:
-        text += '\nuser_pref(' + json.dumps(key) + ', ' + json.dumps(value, ensure_ascii=False) + ');'
-    write(file, text.lstrip('\n') + ('\n' if text else ''))
-    print(f'Firefox {p.name}: {key} = {value!r}; takes effect on next start.')
-    undo('preference', key, '--target', 'firefox', '--profile', str(p), *(['--clear'] if before is None else ['--value', json.dumps(before, ensure_ascii=False)]))
-
-
-def kitty_paths():
-    base = config_home()/'kitty'
-    return base/'kitty.conf', base/'agentoo-fonts.conf'
-
-def kitty_set(a, clear=False):
-    config, fragment = kitty_paths()
-    original = read(fragment)
-    before = read(config)
-    if clear:
-        write(fragment, '')
-    else:
-        lines = original.splitlines()
-        keys = {'font_family', 'bold_font', 'italic_font', 'bold_italic_font'} if a.font else set()
-        if a.size is not None:
-            keys.add('font_size')
-        lines = [l for l in lines if not l.split() or l.split()[0] not in keys]
-        if a.font:
-            spec = 'family=' + shlex.quote(a.font)
-            if a.style:
-                spec += ' style=' + shlex.quote(a.style)
-            lines += ['font_family ' + spec, 'bold_font auto', 'italic_font auto', 'bold_italic_font auto']
-        if a.size is not None:
-            lines.append('font_size ' + str(a.size))
-        write(fragment, '\n'.join(lines)+'\n')
-        include = 'include agentoo-fonts.conf'
-        if include not in before.splitlines():
-            write(config, before.rstrip()+'\n\n# Font selections made by agentoo fonts\n'+include+'\n')
-    print(f'Updated {fragment}. Reload Kitty configuration or open a new window.')
-    print('Later includes, overrides, or command-line options may supersede this fragment.')
-    undo('kitty-config', '--value', original)
-
-def console_device(a):
-    device = a.console
-    if device:
-        if not re.fullmatch(r'/dev/tty[0-9]+', device):
-            raise ValueError('--console must be /dev/ttyN')
-        return device
-    if not sys.stdin.isatty() or os.environ.get('TERM') != 'linux':
-        raise ValueError('run outside tmux on a Linux console, or specify --console /dev/ttyN')
-    return os.ttyname(sys.stdin.fileno())
-
-def root_run(*args):
-    return run(*(([] if os.geteuid() == 0 else ['sudo']) + list(args)))
-
-def accept():
-    if not sys.stdin.isatty():
-        raise ValueError('preview requires an interactive terminal')
-    print('\n[a] accept and save / [r] or Escape revert (Ctrl+C also reverts)', flush=True)
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        while True:
-            c = os.read(fd, 1)
-            if c in (b'a', b'A'):
-                return True
-            if c in (b'r', b'R', b'\x1b', b'\x03', b''):
-                return False
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        print()
-
-def console_set(a):
-    if not re.fullmatch(r'[A-Za-z0-9_./+-]+', a.font):
-        raise ValueError('invalid console font name')
-    if a.size or a.style:
-        raise ValueError('console font determines its own size/style')
-    device = console_device(a)
-    conf = Path('/etc/vconsole.conf')
-    old = re.search(r'^FONT=(.*)$', read(conf), re.M)
-    if a.command == 'preview':
-        if not sys.stdin.isatty():
-            raise ValueError('preview requires an interactive terminal')
-        with tempfile.TemporaryDirectory(prefix='agentoo-console-') as d:
-            backup = Path(d)/'font.psf'
-            root_run('setfont', '-C', device, '-O', str(backup))
-            accepted = False
-            def interrupted(signum, frame):
-                raise KeyboardInterrupt
-            handlers={sig: signal.signal(sig, interrupted) for sig in (signal.SIGTERM, signal.SIGHUP)}
-            try:
-                root_run('setfont', '-C', device, a.font)
-                terminal_test(a)
-                accepted = accept()
-            finally:
-                try:
-                    root_run('setfont', '-C', device, str(backup))
-                finally:
-                    for sig, handler in handlers.items(): signal.signal(sig, handler)
-            if not accepted:
-                print('Preview reverted.')
-                return
-    # Persist only after a successful load; preserve unrelated console settings.
-    root_run('setfont', '-C', device, a.font)
-    text = re.sub(r'^FONT=.*\n?', '', read(conf), flags=re.M).rstrip()
-    text += '\nFONT=' + a.font + '\n'
-    with tempfile.NamedTemporaryFile(mode='w') as f:
-        f.write(text.lstrip('\n')); f.flush()
-        root_run('install', '-m', '0644', f.name, str(conf))
-    print('Console font applied and saved in /etc/vconsole.conf.')
-    if old:
-        undo('set', old[1].strip('"\''), '--target', 'console', '--console', device)
-    else:
-        undo('console-default', '--console', device)
-        print('This restores the boot default, which may differ from a manually loaded previous font.')
-
-
-def download(url):
-    req = urllib.request.Request(url, headers={'User-Agent': 'agentoo-fonts', 'Accept': 'application/vnd.github+json'})
-    with urllib.request.urlopen(req, timeout=90) as response:
-        return response.read()
-
-def install_fonts(a):
-    if a.font in PACKAGES:
-        if a.command == 'remove':
-            raise ValueError('manage removal of Gentoo font packages with Portage')
-        root_run('emerge', '--ask', PACKAGES[a.font])
-        return
-    if a.font not in CATALOG:
-        raise ValueError('unknown catalog entry; see list --available')
-    base = Path('/usr/local/share/fonts/agentoo') if a.system else Path(os.environ.get('XDG_DATA_HOME', str(Path.home()/'.local/share')))/'fonts/agentoo'
-    dest = base/(a.font+'-'+a.variant)
-    if a.system and os.geteuid() != 0:
-        root_run(sys.executable, str(Path(__file__).resolve()), a.command, a.font, '--system', '--variant', a.variant)
-        return
-    if a.command == 'remove':
-        if not (dest/'agentoo-install.json').is_file():
-            raise ValueError('not an Agentoo-managed installation')
-        print('Check fonts status for active selections before removal.')
-        if input(f'Remove {dest}? [y/N] ').lower() != 'y':
-            return
-        shutil.rmtree(dest)
-        run('fc-cache', '-f')
-        return
-    release = json.loads(download('https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest'))
-    assets = release['assets']
-    asset = next((x for x in assets if x['name'] == CATALOG[a.font]+'.zip'), None)
-    if not asset:
-        raise ValueError('latest release does not contain requested archive')
-    print(f'Downloading {asset["name"]} ({release["tag_name"]})', flush=True)
-    blob = download(asset['browser_download_url'])
-    digest = asset.get('digest')
-    if not digest:
-        checks = next((x for x in assets if 'sha256' in x['name'].lower()), None)
-        if checks:
-            for line in download(checks['browser_download_url']).decode().splitlines():
-                parts = line.split()
-                if len(parts) == 2 and parts[1].lstrip('*').split('/')[-1] == asset['name']:
-                    digest = 'sha256:'+parts[0]
-    if digest:
-        if digest != 'sha256:'+hashlib.sha256(blob).hexdigest():
-            raise ValueError('upstream checksum mismatch; nothing installed')
-        print('SHA-256 verified against official release metadata.')
-    else:
-        print('No upstream checksum available; downloaded over HTTPS. SHA-256: '+hashlib.sha256(blob).hexdigest())
-    base.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=base, prefix='.font-stage-') as temp:
-        stage = Path(temp)/'new'; stage.mkdir(mode=0o755); stage.chmod(0o755)
-        with zipfile.ZipFile(io.BytesIO(blob)) as archive:
-            for member in archive.infolist():
-                name = Path(member.filename).name
-                if member.is_dir():
-                    continue
-                if name.lower().endswith(('.ttf', '.otf')):
-                    variant = 'propo' if 'NerdFontPropo' in name else 'mono' if 'NerdFontMono' in name else 'standard'
-                    if a.font != 'symbols' and variant != a.variant:
-                        continue
-                elif not any(x in name.lower() for x in ('license', 'copying', 'ofl', 'readme')):
-                    continue
-                if member.file_size > 100*1024*1024:
-                    raise ValueError('unexpectedly large archive member')
-                if (stage/name).exists():
-                    raise ValueError('duplicate font filename in archive')
-                (stage/name).write_bytes(archive.read(member))
-                (stage/name).chmod(0o644)
-        if not list(stage.glob('*.ttf')) and not list(stage.glob('*.otf')):
-            raise ValueError('archive contains no fonts for requested variant')
-        write(stage/'agentoo-install.json', json.dumps({'catalog':a.font,'version':release['tag_name'],'variant':a.variant,'sha256':hashlib.sha256(blob).hexdigest()}, indent=2)+'\n')
-        if dest.exists():
-            if not (dest/'agentoo-install.json').is_file():
-                raise ValueError('refusing to replace unmanaged directory')
-            previous = Path(temp)/'previous'
-            dest.rename(previous)
-            try:
-                stage.rename(dest)
-            except BaseException:
-                previous.rename(dest)
-                raise
-        else:
-            stage.rename(dest)
-    run('fc-cache', '-f', str(dest))
-    print('Installed; no target selection changed. Families:')
-    print(output('fc-scan', '--format=%{family}\n', *sorted(dest.glob('*.ttf')), *sorted(dest.glob('*.otf'))))
-
 def fontconfig_rules():
     """Read Gentoo's enabled rule selections without modifying symlinks."""
     if shutil.which('eselect'):
@@ -439,362 +148,473 @@ def fontconfig_warnings(names):
     return warnings
 
 
-def fontconfig_status():
-    names, source = fontconfig_rules()
-    print('\nSystem fontconfig rules ('+source+'):')
-    if not names:
-        print('  No enabled rules found in the standard directory.')
-    for name in names:
-        print('  '+name)
-    print('Rules can affect discovery, aliases, fallback, and rendering; filenames alone do not prove effective behavior.')
-    if os.environ.get('FONTCONFIG_FILE') or os.environ.get('FONTCONFIG_PATH'):
-        print('Custom fontconfig environment is set; system selections may not be the active configuration:')
-        for key in ('FONTCONFIG_FILE','FONTCONFIG_PATH'):
-            if key in os.environ: print(f'  {key}={os.environ[key]}')
-    for warning in fontconfig_warnings(names):
-        print('NOTE: '+warning)
-    print('Linux console fonts are independent of fontconfig. No rules were changed.')
-    return names
+def kitty_paths():
+    base = config_home() / 'kitty'
+    return base / 'kitty.conf', base / 'agentoo-fonts.conf'
 
 
-def fontconfig_doctor(a):
-    names = fontconfig_status()
-    print('\nFontconfig tools:')
-    for executable in ('fc-list','fc-match','fc-conflist','fc-cache','eselect'):
-        print(f'  {executable}: {shutil.which(executable) or "not found"}')
-    if not shutil.which('fc-list') or not shutil.which('fc-match'):
-        print('Install fontconfig tools to inspect font discovery and matching. No changes made.')
-        return
-    print('\nEffective generic matches (not necessarily application selections):')
-    for family in ROLES:
-        print('  '+family+': '+output('fc-match','--format=%{family} [%{style}] — %{file}',family))
-    print('\nFont discovery:')
-    records = output('fc-list','--format=%{family}\t%{file}\t%{charset}\n').splitlines()
+def kitty_settings(extra=None):
+    env = os.environ.copy()
+    env.pop('AGENTOO_KITTY_EXTRA', None)
+    if extra:
+        env['AGENTOO_KITTY_EXTRA'] = str(extra)
+    code = 'import runpy; runpy.run_path(' + repr(str(DATA / 'kitty-settings.py')) + ')'
+    return json.loads(run('kitty', '+runpy', code, env=env, capture_output=True, text=True).stdout)
+
+
+def validate_font(family, style=None):
+    if not family or any(c in family for c in '\r\n\0'):
+        raise ValueError('font must be a nonempty single-line family name')
+    faces = output('fc-list', '--format=%{family}\t%{style}\n').splitlines()
+    matching = [line.split('\t', 1) for line in faces
+                if family.casefold() in [n.strip().casefold() for n in line.split('\t')[0].split(',')]]
+    if not matching:
+        raise ValueError(f'font family is not installed: {family}; use agentoo fonts list')
+    if style and not any(style.casefold() in [s.strip().casefold() for s in row[1].split(',')]
+                         for row in matching if len(row) == 2):
+        raise ValueError(f'style is not installed: {family} / {style}')
+    # Ask Kitty as well: fontconfig presence alone does not mean Kitty can select it.
+    with tempfile.TemporaryDirectory(prefix='agentoo-font-check-') as directory:
+        path = Path(directory) / 'selection.conf'
+        write(path, selection_text('', family, style))
+        chosen = kitty_settings(path)['faces']['medium']
+    if chosen['family'].casefold() != family.casefold():
+        raise ValueError(f'Kitty substituted {chosen["family"]!r} for {family!r}')
+
+
+def selection_text(original, family=None, style=None, size=None, geometry=None):
+    keys = {'font_family', 'bold_font', 'italic_font', 'bold_italic_font'} if family else set()
+    if size is not None:
+        keys.add('font_size')
+    geometry = geometry or {}
+    lines = []
+    for line in original.splitlines():
+        parts = line.split()
+        if parts and (parts[0] in keys or
+                      (parts[0] == 'modify_font' and len(parts) > 1 and parts[1] in geometry)):
+            continue
+        lines.append(line)
+    if family:
+        spec = 'family=' + shlex.quote(family)
+        if style:
+            spec += ' style=' + shlex.quote(style)
+        lines += ['font_family ' + spec, 'bold_font auto', 'italic_font auto', 'bold_italic_font auto']
+    if size is not None:
+        lines.append('font_size ' + str(size))
+    lines += [f'modify_font {key} {value}' for key, value in geometry.items()]
+    return '\n'.join(lines).rstrip() + '\n' if lines else ''
+
+
+def reload_kitties():
+    """USR1 is Kitty's native reload mechanism; never signal another user's process."""
+    count = 0
+    failures = []
+    for proc in Path('/proc').iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            if proc.stat().st_uid != os.getuid() or (proc / 'comm').read_text().strip() != 'kitty':
+                continue
+            argv = (proc / 'cmdline').read_bytes().split(b'\0')
+            if len(argv) > 1 and argv[1].startswith(b'+'):
+                continue  # Kitty's Python/kitten helpers are not GUI instances.
+            os.kill(int(proc.name), signal.SIGUSR1)
+            count += 1
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            failures.append(proc.name)
+        except FileNotFoundError:
+            pass
+    print(f'Requested configuration reload in {count} Kitty processes owned by this user.')
+    if failures:
+        print('Could not signal Kitty PIDs: ' + ', '.join(failures))
+    print('Instances using custom config paths or launch overrides may retain their own settings.')
+
+
+def save_selection(text, expected=None):
+    config, fragment = kitty_paths()
+    previous = read(fragment)
+    if expected is not None and previous != expected:
+        raise ValueError('font fragment changed during preview; no changes saved. Reopen the preview.')
+    before = read(config)
+    include = 'include agentoo-fonts.conf'
+    # Validate both destinations before writing either.
+    if fragment.is_symlink() or config.is_symlink():
+        raise ValueError('refusing to replace a symlinked Kitty configuration')
+    existed = fragment.exists()
+    write(fragment, text)
+    try:
+        if include not in [line.strip() for line in before.splitlines()]:
+            write(config, before.rstrip() + '\n\n# Font selections made by agentoo fonts\n' + include + '\n')
+    except OSError:
+        if existed:
+            write(fragment, previous)
+        else:
+            fragment.unlink(missing_ok=True)
+        raise
+    print(f'Updated {fragment}')
+    undo('kitty-config', '--value', previous)
+    reload_kitties()
+
+
+def preview(a, chooser=False, trace=None):
+    if a.font:
+        validate_font(a.font, a.style)
+    original = read(kitty_paths()[1])
+    with tempfile.TemporaryDirectory(prefix='agentoo-font-preview-') as directory:
+        directory = Path(directory)
+        candidate, accepted = directory / 'fonts.conf', directory / 'accepted.conf'
+        write(candidate, selection_text(original, a.font, a.style, a.size))
+        socket = 'unix:' + str(directory / 'kitty.sock')
+        state = {'candidate': str(candidate), 'accepted': str(accepted), 'socket': socket,
+                 'chooser': chooser, 'suite': a.suite, 'text': getattr(a, 'text', None),
+                 'read_only': bool(trace)}
+        state_path = directory / 'state.json'
+        write(state_path, json.dumps(state))
+        cmd = ['kitty', '--class', 'agentoo-font-preview', '--listen-on', socket]
+        if trace:
+            cmd.append('--debug-font-fallback')
+        # Keep normal system/user config, then append the temporary selection.
+        for path in kitty_settings()['paths'] + [str(candidate)]:
+            cmd += ['--config', path]
+        cmd += ['-o', 'allow_remote_control=socket-only', sys.executable,
+                str(Path(__file__).resolve()), '_preview', str(state_path)]
+        env = os.environ.copy()
+        for key in ('TMUX', 'TMUX_PANE'):
+            env.pop(key, None)
+        if trace:
+            with Path(trace).open('w') as log:
+                run(*cmd, stderr=log, env=env)
+            print('Kitty rendering trace:', trace)
+        else:
+            run(*cmd, env=env)
+        if accepted.exists():
+            save_selection(read(accepted), expected=original)
+        else:
+            print('Preview closed without saving.')
+
+
+def adjust_geometry(value, direction):
+    match = re.fullmatch(r'(-?\d+(?:\.\d+)?)(px|%)?', value)
+    if not match:
+        raise ValueError(f'unsupported cell adjustment: {value}')
+    number, unit = float(match[1]), match[2] or ''
+    number += direction
+    number = max(50, min(200, number)) if unit == '%' else max(-20, min(40, number))
+    return f'{number:g}{unit}'
+
+
+def preview_child(state_path):
+    state = json.loads(Path(state_path).read_text())
+    candidate = Path(state['candidate'])
+    if state['chooser']:
+        run('kitten', 'choose-fonts', '--config-file-name', candidate, '--reload-in', 'none')
+    initial = read(candidate)
+    snapshot = kitty_settings(candidate)
+    if snapshot['errors']:
+        raise ValueError('invalid Kitty configuration: ' + '; '.join(snapshot['errors']))
+    size = initial_size = float(snapshot['settings']['font_size'])
+    geometry = dict(snapshot['geometry'])
+    initial_geometry = dict(geometry)
+    changed_geometry = {}
+    paths = snapshot['paths']
+
+    def reload_preview():
+        write(candidate, selection_text(initial, size=size if size != initial_size else None,
+                                        geometry=changed_geometry))
+        run('kitten', '@', '--to', state['socket'], 'load-config', '--ignore-overrides',
+            *paths, '-o', 'allow_remote_control=socket-only', capture_output=True, text=True)
+
+    reload_preview()
+    fd = sys.stdin.fileno()
+    saved_tty = termios.tcgetattr(fd)
+    try:
+        # cbreak preserves normal newline processing for the sample sheet.
+        tty.setcbreak(fd)
+        while True:
+            print('\x1b[2J\x1b[H', end='')
+            print('AGENTOO KITTY DIAGNOSTIC' if state['read_only'] else
+                  'AGENTOO KITTY PREVIEW — temporary until Save')
+            print('Family:', snapshot['settings']['font_family'])
+            print(f'Size: {size:g} pt | cell width: {geometry["cell_width"]} | cell height: {geometry["cell_height"]}')
+            try:
+                rows, cols, xpixels, ypixels = struct.unpack('HHHH', fcntl.ioctl(fd, termios.TIOCGWINSZ, b'\0' * 8))
+                if cols and rows and xpixels and ypixels:
+                    print(f'Grid: {cols} × {rows}; cell: {xpixels / cols:.1f} × {ypixels / rows:.1f} px')
+            except OSError:
+                pass
+            print('+/- size | h/l narrower/wider | j/k shorter/taller | r reset')
+            print('Cell adjustments retain their original unit (%, px, or points). Scroll for samples.')
+            print('Ruler: ' + ''.join(str((i + 1) % 10) for i in range(80)))
+            if state['text'] is not None:
+                print('\nPROBLEM TEXT\n' + state['text'])
+            terminal_test(argparse.Namespace(suite=state['suite'], plain=False, codepoints=False))
+            print(f'\nSize {size:g} pt | width {geometry["cell_width"]} | height {geometry["cell_height"]}')
+            print('+/- size | h/l width | j/k height | r reset | ' +
+                  ('q/Esc close (diagnostic only)' if state['read_only'] else 's save | q/Esc cancel'))
+            sys.stdout.flush()
+            key = sys.stdin.read(1)
+            if key in ('q', '\x1b', ''):
+                return
+            if key == 's' and not state['read_only']:
+                write(Path(state['accepted']), read(candidate))
+                return
+            if key in ('+', '='):
+                size = min(96, size + 0.5)
+            elif key == '-':
+                size = max(4, size - 0.5)
+            elif key in 'hljk':
+                name = 'cell_width' if key in 'hl' else 'cell_height'
+                geometry[name] = adjust_geometry(geometry[name], 1 if key in 'lk' else -1)
+                changed_geometry[name] = geometry[name]
+            elif key == 'r':
+                size, geometry = initial_size, dict(initial_geometry)
+                changed_geometry = {}
+            else:
+                continue
+            reload_preview()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved_tty)
+
+
+def query(*args):
+    """Diagnostics keep useful evidence when an optional tool fails."""
+    try:
+        return output(*args)
+    except (OSError, subprocess.CalledProcessError) as error:
+        return {'error': str(error)}
+
+
+def installed_faces():
+    records = output('fc-list', '--format=%{family}\t%{style}\t%{file}\t%{charset}\n')
     faces = []
-    for row in records:
+    for row in records.splitlines():
         fields = row.split('\t')
-        if len(fields) != 3:
+        if len(fields) != 4:
             continue
         ranges = []
-        for value in fields[2].split():
+        for value in fields[3].split():
             bounds = value.split('-')
-            ranges.append((int(bounds[0],16), int(bounds[-1],16)))
-        faces.append((fields[0], fields[1], ranges))
-    print(f'  {len(faces)} visible faces; {len({face[1] for face in faces})} unique font files')
-    for directory in (Path(os.environ.get('XDG_DATA_HOME',str(Path.home()/'.local/share')))/'fonts', Path('/usr/local/share/fonts/agentoo')):
-        print(f'  {directory}: '+('exists' if directory.is_dir() else 'absent'))
-    if '50-user.conf' not in names:
-        print('NOTE: standard 50-user.conf is not selected; inspect fc-conflist before relying on user fontconfig rules.')
-    if shutil.which('fc-conflist'):
-        print('\nActually loaded configuration (fc-conflist):')
-        loaded = output('fc-conflist').splitlines()
-        print('\n'.join(line for line in loaded if line.startswith('+')) or 'No loaded-file entries reported.')
-    print('\nSample coverage across all visible faces (not browser rendering):')
+            ranges.append((int(bounds[0], 16), int(bounds[-1], 16)))
+        faces.append({'family': fields[0], 'style': fields[1], 'file': fields[2], 'ranges': ranges})
+    return faces
+
+
+def problem_characters(text, faces, pattern='monospace'):
+    result = []
+    for char in sorted(set(text) - set(' \n'), key=ord):
+        covers = sorted({face['family'] for face in faces
+                         if any(lo <= ord(char) <= hi for lo, hi in face['ranges'])})
+        result.append({'character': char, 'codepoint': f'U+{ord(char):04X}',
+                       'name': unicodedata.name(char, 'unnamed'),
+                       'category': unicodedata.category(char), 'combining': unicodedata.combining(char),
+                       'covering_families': covers,
+                       'fontconfig_match': query('fc-match', '--format=%{family}\t%{file}',
+                                                f'{pattern}:charset={ord(char):x}')})
+    return result
+
+
+def doctor_report(a):
+    names, source = fontconfig_rules()
+    faces = installed_faces()
+    report = {
+        'scope': 'Installed coverage and resolved default configuration; not live application state.',
+        'environment': {key: os.environ.get(key) for key in
+                        ('TERM', 'TMUX', 'SSH_CONNECTION', 'FONTCONFIG_FILE', 'FONTCONFIG_PATH', 'XDG_CONFIG_HOME')},
+        'tools': {name: shutil.which(name) for name in ('fc-list', 'fc-match', 'fc-conflist', 'fc-cache', 'eselect', 'kitty', 'kitten')},
+        'rules': {'source': source, 'enabled': names, 'warnings': fontconfig_warnings(names),
+                  'loaded': query('fc-conflist')},
+        'matches': {family: query('fc-match', '-v', family) for family in ROLES},
+        'faces': faces,
+        'coverage': {},
+        'font_directories': sorted({str(Path(face['file']).parent) for face in faces}),
+        'packages': {},
+        'kitty': {},
+        'notes': ['Fontconfig matches are candidates, not proof of rendered fonts.',
+                  'Kitty can draw some terminal symbols itself; font coverage is not the whole renderer.',
+                  'Combining marks and emoji sequences require visual inspection.',
+                  'Restart applications after installing fonts if they retain an old font list.',
+                  'Use doctor --render for a fresh Kitty fallback trace; browser preview is a different renderer.'],
+    }
     for group, rows in samples(a.suite).items():
-        chars = sorted(set(''.join(rows))-set(' \n'), key=ord)
-        missing = [c for c in chars if not any(start <= ord(c) <= end for _,_,ranges in faces for start,end in ranges)]
-        print(f'  {group}: {len(chars)-len(missing)}/{len(chars)} distinct codepoints have a visible font')
-        if missing:
-            print('    Missing: '+' '.join(f'U+{ord(c):04X}' for c in missing))
-    print('\nRepresentative fallback candidates (fontconfig, not application proof):')
-    for label, character in [('Greek','ᾧ'),('Combining breathing','\u0314'),('Braille','⠋'),('Heavy border','━'),('Nerd icon','󰐊'),('Emoji','😀'),('Kaomoji','ಠ')]:
-        matches = output('fc-list',f':charset={ord(character):x}','--format=%{family}\n').splitlines()
-        print(f'  {label} U+{ord(character):04X}: '+(', '.join(sorted(set(matches))[:3]) or 'no visible font covers this codepoint'))
-    print('\nInspect actual Firefox fonts in Inspector → Fonts, then compare agentoo fonts test samples.')
-    print('No eselect rules, caches, fonts, or application settings were changed.')
+        chars = set(''.join(rows)) - set(' \n')
+        missing = [f'U+{ord(char):04X}' for char in sorted(chars, key=ord)
+                   if not any(lo <= ord(char) <= hi for face in faces for lo, hi in face['ranges'])]
+        report['coverage'][group] = {'total': len(chars), 'covered': len(chars) - len(missing), 'missing': missing}
+    for package in sorted(Path('/var/db/pkg/media-fonts').glob('*')):
+        report['packages'][package.name] = {'USE': read(package / 'USE').strip(),
+                                          'repository': read(package / 'repository').strip()}
+    # Package ownership is exact, including fonts installed outside media-fonts.
+    font_files = {face['file'] for face in faces}
+    owners = {}
+    for contents in Path('/var/db/pkg').glob('*/*/CONTENTS'):
+        for line in read(contents).splitlines():
+            fields = line.split()
+            if len(fields) > 1 and fields[0] == 'obj' and fields[1] in font_files:
+                owners[fields[1]] = str(contents.parent.relative_to('/var/db/pkg'))
+    for face in faces:
+        face['package'] = owners.get(face['file'], '(not Portage-owned)')
+    if a.text is not None:
+        report['text'] = {'input': a.text, 'NFC': unicodedata.normalize('NFC', a.text),
+                          'NFD': unicodedata.normalize('NFD', a.text),
+                          'characters': problem_characters(a.text, faces)}
+    if shutil.which('kitty'):
+        try:
+            report['kitty'] = kitty_settings()
+            report['kitty']['fragment'] = read(kitty_paths()[1])
+            report['kitty']['version'] = query('kitty', '--version')
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            report['kitty'] = {'error': str(error)}
+    return report
+
+
+def print_doctor(report):
+    print(report['scope'])
+    print('\nTools:', json.dumps(report['tools'], ensure_ascii=False))
+    print('\nEnvironment:', json.dumps(report['environment'], ensure_ascii=False))
+    print('\nInstalled font packages:')
+    for package, info in report['packages'].items():
+        print(f'  {package}::{info["repository"]} USE="{info["USE"]}"')
+    print('\nFont directories:', ', '.join(report['font_directories']))
+    print('\nVisible faces:')
+    for face in report['faces']:
+        print(f'  {face["family"]} [{face["style"]}] — {face["file"]} ({face["package"]})')
+    print('\nFontconfig rules:', ', '.join(report['rules']['enabled']))
+    print('Loaded rules:\n', report['rules']['loaded'])
+    for warning in report['rules']['warnings']:
+        print('NOTE:', warning)
+    print('\nEffective fontconfig matches and rendering properties:')
+    for family, match in report['matches'].items():
+        print(f'\n{family}:\n{match}')
+    print('\nSample codepoint coverage across installed fonts:')
+    for suite, coverage in report['coverage'].items():
+        print(f'  {suite}: {coverage["covered"]}/{coverage["total"]}; missing: {", ".join(coverage["missing"]) or "none"}')
+    print('\nKitty default configuration (includes resolved; launch overrides not observed):')
+    print(json.dumps(report['kitty'], ensure_ascii=False, indent=2))
+    if 'text' in report:
+        print('\nProblem text:', json.dumps(report['text'], ensure_ascii=False, indent=2))
+    for note in report['notes']:
+        print('NOTE:', note)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        prog='agentoo fonts', description=__doc__,
-        epilog='With no command, show status. Start with: agentoo fonts test\n'
-               'Use agentoo fonts COMMAND --help for arguments and examples.',
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = parser.add_subparsers(dest='command', title='commands', metavar='COMMAND',
-                                help='operation to perform (default: status)')
-    def command(name, description, *, targets=False, profiles=False, examples=''):
-        p = sub.add_parser(name, help=description, description=description,
-                           epilog=examples or None,
-                           formatter_class=argparse.RawDescriptionHelpFormatter)
-        p.set_defaults(target='auto', profile=None, style=None, console=None)
-        if targets:
-            p.add_argument('--target', choices=('auto','kitty','console','firefox'), default='auto',
-                           help='target application (default: auto detects Kitty/Linux console, including tmux clients; Firefox must be explicit)')
-        if profiles:
-            p.add_argument('--profile', metavar='NAME_OR_PATH',
-                           help='Firefox profile name or absolute path; default: unambiguous installation-default profile; changes require that profile closed')
-        return p
-    def role_options(p):
-        p.add_argument('--role', choices=ROLES, default='monospace',
-                       help='Firefox font role (default: monospace); leaves other roles unchanged')
-        p.add_argument('--script', default='x-western', metavar='GROUP',
-                       help='Firefox script/language preference group (default: x-western); e.g. x-unicode or el for Greek')
-    def size_option(p):
-        p.add_argument('--size', type=float, metavar='POINTS',
-                       help='Kitty only: font size, 4–96 points; default: keep existing size')
-    def console_option(p):
-        p.add_argument('--console', metavar='/dev/ttyN',
-                       help='Linux console device; default: current real console outside tmux; console operations request sudo as needed')
-    command('status', 'Report configuration; running overrides may differ', targets=True, profiles=True,
-            examples='Examples:\n  agentoo fonts status\n  agentoo fonts status --target firefox')
-    p = command('list', 'List installed font families/faces or the installation catalog',
-                examples='Examples:\n  agentoo fonts list --nerd\n  agentoo fonts list --available --family ubuntu')
-    p.add_argument('--available', action='store_true', help='show installable catalog entries instead of installed families')
-    p.add_argument('--nerd', action='store_true', help='show only Nerd Font families/catalog entries')
-    p.add_argument('--family', default='', metavar='TEXT', help='case-insensitive substring filter (default: no filter)')
-    suites = ('smoke','nerd','greek','borders','braille','unicode','emoji','kaomoji','width','all')
-    suite_help = ('sample collection (default: all): smoke=styles/code/icons; nerd=icon spacing; '
-                  'greek=polytonic/composing marks; borders=thin/heavy/double lines; '
-                  'braille=spinners/dots; unicode=symbols/CJK/combining marks; '
-                  'emoji=joined/color sequences; kaomoji=text faces; width=terminal ruler; '
-                  'all=all collections except width')
-    p = command('doctor', 'Read-only fontconfig policy, discovery, sample coverage, and fallback diagnostics',
-                examples='Examples:\n  agentoo fonts doctor\n  agentoo fonts doctor --suite kaomoji\n\nReports enabled eselect rules, potential conflicts, actual loaded configuration,\ngeneric matches, and visible-font coverage. Does not modify rules or settings.\nFontconfig results do not establish which font Firefox or Kitty rendered.')
-    p.add_argument('--suite', choices=suites, default='all', help=suite_help)
-    for name in ('test','preview'):
-        p = command(name,
-                    'Display visual samples without changing font settings' if name == 'test' else
-                    'Try an installed font; a accepts/saves, r/Escape/Ctrl+C reverts',
-                    targets=True, profiles=(name == 'preview'),
-                    examples=('Examples:\n  agentoo fonts test\n  agentoo fonts test nerd --codepoints\n'
-                              '  agentoo fonts test greek --target firefox\n'
-                              '  agentoo fonts test all --target firefox --no-open --output /tmp/fonts.html\n\n'
-                              'Unrecognized/SSH terminals still display samples locally. Firefox requires\n'
-                              '--target firefox. Visual output is not an automated coverage result.') if name == 'test' else
-                             ('Examples:\n  agentoo fonts preview "UbuntuSansMono Nerd Font" --target kitty --size 12\n'
-                              '  agentoo fonts preview ter-v24n --target console\n'
-                              '  agentoo fonts preview "Noto Sans" --target firefox --fallback\n\n'
-                              'Kitty opens a separate preview window. Console temporarily saves/restores\n'
-                              'the loaded font. Firefox opens HTML: close Firefox, then accept/revert in\n'
-                              'the terminal. Acceptance saves the command-line family/role/script, not\n'
-                              'HTML control adjustments. No persistent backups; saves print revert commands.'))
+    parser = argparse.ArgumentParser(prog='agentoo fonts', description=__doc__,
+        epilog='Install/remove fonts with Portage. With no command, show Kitty configuration.')
+    sub = parser.add_subparsers(dest='command')
+    suites = (*json.loads((DATA / 'samples.json').read_text()), 'width', 'all')
+    sub.add_parser('status', help='Show resolved default Kitty font settings')
+    p = sub.add_parser('list', help='List installed families and styles')
+    p.add_argument('filter', nargs='?', default='')
+    p.add_argument('--nerd', action='store_true')
+    for name in ('test', 'preview', 'set'):
+        p = sub.add_parser(name, help={'test': 'Print visual samples', 'preview': 'Try fonts in a dedicated window',
+                                      'set': 'Choose interactively, or apply an explicit Kitty selection'}[name])
         if name == 'test':
-            p.add_argument('suite', choices=suites, nargs='?', default='all', help=suite_help)
+            p.add_argument('suite', choices=suites, nargs='?', default='all')
         else:
-            p.add_argument('font', metavar='FONT', help='installed graphical family name (quote spaces), or console PSF font name/path; use list or choose to discover fonts')
-            p.add_argument('--suite', choices=suites, default='all', help=suite_help)
-            role_options(p)
-            p.add_argument('--fallback', action='store_true', help='Firefox only: accept into the script/role fallback list instead of replacing its primary font')
-            console_option(p)
-            size_option(p)
-            p.add_argument('--style', metavar='STYLE', help='Kitty only: face style, e.g. Medium; default: family default')
-        p.add_argument('--codepoints', action='store_true', help='terminal only: append detailed codepoint tables to each group; default: hidden (Firefox uses expandable details)')
-        p.add_argument('--columns', type=int, default=6, metavar='N', help='terminal codepoint table columns, 1–6 (default: 6); does not set terminal width')
-        p.add_argument('--plain', action='store_true', help='terminal only: omit ANSI style demonstration; Unicode samples remain')
-        p.add_argument('--output', metavar='FILE', help='Firefox only: write HTML here; default: $XDG_CACHE_HOME/agentoo/fonts/preview.html or ~/.cache/agentoo/fonts/preview.html')
-        p.add_argument('--no-open', action='store_true', help='Firefox only: generate HTML without launching browser or accepting changes')
-    p = command('set', 'Apply and persist a font selection; print the revert command', targets=True, profiles=True,
-                examples='Examples:\n  agentoo fonts set "Liberation Mono" --target kitty --size 11\n  agentoo fonts set ter-v24n --target console\n  agentoo fonts set "Liberation Mono" --target firefox --role monospace\n\nKitty: reload configuration after saving. Firefox: close profile before saving;\nchanges apply on next start. Console: apply immediately and persist FONT.')
-    p.add_argument('font', metavar='FONT', help='graphical family name (quote spaces), or console PSF font name/path')
-    size_option(p)
-    p.add_argument('--style', metavar='STYLE', help='Kitty only: face style, e.g. Medium; default: family default')
-    console_option(p)
-    role_options(p)
-    p = command('size', 'Persist Kitty font size; reload Kitty configuration to apply', targets=True,
-                examples='Example:\n  agentoo fonts size 12 --target kitty\n\nOnly Kitty is supported. Console size is part of the selected bitmap font.')
-    p.add_argument('size', type=float, metavar='POINTS', help='Kitty font size, 4–96 points')
-    p.set_defaults(font=None)
-    command('choose', 'Open Kitty chooser, list console font files, or open Firefox samples', targets=True,
-            examples='Examples:\n  agentoo fonts choose --target kitty\n  agentoo fonts choose --target console\n\nKitty chooser saves a user font fragment; reload configuration to apply.\nConsole lists available files for preview/set. Firefox opens a visual page only.')
-    for name in ('install','remove'):
-        p = command(name, 'Install latest official Nerd Fonts or a curated Gentoo font package' if name == 'install' else
-                    'Remove an Agentoo-managed Nerd Font entry after confirmation',
-                    examples=('Examples:\n  agentoo fonts install ubuntu-sans-mono\n'
-                              '  agentoo fonts install fira-code --variant mono --system\n'
-                              '  agentoo fonts install noto-emoji\n\n'
-                              'Use list --available for catalog IDs. Nerd Fonts install per-user by default;\n'
-                              'Gentoo packages always install system-wide via emerge --ask. Downloads use\n'
-                              'the latest official release and verify upstream checksums when available.\n'
-                              'Installation does not activate a font.') if name == 'install' else
-                             ('Example:\n  agentoo fonts remove fira-code --variant mono\n\n'
-                              'Check active selections before removal. Only manifest-bearing Agentoo\n'
-                              'directories are removed; Gentoo packages must be removed through Portage.'))
-        p.add_argument('font', metavar='NAME', help='catalog ID from list --available (not the installed family name)')
-        p.add_argument('--system', action='store_true', help='use /usr/local/share/fonts/agentoo and request sudo as needed; default: $XDG_DATA_HOME/fonts/agentoo or ~/.local/share/fonts/agentoo')
-        p.add_argument('--variant', choices=('standard','mono','propo'), default='standard', help='Nerd Fonts variant: standard=regular icon sizing, mono=single-cell icons, propo=proportional icons (default: standard); not used for Gentoo packages; symbols entry includes all variants')
-    p = command('fallback', 'Inspect/edit Firefox script/role fallback lists without changing primary preferences', targets=True, profiles=True,
-                examples='Examples:\n  agentoo fonts fallback show --target firefox\n  agentoo fonts fallback add "Symbols Nerd Font" --target firefox\n  agentoo fonts fallback remove "Symbols Nerd Font" --target firefox\n\nRequires --target firefox. Close the profile before changes. Explicit lists\nreplace the built-in list for that role/script; primary preferences stay intact.\nWebsite CSS, privacy settings, and existing primary glyphs can affect results.')
-    p.add_argument('operation', choices=('show','add','remove'), help='show current explicit list, append a family, or remove a family')
-    p.add_argument('font', nargs='?', metavar='FONT', help='family name, required for add/remove; omit for show')
-    role_options(p)
-    p = command('coverage', 'Check sample codepoints in one fontconfig-selected face; not visual rendering',
-                examples='Example:\n  agentoo fonts coverage "Liberation Mono" --suite greek\n\nReports the matched face (which may be a substitute). Does not test fallback,\nshaping, ligatures, or emoji sequence appearance.')
-    p.add_argument('font', metavar='FONT', help='installed family name or fontconfig pattern')
-    p.add_argument('--suite', choices=suites, default='all', help=suite_help)
-    p = command('explain', 'Show Unicode codepoints and fontconfig candidate fonts',
-                examples='Example:\n  agentoo fonts explain "ᾧ" --font "Liberation Mono"\n\nCandidate lists do not prove which font Firefox or Kitty actually rendered.')
-    p.add_argument('character', metavar='TEXT', help='one or more characters to inspect; quote spaces or shell punctuation')
-    p.add_argument('--font', default='monospace', metavar='PATTERN', help='fontconfig family/pattern to query (default: monospace)')
-    p = command('preference', 'Set/clear an exact Firefox font preference, mainly for printed revert commands', targets=True, profiles=True,
-                examples='Requires --target firefox and a closed profile. --value takes JSON, so a\nstring needs JSON quotes inside shell quotes. Prefer the printed revert command.')
-    p.add_argument('key', metavar='KEY', help='Firefox preference name beginning with font.')
-    g=p.add_mutually_exclusive_group(required=True)
-    g.add_argument('--value', metavar='JSON', help='exact preference value encoded as JSON, e.g. \'"Liberation Mono"\'')
-    g.add_argument('--clear', action='store_true', help='remove explicit preference from user.js and prefs.js, restoring Firefox defaults')
-    p = command('kitty-config', 'Restore exact Agentoo user font fragment from a printed revert command',
-                examples='Use the complete printed revert command; --value may contain newlines.\nLeaves the include in kitty.conf intact. Reload Kitty configuration afterward.')
-    p.add_argument('--value', required=True, metavar='TEXT', help='complete previous fragment contents; empty string clears Agentoo selections')
-    p = command('console-default', 'Clear persistent FONT and reset the active console to its boot font',
-                examples='Example:\n  agentoo fonts console-default --console /dev/tty1\n\nRequests sudo as needed. Boot font may differ from a previously manually loaded\nfont; this does not restore a saved font snapshot.')
-    console_option(p)
+            p.add_argument('font', nargs='?')
+            p.add_argument('--size', type=float)
+            p.add_argument('--style')
+            p.add_argument('--suite', choices=suites, default='all')
+        if name != 'set':
+            p.add_argument('--target', choices=('kitty', 'firefox'), default='kitty')
+            p.add_argument('--output', help='Browser HTML output path')
+            p.add_argument('--no-open', action='store_true', help='Only generate browser HTML')
+            p.add_argument('--plain', action='store_true')
+            p.add_argument('--codepoints', action='store_true')
+            p.add_argument('--columns', type=int, choices=range(1, 7), default=6)
+    p = sub.add_parser('doctor', help='Report font inventory, policy, matching, and Kitty configuration')
+    p.add_argument('--suite', choices=suites, default='all')
+    p.add_argument('--text')
+    p.add_argument('--json', action='store_true')
+    p.add_argument('--render', action='store_true', help='Open a fresh Kitty sample window and capture fallback tracing')
+    p.add_argument('--output', help='Rendering trace file (requires --render)')
+    p = sub.add_parser('coverage', help='Check sample coverage in one matched face')
+    p.add_argument('font')
+    p.add_argument('--suite', choices=suites, default='all')
+    p = sub.add_parser('explain', help='Explain codepoints and fontconfig candidates')
+    p.add_argument('text')
+    p.add_argument('--font', default='monospace')
+    p = sub.add_parser('kitty-config', help='Restore a fragment from a printed revert command')
+    p.add_argument('--value', required=True)
     a = parser.parse_args()
-    if a.command is None:
-        a.command = 'status'; a.target = 'auto'; a.profile = None
-    if getattr(a,'columns',1) < 1 or getattr(a,'columns',1) > 6:
-        parser.error('--columns must be between 1 and 6')
-    if getattr(a,'size',None) is not None and not (4 <= a.size <= 96):
-        parser.error('size must be between 4 and 96 points')
-    if getattr(a,'font',None) and any(c in a.font for c in '\r\n\0'):
-        parser.error('font must be a single line')
-    if a.command == 'list':
-        if a.available:
-            for key,val in CATALOG.items():
-                if a.family.lower() in (key+' '+val).lower(): print(f'{key:22} {val} — latest official Nerd Fonts release')
-            if not a.nerd:
-                for name, package in PACKAGES.items():
-                    if a.family.lower() in name: print(f'{name:22} {package} — Gentoo system package')
+    if getattr(a, 'size', None) is not None and not 4 <= a.size <= 96:
+        parser.error('--size must be between 4 and 96 points')
+    if getattr(a, 'style', None) and not a.font:
+        parser.error('--style requires a font')
+    if getattr(a, 'target', 'kitty') != 'firefox' and (getattr(a, 'no_open', False) or
+            (a.command in ('test', 'preview') and a.output)):
+        parser.error('--no-open and --output require --target firefox')
+    if a.command in (None, 'status'):
+        print(json.dumps(kitty_settings(), ensure_ascii=False, indent=2))
+        print('Launch overrides and runtime selections may differ. Use doctor for the full environment.')
+    elif a.command == 'list':
+        for line in sorted(set(output('fc-list', '--format=%{family}\t%{style}\n').splitlines())):
+            if a.filter.casefold() in line.casefold() and (not a.nerd or 'nerd' in line.casefold()):
+                print(line)
+    elif a.command == 'test':
+        browser_test(a) if a.target == 'firefox' else terminal_test(a)
+    elif a.command == 'preview':
+        if a.target == 'firefox':
+            if a.size is not None or a.style:
+                parser.error('browser preview uses its page controls for size; --size/--style are Kitty options')
+            browser_test(a, a.font)
         else:
-            for line in sorted(set(output('fc-list','--format=%{family}\t%{style}\n').splitlines())):
-                if a.family.lower() in line.lower() and (not a.nerd or 'nerd' in line.lower()): print(line)
-        return
-    if a.command in ('install','remove'):
-        install_fonts(a); return
-    if a.command == 'doctor':
-        fontconfig_doctor(a); return
-    if a.command == 'status':
-        fontconfig_status()
-        print(f'TERM={os.environ.get("TERM","unset")} tmux={bool(os.environ.get("TMUX"))} SSH={bool(os.environ.get("SSH_CONNECTION"))}')
-        t = target(a)
-        print('Target:',t)
-        if t == 'kitty':
-            for p in (Path('/etc/xdg/kitty/kitty.conf'), *kitty_paths()):
-                print(f'\n{p}:\n{read(p) or "(absent)"}')
-            print('Fontconfig monospace candidate:',output('fc-match','monospace'))
-            print('Runtime fonts and command-line/host overrides are not established by this report.')
-        elif t == 'console':
-            print(read(Path('/etc/vconsole.conf')) or '(no vconsole.conf)')
-            print('Active font name cannot be inferred from configuration. Save dimensions/map with:')
-            print('sudo setfont -v -O /tmp/agentoo-current-console-font.psf')
+            preview(a)
+    elif a.command == 'set':
+        if a.font:
+            validate_font(a.font, a.style)
+            save_selection(selection_text(read(kitty_paths()[1]), a.font, a.style, a.size))
         else:
-            p=profile(a); print(p)
-            for k,v in sorted(prefs(p).items()):
-                if k.startswith('font.') or k == 'browser.display.use_document_fonts': print(k,'=',v)
-            print('Only explicit preferences shown; webpage CSS and fallback can select other fonts.')
-        return
-    if a.command == 'coverage':
-        record=output('fc-match','--format=%{family}\n%{file}\n%{charset}',a.font).splitlines()
-        if len(record) < 3: raise ValueError('fontconfig returned no character set')
-        covered=set()
+            preview(a, chooser=True)
+    elif a.command == 'kitty-config':
+        save_selection(a.value)
+    elif a.command == 'doctor':
+        if a.output and not a.render:
+            parser.error('--output requires --render')
+        report = doctor_report(a)
+        if a.render:
+            trace = Path(a.output).expanduser().absolute() if a.output else None
+            # Do not overwrite a predictable or symlinked file in a shared directory.
+            if not a.output:
+                fd, name = tempfile.mkstemp(prefix='agentoo-font-trace-', suffix='.log')
+                os.close(fd)
+                trace = Path(name)
+            # Keep --json stdout machine-readable even when rendering is requested.
+            with contextlib.redirect_stdout(io.StringIO()) as messages:
+                preview(argparse.Namespace(font=None, style=None, size=None, suite=a.suite, text=a.text), trace=trace)
+            if not a.json:
+                print(messages.getvalue(), end='')
+            report['render_trace'] = str(trace)
+        print(json.dumps(report, ensure_ascii=False, indent=2)) if a.json else print_doctor(report)
+    elif a.command == 'explain':
+        print(json.dumps(problem_characters(a.text, installed_faces(), a.font), ensure_ascii=False, indent=2))
+        print('Fontconfig candidates do not establish the rendered font.')
+    elif a.command == 'coverage':
+        record = output('fc-match', '--format=%{family}\n%{file}\n%{charset}', a.font).splitlines()
+        covered = set()
         for part in record[2].split():
-            bounds=part.split('-'); start=int(bounds[0],16); end=int(bounds[-1],16)
-            covered.update(range(start,end+1))
-        print('Matched face:',record[0],record[1])
-        chars=set(''.join(s for rows in samples(a.suite).values() for s in rows))-set(' \n')
-        missing=sorted((c for c in chars if ord(c) not in covered),key=ord)
-        print(f'{len(chars)-len(missing)}/{len(chars)} distinct sample codepoints present in this face.')
-        for c in missing: print(f'Missing U+{ord(c):04X} {unicodedata.name(c,"unnamed")}')
+            bounds = part.split('-')
+            covered.update(range(int(bounds[0], 16), int(bounds[-1], 16) + 1))
+        chars = set(''.join(s for rows in samples(a.suite).values() for s in rows)) - set(' \n')
+        missing = sorted((c for c in chars if ord(c) not in covered), key=ord)
+        print('Matched face:', record[0], record[1])
+        print(f'{len(chars) - len(missing)}/{len(chars)} distinct sample codepoints present.')
+        for char in missing:
+            print(f'Missing U+{ord(char):04X} {unicodedata.name(char, "unnamed")}')
         print('Fallback, composition, shaping, and appearance require visual inspection.')
-        return
-    if a.command == 'explain':
-        for c in a.character:
-            print(f'{c!r} U+{ord(c):04X} {unicodedata.name(c,"unnamed")}')
-            print(output('fc-match','-s','--format=%{family}\t%{file}\n',f'{a.font}:charset={ord(c):x}'))
-        print('Fontconfig candidates are not proof of the font actually rendered in Firefox/Kitty.')
-        return
-    if a.command == 'kitty-config':
-        write(kitty_paths()[1], a.value); print('Restored user fragment. Reload Kitty configuration.'); return
-    if a.command == 'console-default':
-        device=console_device(a)
-        root_run('setfont','-C',device,'-R')
-        text=re.sub(r'^FONT=.*\n?', '',read(Path('/etc/vconsole.conf')),flags=re.M)
-        with tempfile.NamedTemporaryFile(mode='w') as f:
-            f.write(text); f.flush(); root_run('install','-m','0644',f.name,'/etc/vconsole.conf')
-        return
-    t=target(a)
-    if a.command == 'test':
-        if t == 'firefox': browser_test(a)
-        else: terminal_test(a)
-        return
-    if a.command == 'choose':
-        if t == 'kitty':
-            config,fragment=kitty_paths()
-            if not fragment.exists(): write(fragment,'')
-            previous=read(fragment)
-            try:
-                run('kitten','choose-fonts','--config-file-name',str(fragment),'--reload-in','none')
-                if read(fragment) != previous:
-                    text=read(config)
-                    if 'include agentoo-fonts.conf' not in text.splitlines(): write(config,text.rstrip()+'\ninclude agentoo-fonts.conf\n')
-                    undo('kitty-config','--value',previous)
-            except BaseException:
-                write(fragment,previous); raise
-        elif t == 'console':
-            print(output('find','/usr/share/consolefonts','-type','f'))
-            print('Use: agentoo fonts preview NAME --target console')
-        else:
-            a.suite='all'; a.output=None; a.no_open=False; browser_test(a)
-        return
-    if a.command in ('fallback','preference'):
-        if t != 'firefox': raise ValueError('this command requires --target firefox')
-        if a.command == 'preference':
-            if not a.key.startswith('font.'):
-                raise ValueError('only font.* preferences are supported')
-            firefox_pref(a,a.key,None if a.clear else json.loads(a.value)); return
-        key=f'font.name-list.{a.role}.{a.script}'
-        previous=prefs(profile(a)).get(key,'')
-        if a.operation == 'show': print(key,'=',previous or '(Firefox built-in fallback)'); return
-        if not a.font: raise ValueError('specify a font family')
-        if not isinstance(previous,str): raise ValueError('unexpected non-string fallback preference')
-        families=[x.strip() for x in previous.split(',') if x.strip()]
-        if a.operation == 'add' and a.font not in families: families.append(a.font)
-        if a.operation == 'remove': families=[x for x in families if x != a.font]
-        print('Changes only this explicit script/role list; built-in fallback may differ. Primary font preferences remain unchanged.')
-        firefox_pref(a,key,', '.join(families) if families else None); return
-    if a.command == 'preview':
-        if t == 'console': console_set(a)
-        elif t == 'firefox':
-            browser_test(a,a.font)
-            if not a.no_open:
-                print('Close Firefox before accepting in this terminal. HTML adjustments are visual only; acceptance saves the command-line family/role/script.')
-                if accept():
-                    if a.fallback:
-                        key=f'font.name-list.{a.role}.{a.script}'
-                        families=[x.strip() for x in prefs(profile(a)).get(key,'').split(',') if x.strip()]
-                        if a.font not in families: families.append(a.font)
-                        firefox_pref(a,key,', '.join(families))
-                    else:
-                        firefox_pref(a,f'font.name.{a.role}.{a.script}',a.font)
-                else: print('Preview closed without changing Firefox preferences.')
-        else:
-            if not shutil.which('kitty'): raise ValueError('kitty not installed')
-            cmd=['kitty','--class','agentoo-font-preview','-o','font_family='+('family='+shlex.quote(a.font)+((' style='+shlex.quote(a.style)) if a.style else ''))]
-            if a.size: cmd+=['-o',f'font_size={a.size}']
-            cmd += [sys.executable, str(Path(__file__).resolve()), '_kitty-preview']
-            env=os.environ.copy(); env['AGENTOO_PREVIEW']=json.dumps({'font':a.font,'size':a.size,'style':a.style,'suite':a.suite,'columns':a.columns,'plain':a.plain,'codepoints':a.codepoints})
-            run(*cmd,env=env)
-        return
-    if a.command in ('set','size'):
-        if t == 'kitty': kitty_set(a)
-        elif t == 'console':
-            if a.command == 'size': raise ValueError('console size is determined by the font; select another font')
-            if a.size or a.style: raise ValueError('console font determines its own size/style')
-            if not re.fullmatch(r'[A-Za-z0-9_./+-]+',a.font): raise ValueError('invalid console font name')
-            console_set(a)
-        else:
-            if a.command == 'size': raise ValueError('size currently supports Kitty only')
-            if a.style or a.size: raise ValueError('Firefox selection supports family/role/script; size/style are not supported here')
-            firefox_pref(a,f'font.name.{a.role}.{a.script}',a.font)
+
 
 if __name__ == '__main__':
     try:
-        if sys.argv[1:] == ['_kitty-preview']:
-            a=argparse.Namespace(**json.loads(os.environ['AGENTOO_PREVIEW']))
-            terminal_test(a)
-            if accept(): kitty_set(a)
-            else: print('Preview reverted; original Kitty configuration unchanged.')
+        if len(sys.argv) == 3 and sys.argv[1] == '_preview':
+            preview_child(sys.argv[2])
         else:
             main()
-    except (ValueError,OSError,subprocess.CalledProcessError,KeyError,zipfile.BadZipFile) as error:
-        print(f'agentoo fonts: {error}',file=sys.stderr); sys.exit(2)
+    except (ValueError, OSError, subprocess.CalledProcessError, KeyError) as error:
+        print(f'agentoo fonts: {error}', file=sys.stderr)
+        sys.exit(2)
     except KeyboardInterrupt:
-        print('\nCancelled.',file=sys.stderr); sys.exit(130)
+        print('\nCancelled.', file=sys.stderr)
+        sys.exit(130)

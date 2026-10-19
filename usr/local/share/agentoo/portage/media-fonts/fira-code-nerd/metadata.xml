@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <use>
+    <flag name="normal">Install standard Nerd Font icon sizing</flag>
+    <flag name="mono">Install icons constrained to a monospace cell</flag>
+    <flag name="proportional">Install proportional Nerd Font icon sizing</flag>
+  </use>
+</pkgmetadata>

@@ -2,112 +2,163 @@ import argparse
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import signal
 import tempfile
 import unittest
 from unittest.mock import patch
-import zipfile
-import hashlib
 
-spec = importlib.util.spec_from_file_location('fonts', Path(__file__).resolve().parents[2]/'commands/fonts.py')
+spec = importlib.util.spec_from_file_location('fonts', Path(__file__).resolve().parents[2] / 'commands/fonts.py')
 f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)
+
 
 class FontsTests(unittest.TestCase):
     def test_eselect_only_reports_enabled_rules(self):
         listing = 'Available fontconfig .conf files (* is enabled):\n  [1] 10-hinting-full.conf\n  [2] 10-hinting-slight.conf *\n  [3] 50-user.conf *\n'
-        with patch.object(f.shutil, 'which', return_value='/usr/bin/eselect'), patch.object(f, 'output', return_value=listing) as command:
+        with patch.object(f.shutil, 'which', return_value='/usr/bin/eselect'), patch.object(f, 'output', return_value=listing):
             names, source = f.fontconfig_rules()
         self.assertEqual(names, ['10-hinting-slight.conf', '50-user.conf'])
-        command.assert_called_once_with('eselect', 'fontconfig', 'list')
 
     def test_conflict_detection_is_conservative(self):
         self.assertEqual(f.fontconfig_warnings(['10-hinting-slight.conf', '10-yes-antialias.conf']), [])
-        notes = f.fontconfig_warnings(['10-hinting-full.conf', '10-hinting-slight.conf', '10-no-antialias.conf', '10-yes-antialias.conf'])
-        self.assertEqual(len(notes), 2)
-        self.assertTrue(all('Potentially conflicting' in note for note in notes))
+        self.assertEqual(len(f.fontconfig_warnings(['10-hinting-full.conf', '10-hinting-slight.conf',
+                                                 '10-no-antialias.conf', '10-yes-antialias.conf'])), 2)
 
-    def test_doctor_only_invokes_read_only_commands(self):
-        calls = []
-        def query(*args):
-            calls.append(args)
-            if args[:3] == ('eselect', 'fontconfig', 'list'):
-                return '  [1] 50-user.conf *'
-            if args[0] == 'fc-conflist':
-                return '+ /etc/fonts/fonts.conf: Default\n- /etc/fonts/disabled.conf: Disabled'
-            if args[:2] == ('fc-list', '--format=%{family}\t%{file}\t%{charset}\n'):
-                return 'Test Font\t/test/font.ttf\t20-7e'
-            return 'Test Font'
-        with patch.object(f.shutil, 'which', side_effect=lambda name: '/usr/bin/'+name), patch.object(f, 'output', side_effect=query), patch('sys.stdout', new_callable=io.StringIO) as out:
-            f.fontconfig_doctor(argparse.Namespace(suite='kaomoji'))
-        self.assertTrue(all(call[0] in ('eselect', 'fc-match', 'fc-list', 'fc-conflist') for call in calls))
-        self.assertNotIn('Disabled', out.getvalue())
-        self.assertIn('Missing:', out.getvalue())
-        self.assertIn('No eselect rules, caches, fonts, or application settings were changed.', out.getvalue())
+    def test_selection_preserves_maps_features_and_other_geometry(self):
+        old = 'symbol_map U+2800-U+28FF Unifont\nfont_features Example +zero\nmodify_font baseline 2\nmodify_font cell_height 95%\nfont_size 10\nfont_family Old\n'
+        new = f.selection_text(old, 'Liberation Mono', 'Regular', 11, {'cell_height': '100%'})
+        for line in old.splitlines()[:3]:
+            self.assertIn(line, new)
+        self.assertNotIn('font_family Old', new)
+        self.assertNotIn('font_size 10', new)
+        self.assertNotIn('cell_height 95%', new)
+        self.assertIn('cell_height 100%', new)
+        self.assertIn("font_family family='Liberation Mono' style=Regular", new)
 
-    def test_kitty_preserves_unrelated_config_and_prints_exact_undo(self):
+    def test_save_and_revert_preserve_unrelated_configuration_and_reload(self):
         with tempfile.TemporaryDirectory() as d:
-            config, fragment = Path(d)/'kitty.conf', Path(d)/'agentoo-fonts.conf'
-            config.write_text('include host.conf\nsymbol_map U+2800-U+28FF Unifont\n')
+            config, fragment = Path(d) / 'kitty.conf', Path(d) / 'agentoo-fonts.conf'
+            config.write_text('include host.conf\n')
             fragment.write_text('font_size 10\n')
-            a=argparse.Namespace(font='UbuntuSansMono Nerd Font',style='Medium',size=12)
-            with patch.object(f,'kitty_paths',return_value=(config,fragment)), patch('sys.stdout',new_callable=io.StringIO) as out:
-                f.kitty_set(a)
-            self.assertIn('symbol_map U+2800-U+28FF Unifont',config.read_text())
-            self.assertEqual(config.read_text().count('include agentoo-fonts.conf'),1)
-            self.assertIn("'font_size 10\n'",out.getvalue())
-            self.assertIn('font_size 12',fragment.read_text())
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'reload_kitties') as reload, patch('sys.stdout', new_callable=io.StringIO):
+                f.save_selection('font_size 11\n', expected='font_size 10\n')
+                f.save_selection('font_size 10\n')
+            self.assertEqual(reload.call_count, 2)
+            self.assertEqual(fragment.read_text(), 'font_size 10\n')
+            self.assertEqual(config.read_text().count('include agentoo-fonts.conf'), 1)
+            self.assertIn('include host.conf', config.read_text())
 
-    def test_firefox_pref_preserves_primary_and_prints_clear_undo(self):
+    def test_failed_include_write_restores_fragment(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d); (p/'prefs.js').write_text('user_pref("font.name.monospace.x-western", "Liberation Mono");\n')
-            a=argparse.Namespace()
-            with patch.object(f,'profile',return_value=p),patch('sys.stdout',new_callable=io.StringIO) as out:
-                f.firefox_pref(a,'font.name-list.monospace.x-western','Noto Sans Symbols 2')
-            self.assertIn('--clear',out.getvalue())
-            self.assertEqual(f.prefs(p)['font.name.monospace.x-western'],'Liberation Mono')
-            with patch.object(f,'profile',return_value=p),patch('sys.stdout',new_callable=io.StringIO):
-                f.firefox_pref(a,'font.name-list.monospace.x-western',None)
-            self.assertNotIn('font.name-list.monospace.x-western',f.prefs(p))
+            config, fragment = Path(d) / 'kitty.conf', Path(d) / 'fonts.conf'
+            fragment.write_text('original')
+            real_write = f.write
+            def fail_config(path, text):
+                if path == config:
+                    raise PermissionError('config is read-only')
+                real_write(path, text)
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'write', side_effect=fail_config), self.assertRaises(PermissionError):
+                f.save_selection('changed')
+            self.assertEqual(fragment.read_text(), 'original')
 
-    def test_locked_firefox_rejected(self):
+    def test_concurrent_edit_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d); (p/'lock').symlink_to('host:+1234')
-            with patch.object(f,'profile',return_value=p),self.assertRaises(ValueError):
-                f.firefox_pref(argparse.Namespace(),'font.test','value')
-            self.assertFalse((p/'user.js').exists())
+            config, fragment = Path(d) / 'kitty.conf', Path(d) / 'fonts.conf'
+            fragment.write_text('newer edit\n')
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), self.assertRaisesRegex(ValueError, 'changed during preview'):
+                f.save_selection('candidate\n', expected='old edit\n')
+            self.assertEqual(fragment.read_text(), 'newer edit\n')
+            self.assertFalse(config.exists())
 
-    def test_console_restores_on_interrupted_preview(self):
-        a=argparse.Namespace(font='ter-v24n',size=None,style=None,console='/dev/tty1',command='preview')
-        calls=[]
-        def root(*args): calls.append(args)
-        with patch.object(f,'root_run',side_effect=root),patch.object(f,'read',return_value='KEYMAP=us\n'),patch.object(f.sys.stdin,'isatty',return_value=True),patch.object(f,'terminal_test',side_effect=KeyboardInterrupt),self.assertRaises(KeyboardInterrupt):
-            f.console_set(a)
-        self.assertEqual(calls[0][3],'-O')
-        self.assertTrue(calls[-1][-1].endswith('font.psf'))
-        self.assertFalse(any(c[0]=='install' for c in calls))
+    def test_symlink_config_does_not_partially_update_fragment(self):
+        with tempfile.TemporaryDirectory() as d:
+            target, config, fragment = (Path(d) / name for name in ('target', 'kitty.conf', 'fonts.conf'))
+            target.write_text('original')
+            config.symlink_to(target)
+            fragment.write_text('original fragment')
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), self.assertRaisesRegex(ValueError, 'symlink'):
+                f.save_selection('changed')
+            self.assertEqual(fragment.read_text(), 'original fragment')
 
-    def test_download_mismatch_never_installs(self):
-        release={'tag_name':'vtest','assets':[{'name':'FiraCode.zip','browser_download_url':'https://example.invalid/font','digest':'sha256:'+'0'*64}]}
-        a=argparse.Namespace(font='fira-code',system=False,variant='standard',command='install')
-        with tempfile.TemporaryDirectory() as d,patch.dict(f.os.environ,{'XDG_DATA_HOME':d}),patch.object(f,'download',side_effect=[json.dumps(release).encode(),b'bad']),patch('sys.stdout',new_callable=io.StringIO),self.assertRaisesRegex(ValueError,'checksum mismatch'):
-            f.install_fonts(a)
-            self.assertFalse((Path(d)/'fonts').exists())
+    def test_cancelled_preview_never_saves_or_reloads(self):
+        with tempfile.TemporaryDirectory() as d:
+            config, fragment = Path(d) / 'kitty.conf', Path(d) / 'fonts.conf'
+            fragment.write_text('font_size 10\n')
+            a = argparse.Namespace(font=None, style=None, size=None, suite='smoke')
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'kitty_settings', return_value={'paths': []}), patch.object(f, 'run') as run, patch.object(f, 'save_selection') as save, patch('sys.stdout', new_callable=io.StringIO):
+                f.preview(a, chooser=True)
+                command = run.call_args.args
+            save.assert_not_called()
+            self.assertIn('allow_remote_control=socket-only', command)
+            self.assertEqual(fragment.read_text(), 'font_size 10\n')
+            self.assertFalse(config.exists())
 
-    def test_verified_install_filters_variant_and_preserves_license(self):
-        blob=io.BytesIO()
-        with zipfile.ZipFile(blob,'w') as z:
-            z.writestr('FiraCodeNerdFont-Regular.ttf',b'font')
-            z.writestr('FiraCodeNerdFontMono-Regular.ttf',b'mono')
-            z.writestr('LICENSE',b'license')
-        data=blob.getvalue()
-        release={'tag_name':'vtest','assets':[{'name':'FiraCode.zip','browser_download_url':'https://example.invalid/font','digest':'sha256:'+hashlib.sha256(data).hexdigest()}]}
-        a=argparse.Namespace(font='fira-code',system=False,variant='standard',command='install')
-        with tempfile.TemporaryDirectory() as d,patch.dict(f.os.environ,{'XDG_DATA_HOME':d}),patch.object(f,'download',side_effect=[json.dumps(release).encode(),data]),patch.object(f,'run'),patch.object(f,'output',return_value='FiraCode Nerd Font'),patch('sys.stdout',new_callable=io.StringIO):
-            f.install_fonts(a)
-            dest=Path(d)/'fonts/agentoo/fira-code-standard'
-            self.assertTrue((dest/'LICENSE').exists())
-            self.assertFalse((dest/'FiraCodeNerdFontMono-Regular.ttf').exists())
-            self.assertEqual(json.loads((dest/'agentoo-install.json').read_text())['version'],'vtest')
+    def test_preview_save_passes_original_for_concurrency_check(self):
+        with tempfile.TemporaryDirectory() as d:
+            config, fragment = Path(d) / 'kitty.conf', Path(d) / 'fonts.conf'
+            fragment.write_text('original')
+            def child(*cmd, **kwargs):
+                state = json.loads(Path(cmd[-1]).read_text())
+                Path(state['accepted']).write_text('chosen')
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'kitty_settings', return_value={'paths': []}), patch.object(f, 'run', side_effect=child), patch.object(f, 'save_selection') as save:
+                f.preview(argparse.Namespace(font=None, style=None, size=None, suite='smoke'))
+            save.assert_called_once_with('chosen', expected='original')
 
-if __name__ == '__main__': unittest.main()
+    def test_missing_font_and_kitty_substitution_are_rejected(self):
+        with patch.object(f, 'output', return_value='Liberation Mono\tRegular'), self.assertRaisesRegex(ValueError, 'not installed'):
+            f.validate_font('Missing')
+        with patch.object(f, 'output', return_value='Requested\tRegular'), patch.object(f, 'kitty_settings', return_value={'faces': {'medium': {'family': 'Substitute'}}}), self.assertRaisesRegex(ValueError, 'substituted'):
+            f.validate_font('Requested')
+
+    def test_geometry_preserves_units(self):
+        self.assertEqual(f.adjust_geometry('95%', 1), '96%')
+        self.assertEqual(f.adjust_geometry('2px', -1), '1px')
+        self.assertEqual(f.adjust_geometry('-1', -1), '-2')
+        self.assertEqual(f.adjust_geometry('50%', -1), '50%')
+
+    def test_reload_only_signals_current_users_kitty_processes(self):
+        class Proc:
+            def __init__(self, pid, uid, name):
+                self.name, self.uid, self.comm = str(pid), uid, name
+            def stat(self):
+                return argparse.Namespace(st_uid=self.uid)
+            def __truediv__(self, name):
+                return self
+            def read_text(self):
+                return self.comm
+            def read_bytes(self):
+                return b'kitty\0+runpy\0' if self.name == '14' else b'kitty\0'
+        procs = [Proc(10, 1000, 'kitty'), Proc(11, 1000, 'kitty'),
+                 Proc(12, 1001, 'kitty'), Proc(13, 1000, 'bash'), Proc(14, 1000, 'kitty')]
+        with patch.object(f.Path, 'iterdir', return_value=iter(procs)), patch.object(f.os, 'getuid', return_value=1000), patch.object(f.os, 'kill') as kill, patch('sys.stdout', new_callable=io.StringIO):
+            f.reload_kitties()
+        self.assertEqual(kill.call_args_list, [((10, signal.SIGUSR1),), ((11, signal.SIGUSR1),)])
+
+    def test_browser_preview_explains_actual_selection_without_preferences(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'preview.html'
+            a = argparse.Namespace(suite='nerd', output=str(path), no_open=True)
+            for installed, candidate, note in [
+                    ('Symbols Nerd Font Mono', None, 'after the generic font'),
+                    ('Liberation Mono', None, 'No supported Symbols Nerd Font'),
+                    ('Symbols Nerd Font Mono', 'Liberation Mono', 'requested candidate')]:
+                with patch.object(f, 'output', return_value=installed), patch.object(f, 'run') as run, patch('sys.stdout', new_callable=io.StringIO):
+                    f.browser_test(a, candidate)
+                run.assert_not_called()
+                self.assertIn(note, path.read_text())
+                self.assertNotIn('SELECTION_NOTE', path.read_text())
+
+    def test_problem_text_distinguishes_coverage_and_matching(self):
+        faces = [{'family': 'Test', 'ranges': [(0x300, 0x314)]}]
+        with patch.object(f, 'query', return_value='candidate'):
+            chars = f.problem_characters('\u0314ಠ', faces)
+        self.assertEqual(chars[0]['combining'], 230)
+        self.assertEqual(chars[0]['covering_families'], ['Test'])
+        self.assertEqual(chars[1]['covering_families'], [])
+        self.assertEqual(chars[1]['fontconfig_match'], 'candidate')
+
+
+if __name__ == '__main__':
+    unittest.main()

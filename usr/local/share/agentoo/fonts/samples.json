@@ -62,5 +62,15 @@
     "Moods: ¯\\_(ツ)_/¯    ಠ_ಠ    (•‿•)    (ง’̀-‘́)ง",
     "Animals / hug: ʕ•ᴥ•ʔ    ฅ^•ﻌ•^ฅ    (づ｡◕‿‿◕｡)づ",
     "Gestures: ヽ(´▽`)/    (☞ﾟヮﾟ)☞    ☜(ﾟヮﾟ☜)"
+  ],
+  "confusables": [
+    "Latin identifiers: 0O 1Il| 2Z 5S 8B rn/m cl/d vv/w",
+    "Punctuation: ` ' \" , . : ; ! | / \\ () [] {} <> _ - ~",
+    "Latin / Greek / Cyrillic: A Α А   B Β В   O Ο О   p ρ р   x χ х",
+    "Operators: = == === != !== <= >= -> => <=> && || :: := ++ --",
+    "Density (80 characters):",
+    "12345678901234567890123456789012345678901234567890123456789012345678901234567890",
+    "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
   ]
 }

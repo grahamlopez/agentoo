@@ -8,3 +8,10 @@ dev-util/pi-coding-agent-deps::agentoo ~amd64 ~arm64
 # System-wide keyboard remapping daemon and its IPC access group.
 app-misc/keyd::agentoo ~amd64 ~arm64
 acct-group/keyd::agentoo ~amd64 ~arm64
+
+# Optional Nerd Font families; variants are selected through USE flags.
+media-fonts/ubuntu-sans-mono-nerd::agentoo ~amd64 ~arm64
+media-fonts/ubuntu-mono-nerd::agentoo ~amd64 ~arm64
+media-fonts/jetbrains-mono-nerd::agentoo ~amd64 ~arm64
+media-fonts/fira-code-nerd::agentoo ~amd64 ~arm64
+media-fonts/liberation-mono-nerd::agentoo ~amd64 ~arm64
