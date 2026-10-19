@@ -1,0 +1,66 @@
+{
+  "smoke": [
+    "Styles: Normal / Bold / Italic / Bold Italic / Underline / Undercurl",
+    "Code: == === !== >= <= =>       Icons: 󰐊   󰄉   󰑓 󰒲 ",
+    "Faces: (╯°□°）╯︵ ┻━┻    ¯\\_(ツ)_/¯    Latin: ABC abc 0123 café"
+  ],
+  "greek": [
+    "Alphabet: ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ / αβγδεζηθικλμνξοπρστυφχψω ς",
+    "Breathing + accent: ἀ ἁ ἂ ἃ ἄ ἅ ἆ ἇ       Capitals: Ἀ Ἁ Ἄ Ἅ",
+    "Eta: ἠ ἡ ἤ ἥ ἦ ἧ     Omega: ὠ ὡ ὤ ὥ ὦ ὧ     Rho: ῥ / ῥ",
+    "Iota subscript: ᾳ ᾀ ᾁ ᾄ ᾅ ᾆ ᾇ   ῃ ᾐ ᾗ   ῳ ᾠ ᾧ",
+    "Compare precomposed (left) / combining (right):",
+    "  Smooth/rough: ἀ ἁ ἂ ἃ ἄ ἅ ἆ ἇ    / ἀ ἁ ἂ ἃ ἄ ἅ ἆ ἇ",
+    "  Subscripts:   ᾀ ᾅ ᾖ ᾧ Ἄ ᾭ         / ᾀ ᾅ ᾖ ᾧ Ἄ ᾭ",
+    "  Diaeresis:    ϊ ΐ ϋ ΰ               / ϊ ΐ ϋ ΰ",
+    "Phrase: ἄνθρωπος · Ἑλληνικὴ γλῶσσα · ᾠδή"
+  ],
+  "braille": [
+    "Spinner: ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏    Dots: ⠀⠁⠂⠃⠄⠅⠆⠇  ⡀⢀⣀⣿",
+    "Fill: ⣷⣯⣟⡿⢿⣻⣽⣾    Cell boundaries: |⠁|⠃|⠇|⡇|⣇|⣧|⣷|⣿|"
+  ],
+  "borders": [
+    "     Thin                   Heavy                  Double",
+    "┌────────┬────────┐    ┏━━━━━━━━┳━━━━━━━━┓    ╔════════╦════════╗",
+    "│        │        │    ┃        ┃        ┃    ║        ║        ║",
+    "├────────┼────────┤    ┣━━━━━━━━╋━━━━━━━━┫    ╠════════╬════════╣",
+    "└────────┴────────┘    ┗━━━━━━━━┻━━━━━━━━┛    ╚════════╩════════╝",
+    "tmux pane labels: 0 ━━━  1 ━━━  2 ───    Blocks: ░▒▓█ ▀▄▌▐"
+  ],
+  "unicode": [
+    "Arrows: ← ↑ → ↓ ↔ ↕ ⇒ ⇐ ⇔ ↦ ⟶    Marks: ✓ ✔ ✗ ✘ ⚠ ⏲ ◇ ◆ ○ ● □ ■",
+    "Math: ∀ ∃ ∈ ∉ ∑ ∏ √ ∞ ≠ ≈ ≤ ≥ ⊂ ⊆    CJK: 中文 日本語 한국어",
+    "Combining: á ë ñ ō x̂ ạ ā́    NFC/NFD: café / café    Latin: ABC abc 0123"
+  ],
+  "nerd": [
+    "Same icons in three contexts; spacing can change terminal symbol size.",
+    "Spaced = room to expand; adjacent = touching; bounded = single-cell fit.",
+    "Powerline:",
+    "  Spaced:        ",
+    "  Adjacent: ",
+    "  Bounded:  ||||||",
+    "Files:",
+    "  Spaced:          ",
+    "  Adjacent: ",
+    "  Bounded:  ||||||||",
+    "Application:",
+    "  Spaced:         ⏲ ",
+    "  Adjacent: ⏲",
+    "  Bounded:  |||||||⏲|",
+    "Material:",
+    "  Spaced:   󰐊 󰄉 󰑓 󰒲  ",
+    "  Adjacent: 󰐊󰄉󰑓󰒲",
+    "  Bounded:  |󰐊|󰄉|󰑓|󰒲||"
+  ],
+  "emoji": [
+    "Faces: 😀 😅 🤔 🥳    Text/color: ♥︎ / ♥️  ☀︎ / ☀️    Heart: ❤️",
+    "Tone: 👍 / 👍🏽    Joined: 👩‍💻  👨‍👩‍👧‍👦  🏳️‍🌈    Flags: 🇬🇷 🇺🇸",
+    "Keycap: 1️⃣    Objects: 🚀 🐧    Latin baseline: ABC abc 0123"
+  ],
+  "kaomoji": [
+    "Tables: (╯°□°）╯︵ ┻━┻    ┬─┬ノ( º _ ºノ)    (ノಠ益ಠ)ノ彡┻━┻",
+    "Moods: ¯\\_(ツ)_/¯    ಠ_ಠ    (•‿•)    (ง’̀-‘́)ง",
+    "Animals / hug: ʕ•ᴥ•ʔ    ฅ^•ﻌ•^ฅ    (づ｡◕‿‿◕｡)づ",
+    "Gestures: ヽ(´▽`)/    (☞ﾟヮﾟ)☞    ☜(ﾟヮﾟ☜)"
+  ]
+}

@@ -5,7 +5,7 @@ An opinionated Gentoo distribution. See the
 and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
-secrets, display backlight, screenshots, and power status.
+secrets, display backlight, screenshots, power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
 Operations request sudo only when needed; help and desktop utilities run as the
 current user. Arbitrary Git commands also run as the current user: use explicit
 `sudo agentoo git ...` for protected system repository writes. Git may require
