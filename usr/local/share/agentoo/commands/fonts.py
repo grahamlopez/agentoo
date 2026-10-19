@@ -129,6 +129,15 @@ def browser_test(a, font=None):
     rows = samples(a.suite)
     families = output('fc-list', '--format=%{family[0]}\n').splitlines()
     options = ''.join(f'<option>{html.escape(f)}</option>' for f in sorted(set(families)))
+    # Private-use icons require an explicitly named family in Firefox.
+    nerd_fallback = next((family for family in ('Symbols Nerd Font Mono', 'Symbols Nerd Font')
+                          if family in families), '') if font is None else ''
+    if nerd_fallback:
+        selection_note = f'The right side starts with {html.escape(nerd_fallback)} after the generic font.'
+    elif font is not None:
+        selection_note = 'The right side starts with your requested candidate font.'
+    else:
+        selection_note = 'No supported Symbols Nerd Font was found; both sides start with the generic font.'
     sections = ''
     for name, lines in rows.items():
         content = 'Latin reference: ABC abc 0123 café\n' + '\n'.join(lines)
@@ -136,9 +145,10 @@ def browser_test(a, font=None):
         sections += f'<section><h2>{html.escape(name)}</h2><div class="pair"><pre>{html.escape(content)}</pre><pre class="candidate">{html.escape(content)}</pre></div><details><summary>Codepoints</summary>{codes}</details></section>'
     page = '''<!doctype html><meta charset="utf-8"><title>Agentoo font preview</title>
 <style>body{margin:2rem;font:16px system-ui;background:#f5f4ef;color:#222}label{margin-right:1rem}section{border-top:1px solid #aaa;margin-top:2rem}.pair{display:grid;grid-template-columns:1fr 1fr;gap:2rem;overflow:auto}pre{font:20px monospace;line-height:1.7;white-space:pre-wrap}details{overflow-wrap:anywhere}header{position:sticky;top:0;background:#f5f4ef;padding:1rem 0}select,input{font:inherit;max-width:24rem}</style>
-<header><h1>Agentoo font preview</h1><label>Candidate <input id="font" list="fonts"></label><datalist id="fonts">OPTIONS</datalist><label>Size <input id="size" type="number" value="20" min="6" max="96"></label><label>Role <select id="role"><option>monospace</option><option>sans-serif</option><option>serif</option></select></label><label><input id="fallback" type="checkbox">Fallback after current default</label><p>Left: current generic font. Right: candidate stack. Latin reference: ABC abc 0123 café.</p><p>Preview only; no Firefox preferences are changed. Use Firefox Inspector → Fonts to inspect actual rendered fonts.</p></header>SECTIONS
-<script>const f=document.querySelector('#font'),s=document.querySelector('#size'),r=document.querySelector('#role'),b=document.querySelector('#fallback');f.value=INITIAL;function update(){let quoted='"'+f.value.replaceAll('\\\\','\\\\\\\\').replaceAll('"','\\\\"')+'"';let stack=f.value?(b.checked?r.value+', '+quoted:quoted+', '+r.value):r.value;document.querySelectorAll('pre').forEach(p=>{p.style.fontSize=s.value+'px';p.style.fontFamily=p.classList.contains('candidate')?stack:r.value});}for(let e of [f,s,r,b])e.addEventListener('input',update);update();</script>'''
-    page = page.replace('OPTIONS', options).replace('SECTIONS', sections).replace('INITIAL', json.dumps(font or '').replace('<', '\\u003c'))
+<header><h1>Agentoo font preview</h1><label>Candidate <input id="font" list="fonts"></label><datalist id="fonts">OPTIONS</datalist><label>Size <input id="size" type="number" value="20" min="6" max="96"></label><label>Role <select id="role"><option>monospace</option><option>sans-serif</option><option>serif</option></select></label><label><input id="fallback" type="checkbox">Fallback after current default</label><p>Left: current generic font. Right: candidate stack. Latin reference: ABC abc 0123 café.</p><p>Nerd icons use private-use codepoints: explicitly name a compatible Nerd font. SELECTION_NOTE The left remains generic only. Successful rendering on the right does not enable Nerd icons elsewhere in Firefox.</p><p>Preview only; no Firefox preferences are changed. Use Firefox Inspector → Fonts to inspect actual rendered fonts.</p></header>SECTIONS
+<script>const f=document.querySelector('#font'),s=document.querySelector('#size'),r=document.querySelector('#role'),b=document.querySelector('#fallback');f.value=INITIAL;b.checked=FALLBACK;function update(){let quoted='"'+f.value.replaceAll('\\\\','\\\\\\\\').replaceAll('"','\\\\"')+'"';let stack=f.value?(b.checked?r.value+', '+quoted:quoted+', '+r.value):r.value;document.querySelectorAll('pre').forEach(p=>{p.style.fontSize=s.value+'px';p.style.fontFamily=p.classList.contains('candidate')?stack:r.value});}for(let e of [f,s,r,b])e.addEventListener('input',update);update();</script>'''
+    page = page.replace('OPTIONS', options).replace('SECTIONS', sections).replace('INITIAL', json.dumps(font or nerd_fallback).replace('<', '\\u003c'))
+    page = page.replace('FALLBACK', json.dumps(bool(nerd_fallback))).replace('SELECTION_NOTE', selection_note)
     path = Path(a.output).expanduser().absolute() if a.output else Path(os.environ.get('XDG_CACHE_HOME', str(Path.home()/'.cache'))) / 'agentoo/fonts/preview.html'
     write(path, page)
     print(path)

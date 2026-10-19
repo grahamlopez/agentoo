@@ -3,3 +3,6 @@
 # File-only Wayland screenshots and interactive region selection.
 gui-apps/grim
 gui-apps/slurp
+# Fonts
+media-fonts/unifont
+media-fonts/noto-emoji

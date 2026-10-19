@@ -134,7 +134,13 @@ agentoo fonts set 'Liberation Mono' --target firefox --role monospace
 
 The local HTML page compares existing generic fonts with an adjustable candidate
 stack and size. It includes a fallback mode, codepoints, and all the shared
-samples. The page does not mutate preferences. After inspecting, close Firefox and return
+samples. Firefox does not automatically use arbitrary system fonts for private-use Nerd icons.
+When Symbols Nerd Font Mono or Symbols Nerd Font is installed, tests initialize
+the candidate side with that family after the generic font. Otherwise both sides
+start with the generic font. Explicit previews use the requested candidate.
+The generic-only side remains a diagnostic comparison; success on the candidate
+side does not enable Nerd icons elsewhere in Firefox.
+The page does not mutate preferences. After inspecting, close Firefox and return
 to the terminal: `a` saves the command-line family/role/script; `r`/Escape/Ctrl+C
 leaves preferences unchanged. HTML control adjustments are visual only and do
 not change the selection saved by the CLI. Use `preview --fallback` to accept
