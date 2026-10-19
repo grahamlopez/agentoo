@@ -11,6 +11,18 @@ git_config() {
     printf 'Run this system repository operation with sudo agentoo git ...\n' >&2
     return 1
   fi
+  # Read-only commands need no desktop transaction. Unknown commands include
+  # aliases and global-option forms, so guard those conservatively as well.
+  if (( EUID == 0 )); then
+    case ${1:-} in
+      status|diff|log|show|blame|grep|ls-files|ls-tree|rev-parse|rev-list|describe|config|remote|fetch|push|help|--help|--version) ;;
+      *)
+        python3 "$(dirname "$0")/git-transaction.py" \
+          git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" "$@"
+        return
+        ;;
+    esac
+  fi
   git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" "$@"
 }
 

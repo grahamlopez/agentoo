@@ -85,6 +85,32 @@ manual recovery; reset/restore and manual edits are not all covered by hooks.
 No background service or automatic privilege prompt is installed. To disable
 these hooks, use `agentoo git config --unset core.hooksPath`.
 
+## Live Hyprland configuration updates
+
+Run system updates through `sudo agentoo git pull` (or the corresponding
+checkout, switch, restore, reset, merge, or rebase command). The root-run Git
+wrapper pauses automatic config reload in running Hyprland instances before
+Git changes files. It repairs managed permissions after Git finishes, including
+failed or interrupted operations, then reloads Hyprland only if repair succeeds.
+Finally it restores each session's previous automatic-reload setting. Direct
+config edits retain automatic reload. Pause, reload, and restoration failures
+are reported; a failed pause prevents the Git operation from starting.
+
+The guard serializes root-run deployments and discovers sessions under
+`/run/user/*/hypr/`, so it also works when sudo does not preserve the desktop
+environment. Stale, unreachable instance directories are skipped. No running
+desktop is required. It uses Hyprland's Lua `hyprctl eval` interface and Python's
+standard library; no daemon or additional package is needed.
+
+Common read-only commands, fetch, push, and repository configuration commands
+bypass the guard. Unknown commands (including Git aliases) and commands preceded
+by global options are guarded conservatively. Non-root Git commands retain
+their existing behavior and do not trigger privilege escalation. Raw Git calls
+that bypass `agentoo git` still have only the post-operation permission hooks;
+they cannot pause reload before files change. SIGINT and SIGTERM run cleanup;
+SIGKILL or a power failure cannot, and may require restoring automatic reload
+manually or restarting the desktop session.
+
 Run the focused checks from a development checkout with:
 
 ```sh

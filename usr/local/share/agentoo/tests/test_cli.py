@@ -49,6 +49,10 @@ class CliTest(unittest.TestCase):
         (commands / 'git').write_text((COMMANDS / 'git').read_text().replace(
             '/var/lib/agentoo/repository.git', str(repository)))
         (commands / 'require-root').write_text((COMMANDS / 'require-root').read_text())
+        # Root-run tests exercise wrapper forwarding without desktop IPC or
+        # permission repair on the test machine.
+        (commands / 'git-transaction.py').write_text(
+            'import os, sys\nos.execvp(sys.argv[1], sys.argv[1:])\n')
         self.entry.write_text(self.entry.read_text().replace(str(COMMANDS), str(commands)))
         fake_git = self.root / 'git'
         fake_git.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
