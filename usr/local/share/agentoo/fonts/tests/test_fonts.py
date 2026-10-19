@@ -42,9 +42,10 @@ class FontsTests(unittest.TestCase):
             config, fragment = Path(d) / 'kitty.conf', Path(d) / 'agentoo-fonts.conf'
             config.write_text('include host.conf\n')
             fragment.write_text('font_size 10\n')
-            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'reload_kitties') as reload, patch('sys.stdout', new_callable=io.StringIO):
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'reload_kitties') as reload, patch('sys.stdout', new_callable=io.StringIO) as out:
                 f.save_selection('font_size 11\n', expected='font_size 10\n')
                 f.save_selection('font_size 10\n')
+            self.assertIn('agentoo fonts set --restore', out.getvalue())
             self.assertEqual(reload.call_count, 2)
             self.assertEqual(fragment.read_text(), 'font_size 10\n')
             self.assertEqual(config.read_text().count('include agentoo-fonts.conf'), 1)
@@ -158,6 +159,90 @@ class FontsTests(unittest.TestCase):
         self.assertEqual(chars[0]['covering_families'], ['Test'])
         self.assertEqual(chars[1]['covering_families'], [])
         self.assertEqual(chars[1]['fontconfig_match'], 'candidate')
+
+    def invoke(self, *args):
+        with patch.object(f.sys, 'argv', ['agentoo fonts', *args]), patch('sys.stdout', new_callable=io.StringIO) as out:
+            f.main()
+        return out.getvalue()
+
+    def test_help_is_plain_and_has_consistent_headings(self):
+        class TerminalOutput(io.StringIO):
+            def isatty(self):
+                return True
+        for command in [None, 'status', 'test', 'set', 'doctor']:
+            argv = ['agentoo fonts'] + ([command] if command else []) + ['--help']
+            with patch.object(f.sys, 'argv', argv), patch.dict(f.os.environ, {'FORCE_COLOR': '1', 'PYTHON_COLORS': '1'}), patch('sys.stdout', new_callable=TerminalOutput) as out, self.assertRaises(SystemExit) as error:
+                f.main()
+            self.assertEqual(error.exception.code, 0)
+            help_text = out.getvalue()
+            prefix = 'Usage: agentoo fonts' + (' ' + command if command else '')
+            self.assertTrue(help_text.startswith(prefix), help_text)
+            self.assertNotIn('Usage: Usage:', help_text)
+            self.assertNotIn('\x1b', help_text)
+            self.assertIn('Options:', help_text)
+            if command is None:
+                self.assertIn('Commands:\n  status', help_text)
+
+    def test_status_is_the_default_and_accepts_filters(self):
+        with patch.object(f, 'status') as status:
+            self.invoke()
+            status.assert_called_once_with('', False)
+            status.reset_mock()
+            self.invoke('status', '--filter', 'mono', '--nerd')
+            status.assert_called_once_with('mono', True)
+
+    def test_test_routes_terminal_candidate_size_style_and_interactive(self):
+        with patch.object(f, 'terminal_test') as terminal, patch.object(f, 'preview') as preview:
+            self.invoke('test', 'greek')
+            self.assertEqual(terminal.call_args.args[0].suite, 'greek')
+            preview.assert_not_called()
+            self.invoke('test', 'nerd', '--font', 'Example')
+            self.assertEqual(preview.call_args.args[0].font, 'Example')
+            self.assertEqual(preview.call_args.args[0].suite, 'nerd')
+            self.invoke('test', '--interactive')
+            self.assertIsNone(preview.call_args.args[0].font)
+            self.invoke('test', '--size', '12')
+            self.assertEqual(preview.call_args.args[0].size, 12)
+            with patch.object(f, 'kitty_settings', return_value={'faces': {'medium': {'family': 'Current'}}}):
+                self.invoke('test', '--style', 'Bold')
+            self.assertEqual(preview.call_args.args[0].font, 'Current')
+
+    def test_test_routes_browser_candidate_without_opening_kitty(self):
+        with patch.object(f, 'browser_test') as browser, patch.object(f, 'preview') as preview:
+            self.invoke('test', 'nerd', '--font', 'Symbols Nerd Font Mono', '--target', 'firefox', '--no-open')
+            self.assertEqual(browser.call_args.args[0].suite, 'nerd')
+            self.assertTrue(browser.call_args.args[0].no_open)
+            self.assertEqual(browser.call_args.args[1], 'Symbols Nerd Font Mono')
+            preview.assert_not_called()
+
+    def test_set_restore_is_exact_and_excludes_selection_options(self):
+        old = 'font_size 11\nsymbol_map U+2800-U+28FF Unifont\n'
+        with patch.object(f, 'save_selection') as save, patch.object(f, 'preview') as preview:
+            self.invoke('set', '--restore', old)
+            save.assert_called_once_with(old)
+            preview.assert_not_called()
+            save.reset_mock()
+            self.invoke('set', '--restore', '')
+            save.assert_called_once_with('')
+            for extra in [('--font', 'Example'), ('--size', '12'), ('--style', 'Bold'), ('--suite', 'all')]:
+                with patch('sys.stderr', new_callable=io.StringIO), self.assertRaises(SystemExit) as error:
+                    self.invoke('set', '--restore', old, *extra)
+                self.assertEqual(error.exception.code, 2)
+
+    def test_removed_commands_and_analysis_render_combination_are_rejected(self):
+        for args in [('list',), ('preview',), ('coverage',), ('explain',), ('kitty-config',),
+                     ('doctor', '--font', 'Example', '--render')]:
+            with patch('sys.stderr', new_callable=io.StringIO), self.assertRaises(SystemExit) as error:
+                self.invoke(*args)
+            self.assertEqual(error.exception.code, 2)
+
+    def test_face_analysis_exposes_substitution_and_single_face_gaps(self):
+        with patch.object(f, 'output', return_value='Substitute\n/test/font.ttf\n20-7e'):
+            result = f.face_analysis('Requested', 'greek')
+        self.assertEqual(result['pattern'], 'Requested')
+        self.assertEqual(result['family'], 'Substitute')
+        self.assertIn('U+1FA7', result['coverage']['greek']['missing'])
+
 
 
 if __name__ == '__main__':

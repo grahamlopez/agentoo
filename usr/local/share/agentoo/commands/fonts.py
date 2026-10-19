@@ -23,6 +23,31 @@ import unicodedata
 DATA = Path(__file__).resolve().parent.parent / 'fonts'
 ROLES = ('monospace', 'sans-serif', 'serif', 'emoji')
 
+class HelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Match Agentoo's plain help headings and keep layout independent of the TTY."""
+    def __init__(self, prog):
+        super().__init__(prog, width=80, max_help_position=26)
+        self._action_max_length = 24
+
+    def _format_action(self, action):
+        if isinstance(action, argparse._SubParsersAction):
+            return ''.join(self._format_action(child) for child in action._get_subactions())
+        return super()._format_action(action)
+
+    def _format_usage(self, usage, actions, groups, prefix):
+        return super()._format_usage(usage, actions, groups, prefix or 'Usage: ')
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('formatter_class', HelpFormatter)
+        if sys.version_info >= (3, 14):
+            kwargs['color'] = False
+        super().__init__(*args, **kwargs)
+        self._positionals.title = 'Arguments'
+        self._optionals.title = 'Options'
+
+
 def run(*args, **kw):
     return subprocess.run([str(x) for x in args], check=True, **kw)
 
@@ -71,14 +96,8 @@ def terminal_test(a):
         print('\n' + name.upper())
         for row in rows:
             print(row)
-        if name == 'smoke' and not a.plain and sys.stdout.isatty():
+        if name == 'smoke' and sys.stdout.isatty():
             print('\x1b[1mBold\x1b[0m / \x1b[3mItalic\x1b[0m / \x1b[1;3mBold Italic\x1b[0m / \x1b[4mUnderline\x1b[0m / \x1b[4:3mUndercurl\x1b[0m')
-        if getattr(a, 'codepoints', False):
-            chars = sorted(set(''.join(rows)) - set(' '), key=ord)
-            columns = min(a.columns, 6)
-            for i in range(0, len(chars), columns):
-                group = chars[i:i+columns]
-                print(' '.join(f'{c} U+{ord(c):04X}' for c in group))
 
 def browser_test(a, font=None):
     rows = samples(a.suite)
@@ -169,7 +188,7 @@ def validate_font(family, style=None):
     matching = [line.split('\t', 1) for line in faces
                 if family.casefold() in [n.strip().casefold() for n in line.split('\t')[0].split(',')]]
     if not matching:
-        raise ValueError(f'font family is not installed: {family}; use agentoo fonts list')
+        raise ValueError(f'font family is not installed: {family}; use agentoo fonts status')
     if style and not any(style.casefold() in [s.strip().casefold() for s in row[1].split(',')]
                          for row in matching if len(row) == 2):
         raise ValueError(f'style is not installed: {family} / {style}')
@@ -254,7 +273,7 @@ def save_selection(text, expected=None):
             fragment.unlink(missing_ok=True)
         raise
     print(f'Updated {fragment}')
-    undo('kitty-config', '--value', previous)
+    undo('set', '--restore', previous)
     reload_kitties()
 
 
@@ -349,7 +368,7 @@ def preview_child(state_path):
             print('Ruler: ' + ''.join(str((i + 1) % 10) for i in range(80)))
             if state['text'] is not None:
                 print('\nPROBLEM TEXT\n' + state['text'])
-            terminal_test(argparse.Namespace(suite=state['suite'], plain=False, codepoints=False))
+            terminal_test(argparse.Namespace(suite=state['suite']))
             print(f'\nSize {size:g} pt | width {geometry["cell_width"]} | height {geometry["cell_height"]}')
             print('+/- size | h/l width | j/k height | r reset | ' +
                   ('q/Esc close (diagnostic only)' if state['read_only'] else 's save | q/Esc cancel'))
@@ -415,6 +434,54 @@ def problem_characters(text, faces, pattern='monospace'):
     return result
 
 
+def face_analysis(pattern, suite):
+    record = output('fc-match', '--format=%{family}\n%{file}\n%{charset}', pattern).splitlines()
+    if len(record) < 3:
+        raise ValueError('fontconfig returned no face charset')
+    ranges = []
+    for part in record[2].split():
+        bounds = part.split('-')
+        ranges.append((int(bounds[0], 16), int(bounds[-1], 16)))
+    coverage = {}
+    for group, rows in samples(suite).items():
+        chars = set(''.join(rows)) - set(' \n')
+        missing = [f'U+{ord(char):04X}' for char in sorted(chars, key=ord)
+                   if not any(lo <= ord(char) <= hi for lo, hi in ranges)]
+        coverage[group] = {'total': len(chars), 'covered': len(chars) - len(missing), 'missing': missing}
+    return {'pattern': pattern, 'family': record[0], 'file': record[1],
+            'ranges': ranges, 'coverage': coverage}
+
+
+def status(filter_text='', nerd=False):
+    print('Current Kitty configuration (default launch; runtime overrides may differ):')
+    if shutil.which('kitty'):
+        try:
+            snapshot = kitty_settings()
+            for key in ('font_family', 'font_size'):
+                print(f'  {key}: {snapshot["settings"][key]}')
+            for role, face in snapshot['faces'].items():
+                print(f'  {role}: {face["family"]} [{face["style"]}] — {face["path"]}')
+            print('  Cell adjustments:', snapshot['geometry'])
+            for error in snapshot['errors']:
+                print('  Configuration error:', error)
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            print('  Could not resolve Kitty settings:', error)
+    else:
+        print('  Kitty is not installed.')
+    families = {}
+    for row in output('fc-list', '--format=%{family}\t%{style}\n').splitlines():
+        family, _, style = row.partition('\t')
+        if filter_text.casefold() not in row.casefold() or (nerd and 'nerd' not in row.casefold()):
+            continue
+        families.setdefault(family, set()).add(style)
+    print('\nInstalled font families and styles:')
+    for family, styles in sorted(families.items()):
+        print(f'  {family}: {", ".join(sorted(styles))}')
+    if not families:
+        print('  No matching fonts.')
+    print('\nUse test for samples, set for selection, and doctor for diagnostics. Fonts are installed with Portage.')
+
+
 def doctor_report(a):
     names, source = fontconfig_rules()
     faces = installed_faces()
@@ -458,7 +525,13 @@ def doctor_report(a):
     if a.text is not None:
         report['text'] = {'input': a.text, 'NFC': unicodedata.normalize('NFC', a.text),
                           'NFD': unicodedata.normalize('NFD', a.text),
-                          'characters': problem_characters(a.text, faces)}
+                          'characters': problem_characters(a.text, faces, a.font or 'monospace')}
+    if a.font:
+        report['font_analysis'] = face_analysis(a.font, a.suite)
+        if 'text' in report:
+            ranges = report['font_analysis']['ranges']
+            for char in report['text']['characters']:
+                char['in_matched_face'] = any(lo <= ord(char['character']) <= hi for lo, hi in ranges)
     if shutil.which('kitty'):
         try:
             report['kitty'] = kitty_settings()
@@ -492,6 +565,9 @@ def print_doctor(report):
         print(f'  {suite}: {coverage["covered"]}/{coverage["total"]}; missing: {", ".join(coverage["missing"]) or "none"}')
     print('\nKitty default configuration (includes resolved; launch overrides not observed):')
     print(json.dumps(report['kitty'], ensure_ascii=False, indent=2))
+    if 'font_analysis' in report:
+        print('\nSingle matched face (--font analysis only; does not select a font):')
+        print(json.dumps(report['font_analysis'], ensure_ascii=False, indent=2))
     if 'text' in report:
         print('\nProblem text:', json.dumps(report['text'], ensure_ascii=False, indent=2))
     for note in report['notes']:
@@ -499,111 +575,114 @@ def print_doctor(report):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog='agentoo fonts', description=__doc__,
-        epilog='Install/remove fonts with Portage. With no command, show Kitty configuration.')
-    sub = parser.add_subparsers(dest='command')
+    parser = ArgumentParser(prog='agentoo fonts', usage='%(prog)s [COMMAND] [options]', description=__doc__,
+        epilog='Default: show current Kitty settings and installed families (same as status).\n'
+               'Install and remove fonts with Portage.\n\n'
+               'Examples:\n'
+               '  agentoo fonts test --interactive\n'
+               '  agentoo fonts set --font \'Liberation Mono\' --size 11\n'
+               '  agentoo fonts doctor --text TEXT --json\n\n'
+               'Guide: ' + str(DATA.parent / 'docs/fonts.md'))
+    parser.add_argument('--filter', default='', help='filter installed families/styles in default status output; case-insensitive substring')
+    parser.add_argument('--nerd', action='store_true', help='show only Nerd faces in default status output')
+    sub = parser.add_subparsers(dest='command', title='Commands', metavar='COMMAND', prog=parser.prog)
+    parser._action_groups.insert(0, parser._action_groups.pop())
     suites = (*json.loads((DATA / 'samples.json').read_text()), 'width', 'all')
-    sub.add_parser('status', help='Show resolved default Kitty font settings')
-    p = sub.add_parser('list', help='List installed families and styles')
-    p.add_argument('filter', nargs='?', default='')
-    p.add_argument('--nerd', action='store_true')
-    for name in ('test', 'preview', 'set'):
-        p = sub.add_parser(name, help={'test': 'Print visual samples', 'preview': 'Try fonts in a dedicated window',
-                                      'set': 'Choose interactively, or apply an explicit Kitty selection'}[name])
-        if name == 'test':
-            p.add_argument('suite', choices=suites, nargs='?', default='all')
-        else:
-            p.add_argument('font', nargs='?')
-            p.add_argument('--size', type=float)
-            p.add_argument('--style')
-            p.add_argument('--suite', choices=suites, default='all')
-        if name != 'set':
-            p.add_argument('--target', choices=('kitty', 'firefox'), default='kitty')
-            p.add_argument('--output', help='Browser HTML output path')
-            p.add_argument('--no-open', action='store_true', help='Only generate browser HTML')
-            p.add_argument('--plain', action='store_true')
-            p.add_argument('--codepoints', action='store_true')
-            p.add_argument('--columns', type=int, choices=range(1, 7), default=6)
-    p = sub.add_parser('doctor', help='Report font inventory, policy, matching, and Kitty configuration')
-    p.add_argument('--suite', choices=suites, default='all')
-    p.add_argument('--text')
-    p.add_argument('--json', action='store_true')
-    p.add_argument('--render', action='store_true', help='Open a fresh Kitty sample window and capture fallback tracing')
-    p.add_argument('--output', help='Rendering trace file (requires --render)')
-    p = sub.add_parser('coverage', help='Check sample coverage in one matched face')
-    p.add_argument('font')
-    p.add_argument('--suite', choices=suites, default='all')
-    p = sub.add_parser('explain', help='Explain codepoints and fontconfig candidates')
-    p.add_argument('text')
-    p.add_argument('--font', default='monospace')
-    p = sub.add_parser('kitty-config', help='Restore a fragment from a printed revert command')
-    p.add_argument('--value', required=True)
+    suite_help = 'sample collection: ' + ', '.join(suites) + '; default: all (excludes width)'
+    p = sub.add_parser('status', help='Show current Kitty settings and installed font families')
+    p.add_argument('--filter', default=argparse.SUPPRESS, help='case-insensitive substring filter for installed families/styles')
+    p.add_argument('--nerd', action='store_true', default=argparse.SUPPRESS, help='show only installed Nerd faces')
+    p = sub.add_parser('test', help='Print samples, or open an interactive font comparison',
+        epilog='Without preview options, print samples in the current terminal.\n'
+               '--font, --size, --style, or --interactive opens a dedicated Kitty window.\n'
+               'Firefox comparisons are read-only.\n\n'
+               'Preview controls:\n'
+               '  +/- size, h/l width, j/k height, r reset, s save, q/Escape cancel\n'
+               '  Saving reloads all your Kitty instances.')
+    p.add_argument('suite', choices=suites, metavar='SUITE', nargs='?', default='all', help=suite_help)
+    p.add_argument('--font', help='installed family to preview; opens a dedicated Kitty window; default: current configuration')
+    p.add_argument('--size', type=float, help='Kitty point size, 4–96; opens an interactive window; default: configured size')
+    p.add_argument('--style', help='installed Kitty face style; opens an interactive window; default: configured face')
+    p.add_argument('--interactive', action='store_true', help='open the current configuration in a dedicated Kitty adjustment window')
+    p.add_argument('--target', choices=('kitty', 'firefox'), metavar='TARGET', default='kitty', help='kitty (default): terminal samples or interactive preview; firefox: read-only HTML')
+    p.add_argument('--output', help='Firefox only: HTML path; default: $XDG_CACHE_HOME/agentoo/fonts/preview.html or ~/.cache/agentoo/fonts/preview.html')
+    p.add_argument('--no-open', action='store_true', help='Firefox only: generate HTML without opening the browser')
+    p = sub.add_parser('set', help='Choose interactively, apply a selection, or restore a fragment',
+        epilog='Without selection options, open the native chooser, then the adjustment preview.\n'
+               '--font applies immediately without a window.\n'
+               'Every save reloads all your Kitty instances.')
+    selection = p.add_mutually_exclusive_group()
+    selection.add_argument('--font', help='installed family to apply immediately; omit to open the native chooser')
+    selection.add_argument('--restore', metavar='TEXT', help='restore exact fragment contents from a printed revert command; empty string clears the fragment; incompatible with selection options')
+    p.add_argument('--size', type=float, help='Kitty point size, 4–96; default: retain configured size')
+    p.add_argument('--style', help='installed face style, e.g. Regular or Medium; requires --font; default: family default')
+    p.add_argument('--suite', choices=suites, metavar='SUITE', help='samples after interactive chooser; default: all; incompatible with --restore')
+    p = sub.add_parser('doctor', help='Inspect codepoints, coverage, matching, and font configuration',
+        epilog='Agent diagnostics:\n'
+               '  doctor --text TEXT --json\n'
+               '  text.characters contains codepoints; text.NFC/NFD preserve sequence context.\n'
+               '  --font adds font_analysis for one matched face without selecting it.\n\n'
+               '--render requires a GUI and waits for the diagnostic window to close.\n'
+               'Guide: ' + str(DATA.parent / 'docs/fonts.md'))
+    p.add_argument('--suite', choices=suites, metavar='SUITE', default='all', help=suite_help)
+    p.add_argument('--text', help='inspect exact text: codepoints, Unicode names, normalization, combining marks, and covering families; also display it with --render')
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument('--font', help='fontconfig pattern for candidate matching and single-face coverage; reports substitution; analysis only, incompatible with --render')
+    mode.add_argument('--render', action='store_true', help='open a fresh diagnostic Kitty using current configuration and capture fallback tracing; cannot save')
+    p.add_argument('--json', action='store_true', help='emit one JSON document instead of human-readable text')
+    p.add_argument('--output', help='rendering trace path (requires --render); default: a unique temporary .log file')
     a = parser.parse_args()
+    if a.command not in (None, 'status') and (a.filter or a.nerd):
+        parser.error('--filter and --nerd only apply to status')
     if getattr(a, 'size', None) is not None and not 4 <= a.size <= 96:
         parser.error('--size must be between 4 and 96 points')
-    if getattr(a, 'style', None) and not a.font:
-        parser.error('--style requires a font')
-    if getattr(a, 'target', 'kitty') != 'firefox' and (getattr(a, 'no_open', False) or
-            (a.command in ('test', 'preview') and a.output)):
-        parser.error('--no-open and --output require --target firefox')
     if a.command in (None, 'status'):
-        print(json.dumps(kitty_settings(), ensure_ascii=False, indent=2))
-        print('Launch overrides and runtime selections may differ. Use doctor for the full environment.')
-    elif a.command == 'list':
-        for line in sorted(set(output('fc-list', '--format=%{family}\t%{style}\n').splitlines())):
-            if a.filter.casefold() in line.casefold() and (not a.nerd or 'nerd' in line.casefold()):
-                print(line)
+        status(a.filter, a.nerd)
     elif a.command == 'test':
-        browser_test(a) if a.target == 'firefox' else terminal_test(a)
-    elif a.command == 'preview':
         if a.target == 'firefox':
-            if a.size is not None or a.style:
-                parser.error('browser preview uses its page controls for size; --size/--style are Kitty options')
+            if a.size is not None or a.style or a.interactive:
+                parser.error('--size, --style, and --interactive are Kitty options; use the browser page controls')
             browser_test(a, a.font)
         else:
-            preview(a)
+            if a.no_open or a.output:
+                parser.error('--no-open and --output require --target firefox')
+            if a.font or a.size is not None or a.style or a.interactive:
+                if a.style and not a.font:
+                    a.font = kitty_settings()['faces']['medium']['family']
+                preview(a)
+            else:
+                terminal_test(a)
     elif a.command == 'set':
-        if a.font:
+        if a.restore is not None:
+            if a.size is not None or a.style or a.suite is not None:
+                parser.error('--restore cannot be combined with --size, --style, or --suite')
+            save_selection(a.restore)
+        elif a.font:
+            if a.suite is not None:
+                parser.error('--suite only applies to the interactive chooser; use test SUITE --font FONT to preview')
             validate_font(a.font, a.style)
             save_selection(selection_text(read(kitty_paths()[1]), a.font, a.style, a.size))
         else:
+            if a.style:
+                parser.error('--style requires --font')
+            a.suite = a.suite or 'all'
             preview(a, chooser=True)
-    elif a.command == 'kitty-config':
-        save_selection(a.value)
     elif a.command == 'doctor':
         if a.output and not a.render:
             parser.error('--output requires --render')
         report = doctor_report(a)
         if a.render:
             trace = Path(a.output).expanduser().absolute() if a.output else None
-            # Do not overwrite a predictable or symlinked file in a shared directory.
             if not a.output:
                 fd, name = tempfile.mkstemp(prefix='agentoo-font-trace-', suffix='.log')
                 os.close(fd)
                 trace = Path(name)
-            # Keep --json stdout machine-readable even when rendering is requested.
             with contextlib.redirect_stdout(io.StringIO()) as messages:
                 preview(argparse.Namespace(font=None, style=None, size=None, suite=a.suite, text=a.text), trace=trace)
             if not a.json:
                 print(messages.getvalue(), end='')
             report['render_trace'] = str(trace)
         print(json.dumps(report, ensure_ascii=False, indent=2)) if a.json else print_doctor(report)
-    elif a.command == 'explain':
-        print(json.dumps(problem_characters(a.text, installed_faces(), a.font), ensure_ascii=False, indent=2))
-        print('Fontconfig candidates do not establish the rendered font.')
-    elif a.command == 'coverage':
-        record = output('fc-match', '--format=%{family}\n%{file}\n%{charset}', a.font).splitlines()
-        covered = set()
-        for part in record[2].split():
-            bounds = part.split('-')
-            covered.update(range(int(bounds[0], 16), int(bounds[-1], 16) + 1))
-        chars = set(''.join(s for rows in samples(a.suite).values() for s in rows)) - set(' \n')
-        missing = sorted((c for c in chars if ord(c) not in covered), key=ord)
-        print('Matched face:', record[0], record[1])
-        print(f'{len(chars) - len(missing)}/{len(chars)} distinct sample codepoints present.')
-        for char in missing:
-            print(f'Missing U+{ord(char):04X} {unicodedata.name(char, "unnamed")}')
-        print('Fallback, composition, shaping, and appearance require visual inspection.')
 
 
 if __name__ == '__main__':

@@ -6,6 +6,11 @@ and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
 secrets, display backlight, screenshots, power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
+For missing glyphs, codepoints, Braille, Greek, Nerd icons, emoji, or font
+rendering issues, start with `agentoo fonts doctor --text 'problem text' --json`.
+See the [agent font diagnostic workflow](usr/local/share/agentoo/docs/fonts.md#agent-diagnostic-workflow)
+for interpreting coverage, matching, and rendering evidence.
+
 Operations request sudo only when needed; help and desktop utilities run as the
 current user. Arbitrary Git commands also run as the current user: use explicit
 `sudo agentoo git ...` for protected system repository writes. Git may require

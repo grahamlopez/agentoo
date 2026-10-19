@@ -51,17 +51,23 @@ Desktop and power:
   power show-all         Show detailed battery and CPU power settings
 
 Fonts:
-  fonts doctor [--suite SUITE] [--text TEXT] [--json]
-                         Report discovery, matching, rendering policy, and Kitty settings
-  fonts doctor --render  Open a fresh Kitty sample window with fallback tracing
-  fonts test [SUITE]      Print visual samples in the current terminal
-  fonts preview [FONT]   Adjust size and cell spacing in a dedicated Kitty window
-  fonts preview --target firefox
+  fonts [status] [--filter TEXT] [--nerd]
+                         Show current Kitty settings and installed families/styles
+  fonts test [SUITE]      Print samples with the current terminal's rendering
+  fonts test [SUITE] --font FAMILY
+                         Adjust a font in a dedicated Kitty preview; --interactive uses current settings
+  fonts test [SUITE] --target firefox
                          Open a read-only browser comparison
-  fonts set [FONT]       Choose interactively, or apply an explicit selection
-  fonts list [FILTER]    List installed font families and styles
+  fonts set [--font FAMILY]
+                         Choose interactively, or apply an explicit selection
+  fonts set --restore TEXT
+                         Restore an exact fragment from a printed revert command
+  fonts doctor [--text TEXT] [--font PATTERN] [--suite SUITE] [--json]
+                         Inspect codepoints, single-face/system coverage, matching, and policy
+  fonts doctor --render  Open a fresh Kitty diagnostic window with fallback tracing
   fonts <subcommand> --help
                          Explain arguments and options
+  Font agent guide: /usr/local/share/agentoo/docs/fonts.md
 
 Options:
   -h, --help             Show help

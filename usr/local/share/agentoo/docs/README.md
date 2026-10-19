@@ -3,6 +3,16 @@
 An opinionated Gentoo distribution with development and system administration
 at its center. This repository brings its configuration and installer under one roof, with custom ebuilds planned.
 
+## Font troubleshooting for agents
+
+Use `agentoo fonts doctor --text 'problem text' --json` for codepoints, Unicode
+normalization, coverage, package ownership, fontconfig policy, and resolved Kitty
+settings. Use `agentoo fonts doctor --text 'problem text'` for a human-readable report.
+Read the [font diagnostic workflow](fonts.md#agent-diagnostic-workflow) for
+command selection, JSON fields, and the limits of installed coverage versus
+actual rendering. Font installation belongs to Portage; browser preview is
+read-only, and saving a Kitty selection reloads all of the user's Kitty instances.
+
 ## Structure
 
 The repository mirrors the target filesystem. Managed systems use a bare Git
