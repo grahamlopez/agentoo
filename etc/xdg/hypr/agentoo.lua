@@ -22,6 +22,15 @@ hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
 hl.bind("SUPER + F", hl.dsp.window.fullscreen({ action = "toggle" }))
 hl.bind("SUPER + V", hl.dsp.window.float({ action = "toggle" }))
 
+hl.bind("ALT + TAB", function()
+    hl.dispatch(hl.dsp.window.cycle_next())
+    hl.dispatch(hl.dsp.window.bring_to_top())
+end)
+hl.bind("ALT + SHIFT + TAB", function()
+    hl.dispatch(hl.dsp.window.cycle_next({ next = false }))
+    hl.dispatch(hl.dsp.window.bring_to_top())
+end)
+
 for _, direction in ipairs({ "left", "right", "up", "down" }) do
     hl.bind("SUPER + " .. direction, hl.dsp.focus({ direction = direction }))
     hl.bind("SUPER + SHIFT + " .. direction, hl.dsp.window.move({ direction = direction }))
