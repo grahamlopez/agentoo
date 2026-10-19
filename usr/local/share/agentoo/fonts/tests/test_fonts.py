@@ -14,6 +14,37 @@ f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)
 
 class FontsTests(unittest.TestCase):
+    def test_eselect_only_reports_enabled_rules(self):
+        listing = 'Available fontconfig .conf files (* is enabled):\n  [1] 10-hinting-full.conf\n  [2] 10-hinting-slight.conf *\n  [3] 50-user.conf *\n'
+        with patch.object(f.shutil, 'which', return_value='/usr/bin/eselect'), patch.object(f, 'output', return_value=listing) as command:
+            names, source = f.fontconfig_rules()
+        self.assertEqual(names, ['10-hinting-slight.conf', '50-user.conf'])
+        command.assert_called_once_with('eselect', 'fontconfig', 'list')
+
+    def test_conflict_detection_is_conservative(self):
+        self.assertEqual(f.fontconfig_warnings(['10-hinting-slight.conf', '10-yes-antialias.conf']), [])
+        notes = f.fontconfig_warnings(['10-hinting-full.conf', '10-hinting-slight.conf', '10-no-antialias.conf', '10-yes-antialias.conf'])
+        self.assertEqual(len(notes), 2)
+        self.assertTrue(all('Potentially conflicting' in note for note in notes))
+
+    def test_doctor_only_invokes_read_only_commands(self):
+        calls = []
+        def query(*args):
+            calls.append(args)
+            if args[:3] == ('eselect', 'fontconfig', 'list'):
+                return '  [1] 50-user.conf *'
+            if args[0] == 'fc-conflist':
+                return '+ /etc/fonts/fonts.conf: Default\n- /etc/fonts/disabled.conf: Disabled'
+            if args[:2] == ('fc-list', '--format=%{family}\t%{file}\t%{charset}\n'):
+                return 'Test Font\t/test/font.ttf\t20-7e'
+            return 'Test Font'
+        with patch.object(f.shutil, 'which', side_effect=lambda name: '/usr/bin/'+name), patch.object(f, 'output', side_effect=query), patch('sys.stdout', new_callable=io.StringIO) as out:
+            f.fontconfig_doctor(argparse.Namespace(suite='kaomoji'))
+        self.assertTrue(all(call[0] in ('eselect', 'fc-match', 'fc-list', 'fc-conflist') for call in calls))
+        self.assertNotIn('Disabled', out.getvalue())
+        self.assertIn('Missing:', out.getvalue())
+        self.assertIn('No eselect rules, caches, fonts, or application settings were changed.', out.getvalue())
+
     def test_kitty_preserves_unrelated_config_and_prints_exact_undo(self):
         with tempfile.TemporaryDirectory() as d:
             config, fragment = Path(d)/'kitty.conf', Path(d)/'agentoo-fonts.conf'

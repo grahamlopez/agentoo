@@ -51,6 +51,8 @@ Desktop and power:
   power show-all         Show detailed battery and CPU power settings
 
 Fonts:
+  fonts doctor [--suite SUITE]
+                         Read-only fontconfig policy and coverage diagnostics
   fonts test [SUITE]      Show all visual samples by default in the current terminal
   fonts test --target firefox
                          Open the shared samples in Firefox

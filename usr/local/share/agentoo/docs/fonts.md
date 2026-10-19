@@ -52,6 +52,31 @@ codepoints against one fontconfig-selected face; it cannot validate shaping,
 ligatures, fallback appearance, emoji sequences, or real application rendering.
 The matched face is always shown so fontconfig substitution is visible.
 
+## Read-only fontconfig diagnostics
+
+`agentoo fonts status` includes enabled system rules from
+`eselect fontconfig list`, falling back to `/etc/fonts/conf.d` when unavailable.
+It reports potential conflicts among known hinting, antialiasing, subpixel,
+LCD-filter, and bitmap presets. These are review hints: rule order and local
+configuration determine the effective result. Custom `FONTCONFIG_FILE` and
+`FONTCONFIG_PATH` environments are called out explicitly.
+
+```sh
+agentoo fonts doctor
+agentoo fonts doctor --suite kaomoji
+agentoo fonts doctor --suite greek
+```
+
+Doctor reports installed diagnostic tools, generic font matches, visible face
+counts, font directories, actually loaded rules via `fc-conflist` when available,
+sample codepoints with no visible font coverage, and representative character
+coverage candidates. `--suite` defaults to all. Fontconfig sees the environment
+of the invoking process, which may differ from a sandboxed browser. A visible
+font covering a codepoint does not guarantee Firefox uses it or that combining
+marks/emoji sequences render well. Doctor never enables/disables rules, refreshes
+caches, installs fonts, or modifies application preferences. The Linux console
+uses a separate font mechanism.
+
 ## Installation
 
 The small catalog uses the latest official Nerd Fonts GitHub release. User

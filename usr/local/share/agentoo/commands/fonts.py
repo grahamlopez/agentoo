@@ -397,6 +397,103 @@ def install_fonts(a):
     print('Installed; no target selection changed. Families:')
     print(output('fc-scan', '--format=%{family}\n', *sorted(dest.glob('*.ttf')), *sorted(dest.glob('*.otf'))))
 
+def fontconfig_rules():
+    """Read Gentoo's enabled rule selections without modifying symlinks."""
+    if shutil.which('eselect'):
+        try:
+            report = output('eselect', 'fontconfig', 'list')
+            names = re.findall(r'^\s*\[\d+\]\s+(\S+)\s+\*\s*$', report, re.M)
+            return names, 'eselect fontconfig list'
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    directory = Path('/etc/fonts/conf.d')
+    return sorted(p.name for p in directory.glob('*.conf')), '/etc/fonts/conf.d (eselect unavailable or failed)'
+
+
+def fontconfig_warnings(names):
+    enabled = set(names)
+    groups = {
+        'hinting levels': ['10-hinting-full.conf', '10-hinting-medium.conf', '10-hinting-none.conf', '10-hinting-slight.conf'],
+        'subpixel orders': ['10-sub-pixel-'+x+'.conf' for x in ('none','rgb','bgr','vrgb','vbgr')],
+        'antialias switches': ['10-no-antialias.conf', '10-yes-antialias.conf'],
+        'bitmap policies': ['70-no-bitmaps.conf', '70-no-bitmaps-and-emoji.conf', '70-no-bitmaps-except-emoji.conf', '70-yes-bitmaps.conf'],
+        'LCD filters': ['11-lcdfilter-'+x+'.conf' for x in ('default','legacy','light','none')],
+    }
+    warnings = []
+    for label, alternatives in groups.items():
+        found = sorted(enabled.intersection(alternatives))
+        if len(found) > 1:
+            warnings.append(f'Potentially conflicting {label}: '+', '.join(found))
+    if '10-unhinted.conf' in enabled and enabled.intersection({'10-hinting-full.conf','10-hinting-medium.conf','10-hinting-slight.conf','10-autohint.conf'}):
+        warnings.append('Unhinted rendering is enabled alongside hinting rules; inspect effective matches.')
+    return warnings
+
+
+def fontconfig_status():
+    names, source = fontconfig_rules()
+    print('\nSystem fontconfig rules ('+source+'):')
+    if not names:
+        print('  No enabled rules found in the standard directory.')
+    for name in names:
+        print('  '+name)
+    print('Rules can affect discovery, aliases, fallback, and rendering; filenames alone do not prove effective behavior.')
+    if os.environ.get('FONTCONFIG_FILE') or os.environ.get('FONTCONFIG_PATH'):
+        print('Custom fontconfig environment is set; system selections may not be the active configuration:')
+        for key in ('FONTCONFIG_FILE','FONTCONFIG_PATH'):
+            if key in os.environ: print(f'  {key}={os.environ[key]}')
+    for warning in fontconfig_warnings(names):
+        print('NOTE: '+warning)
+    print('Linux console fonts are independent of fontconfig. No rules were changed.')
+    return names
+
+
+def fontconfig_doctor(a):
+    names = fontconfig_status()
+    print('\nFontconfig tools:')
+    for executable in ('fc-list','fc-match','fc-conflist','fc-cache','eselect'):
+        print(f'  {executable}: {shutil.which(executable) or "not found"}')
+    if not shutil.which('fc-list') or not shutil.which('fc-match'):
+        print('Install fontconfig tools to inspect font discovery and matching. No changes made.')
+        return
+    print('\nEffective generic matches (not necessarily application selections):')
+    for family in ROLES:
+        print('  '+family+': '+output('fc-match','--format=%{family} [%{style}] — %{file}',family))
+    print('\nFont discovery:')
+    records = output('fc-list','--format=%{family}\t%{file}\t%{charset}\n').splitlines()
+    faces = []
+    for row in records:
+        fields = row.split('\t')
+        if len(fields) != 3:
+            continue
+        ranges = []
+        for value in fields[2].split():
+            bounds = value.split('-')
+            ranges.append((int(bounds[0],16), int(bounds[-1],16)))
+        faces.append((fields[0], fields[1], ranges))
+    print(f'  {len(faces)} visible faces; {len({face[1] for face in faces})} unique font files')
+    for directory in (Path(os.environ.get('XDG_DATA_HOME',str(Path.home()/'.local/share')))/'fonts', Path('/usr/local/share/fonts/agentoo')):
+        print(f'  {directory}: '+('exists' if directory.is_dir() else 'absent'))
+    if '50-user.conf' not in names:
+        print('NOTE: standard 50-user.conf is not selected; inspect fc-conflist before relying on user fontconfig rules.')
+    if shutil.which('fc-conflist'):
+        print('\nActually loaded configuration (fc-conflist):')
+        loaded = output('fc-conflist').splitlines()
+        print('\n'.join(line for line in loaded if line.startswith('+')) or 'No loaded-file entries reported.')
+    print('\nSample coverage across all visible faces (not browser rendering):')
+    for group, rows in samples(a.suite).items():
+        chars = sorted(set(''.join(rows))-set(' \n'), key=ord)
+        missing = [c for c in chars if not any(start <= ord(c) <= end for _,_,ranges in faces for start,end in ranges)]
+        print(f'  {group}: {len(chars)-len(missing)}/{len(chars)} distinct codepoints have a visible font')
+        if missing:
+            print('    Missing: '+' '.join(f'U+{ord(c):04X}' for c in missing))
+    print('\nRepresentative fallback candidates (fontconfig, not application proof):')
+    for label, character in [('Greek','ᾧ'),('Combining breathing','\u0314'),('Braille','⠋'),('Heavy border','━'),('Nerd icon','󰐊'),('Emoji','😀'),('Kaomoji','ಠ')]:
+        matches = output('fc-list',f':charset={ord(character):x}','--format=%{family}\n').splitlines()
+        print(f'  {label} U+{ord(character):04X}: '+(', '.join(sorted(set(matches))[:3]) or 'no visible font covers this codepoint'))
+    print('\nInspect actual Firefox fonts in Inspector → Fonts, then compare agentoo fonts test samples.')
+    print('No eselect rules, caches, fonts, or application settings were changed.')
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog='agentoo fonts', description=__doc__,
@@ -441,6 +538,9 @@ def main():
                   'braille=spinners/dots; unicode=symbols/CJK/combining marks; '
                   'emoji=joined/color sequences; kaomoji=text faces; width=terminal ruler; '
                   'all=all collections except width')
+    p = command('doctor', 'Read-only fontconfig policy, discovery, sample coverage, and fallback diagnostics',
+                examples='Examples:\n  agentoo fonts doctor\n  agentoo fonts doctor --suite kaomoji\n\nReports enabled eselect rules, potential conflicts, actual loaded configuration,\ngeneric matches, and visible-font coverage. Does not modify rules or settings.\nFontconfig results do not establish which font Firefox or Kitty rendered.')
+    p.add_argument('--suite', choices=suites, default='all', help=suite_help)
     for name in ('test','preview'):
         p = command(name,
                     'Display visual samples without changing font settings' if name == 'test' else
@@ -549,7 +649,10 @@ def main():
         return
     if a.command in ('install','remove'):
         install_fonts(a); return
+    if a.command == 'doctor':
+        fontconfig_doctor(a); return
     if a.command == 'status':
+        fontconfig_status()
         print(f'TERM={os.environ.get("TERM","unset")} tmux={bool(os.environ.get("TMUX"))} SSH={bool(os.environ.get("SSH_CONNECTION"))}')
         t = target(a)
         print('Target:',t)
