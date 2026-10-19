@@ -1,5 +1,6 @@
--- Shared defaults for Hyprland 0.56.2. No autostart or host-specific workarounds.
+-- Shared defaults for Hyprland 0.56.2. No host-specific workarounds.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+require("/etc/xdg/hypr/lid.lua")
 
 hl.config({
     input = { kb_layout = "us", kb_options = "ctrl:nocaps" },

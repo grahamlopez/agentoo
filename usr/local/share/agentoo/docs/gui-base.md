@@ -6,9 +6,10 @@ without exact version pins. Unkeyworded live ebuilds and package masks remain
 excluded by the normal Portage policy. Preview updates after syncing; new
 dependencies may require additional package-specific keyword decisions.
 Launch it explicitly from a normal user's TTY login with `start-hyprland`.
-There is no automatic startup, greeter, UWSM, XWayland, launcher, panel,
+There is no automatic session startup, greeter, UWSM, XWayland, launcher, panel,
 notification daemon, portal, wallpaper daemon, or screen locker. Suspend and
-lid handling belong to systemd/logind. Resume returns to an unlocked session.
+lid-close suspend belong to systemd/logind. Hyprland routes displays for docked
+lid use as described below. Resume returns to an unlocked session.
 Networking remains dhcpcd and wpa_supplicant.
 
 ## Before pulling on thinktop
@@ -330,6 +331,117 @@ after reviewing its dependency plan. Avoid adding services just to silence a
 short-lived `wpctl` client's warnings. See the
 [PipeWire realtime module documentation](https://docs.pipewire.org/page_module_rt.html).
 
+## External displays and HiDPI
+
+The shared configuration already uses the same automatic monitor policy as
+[Omarchy's current Lua configuration](https://github.com/omacom/omarchy/blob/quattro/config/hypr/monitors.lua):
+
+```lua
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+```
+
+The empty output matches displays without a specific rule. Hyprland enables
+connected displays using their preferred resolution and refresh rate, places
+new displays to the right, and chooses scaling from each display's pixel
+density. Connecting an external display extends the desktop without a separate
+monitor daemon. High resolution and scaling are independent: a laptop can use
+2x while an external display uses 1x. See the
+[Hyprland monitor reference](https://wiki.hypr.land/Configuring/Basics/Monitors/).
+
+Inspect the running session before adding overrides:
+
+```sh
+hyprctl monitors all
+hyprctl configerrors
+```
+
+Compare the active resolution, refresh rate, scale, and available modes. If a
+terminal survives a compositor restart, its `HYPRLAND_INSTANCE_SIGNATURE` may
+refer to the previous session. Use `hyprctl instances` and then
+`hyprctl -i INSTANCE monitors all` to query the current one.
+
+If the desired resolution is absent from the available modes, first investigate
+the monitor's picture-by-picture/screen partition settings, input mode, cable,
+dock, and graphics link. Changing `preferred` to `highres` cannot select a mode
+the connection does not expose. For example, the Dell U5226KW was observed
+offering at most 4608x2560 at 120 Hz, despite its
+[specified full-panel resolution of 6144x2560](https://www.dell.com/en-us/shop/dell-ultrasharp-52-thunderbolt-hub-monitor-u5226kw/apd/210-bthw/).
+After PiP was disabled on that monitor, Hyprland automatically selected
+6144x2560 at 59.99 Hz with 1x scaling; 6144x2560 at 120 Hz also appeared in the
+available modes. The automatic `preferred` policy selects the preferred timing,
+which need not be the highest refresh rate.
+These readings verify compositor state, not visible output on the panel. An
+empty workspace shows the base's nearly black background; open a window on the
+external workspace to distinguish that from a blank output. If it remains
+blank, inspect `hyprctl rollinglog` and kernel display errors before declaring
+the mode working.
+
+For a display needing a fixed scale or arrangement, add a specific `hl.monitor`
+rule to the host fragment or personal override described below. Prefer a
+`desc:...` output match from `hyprctl monitors all` when connector names change
+between docks. Keep the shared automatic fallback for unfamiliar displays.
+Use a scale that divides both resolution dimensions into whole logical pixels;
+positions are measured in those logical pixels.
+
+[Omarchy also provides](https://github.com/omacom/omarchy/blob/quattro/manual/33-monitors.md)
+scale shortcuts, mirroring, lid-based internal-display switching, and brightness
+control for supported external monitors. These are separate enhancements;
+Agentoo provides the automatic monitor rule, lid-based display switching, and
+laptop backlight controls. Its GUI package policy disables XWayland, so Omarchy's global
+`GDK_SCALE=2` and XWayland zero-scaling policy are not needed for this base.
+Keep per-display compositor scaling as the default for mixed-density displays.
+
+### Laptop lid behavior
+
+`/etc/xdg/hypr/lid.lua` binds `switch:on:Lid Switch` and
+`switch:off:Lid Switch` and reconciles monitor hotplug, session startup, and
+configuration reloads. Each reconciliation re-reads physical ACPI lid state;
+if it is unavailable, the latest switch event remains authoritative.
+Closing the lid with an active external output disables
+the internal eDP/LVDS/DSI outputs; Hyprland moves their workspaces to remaining
+outputs. Opening the lid reloads the configured rules to restore internal
+outputs, including host and personal display settings. Hyprland decides where
+workspaces return; this does not promise to restore each window's old location.
+Connecting an external output while closed also disables internal outputs.
+Removing the last external output restores the configured rules if the lid
+handler had disabled the panel, avoiding a persistent disabled-panel rule.
+
+`/usr/local/share/agentoo/hypr/lid-resume.py` listens for logind's
+[`PrepareForSleep(false)` signal](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.login1.html).
+It asks the running session to reconcile after 250 ms and again after a bounded
+delay (about 1.75 seconds after resume), allowing a connected dock to enumerate.
+Later monitor-added events also reconcile. This covers resuming with the lid
+still closed, including when a lid-switch event was missed during sleep.
+The observer uses Python's standard library and GLib's `gdbus` (selected by
+`@gui-base`), needs no root permissions, performs no periodic polling, and exits
+when the compositor's event socket closes. A per-instance lock prevents duplicate
+observers on config reloads. It does not depend on a graphical systemd target.
+
+Plugging in a dock can only resume a sleeping laptop if the hardware/firmware
+supports waking on that connection. Hyprland cannot trigger that while suspended.
+USB/Thunderbolt wake was enabled on thinktop, but cable-insertion wake still needs
+a physical test. No wake or firmware settings are changed by this handler.
+
+The handler never requests suspend or takes a logind inhibitor. The stock
+logind policy keeps a docked system awake and suspends an undocked laptop on
+lid-close. No logind override or service restart is needed. Systems with custom
+logind policy or a differently named lid switch need their settings reviewed
+with `systemd-analyze cat-config systemd/logind.conf`, `systemd-inhibit --list`,
+and `hyprctl devices`.
+
+Physical acceptance: close/open the lid with the Dell connected, check that
+workspaces remain reachable and the panel returns, then test lid-close suspend
+without external displays. Also test dock/undock while closed, a config
+reload while closed, and connecting the dock while suspended with the lid closed.
+After a supported wake event, confirm that only the Dell is active and the
+machine stays awake. Parser and simulated tests cannot verify physical suspend
+or the monitor's visible output.
+
+Run the simulated lid/hotplug regression checks from the repository root with
+`lua usr/local/share/agentoo/tests/test_hypr_lid.lua`.
+Run the observer signal/lifecycle tests with
+`python3 -B usr/local/share/agentoo/tests/test_lid_resume.py`.
+
 ## Configuration and launch
 
 Hyprland 0.56.2 with hyprutils 0.14.2 discovers
@@ -461,7 +573,8 @@ versions, commands, and outcomes in the open card. Complete all of the following
 4. Lid-close suspend and lid-open resume. Inspect `systemd-analyze cat-config
    systemd/logind.conf` and `systemd-inhibit --list`; verify packaged lid policy,
    including docked/external-display behavior when applicable. Add a logind
-   drop-in only for a demonstrated host requirement; no competing lid handler.
+   drop-in only for a demonstrated host requirement. Hyprland's lid handler
+   routes outputs only; logind remains the sole suspend-policy owner.
 5. Close applications, exit, and relaunch. Compare `systemctl --user
    show-environment` inside and after the session for stale Wayland variables,
    inspect `pgrep -a -u "$(id -u)" -f 'Hyprland|start-hyprland|kitty'`, and review
