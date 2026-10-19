@@ -417,17 +417,29 @@ USB/Thunderbolt wake was enabled on thinktop, but the tested dock connection did
 not wake it; opening the lid did. Cable-insertion wake is deferred. No wake or
 firmware settings are changed by this handler.
 
-The handler never requests suspend or takes a logind inhibitor. The stock
-logind policy keeps a docked system awake and suspends an undocked laptop on
-lid-close. No logind override or service restart is needed. Systems with custom
-logind policy or a differently named lid switch need their settings reviewed
+The handler never requests suspend or takes a logind inhibitor. The logind
+drop-in `/etc/systemd/logind.conf.d/30-ignore-lid-on-external-power.conf` sets
+`HandleLidSwitchExternalPower=ignore`. A closed laptop stays awake on external
+power even if the Dell temporarily disconnects while switching input or PiP/PbP
+mode. This also keeps it awake on an ordinary charger without an external
+display. On battery, undocked lid-close suspend remains enabled; docked behavior
+retains logind's default ignore policy. Manual suspend remains available.
+This follows the previously tested fix in
+[the historical Omarchy notes](omarchy-configuration-changes.md#1-keep-the-closed-laptop-awake-during-monitor-inputpbp-switching).
+If monitor reconfiguration also removes external power, the battery lid policy
+can still suspend the laptop; this rule adds no timed disconnect grace period.
+Apply a changed drop-in with `sudo systemctl reload systemd-logind`; a service
+restart is unnecessary. Systems with custom logind policy or a differently named
+lid switch need their settings reviewed
 with `systemd-analyze cat-config systemd/logind.conf`, `systemd-inhibit --list`,
 and `hyprctl devices`.
 
 Physical acceptance: close/open the lid with the Dell connected, check that
-workspaces remain reachable and the panel returns, then test lid-close suspend
-without external displays. Also test dock/undock while closed, a config
-reload while closed. Parser and simulated tests cannot verify physical suspend
+workspaces remain reachable and the panel returns, then test undocked lid-close
+suspend on battery and staying awake on a charger. Test Dell input/PiP/PbP
+switching with the lid closed and external power connected. Also test
+dock/undock while closed and a config reload while closed.
+Parser and simulated tests cannot verify physical suspend
 or the monitor's visible output.
 
 Run the simulated lid/hotplug regression checks from the repository root with
