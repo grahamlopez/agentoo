@@ -143,7 +143,12 @@ def browser_test(a, font=None):
     write(path, page)
     print(path)
     if not a.no_open:
-        run('firefox', path.as_uri())
+        launcher = next((executable for name in ('firefox', 'firefox-bin')
+                         if (executable := shutil.which(name))), None)
+        if launcher is None:
+            raise ValueError('Firefox launcher not found (tried firefox and firefox-bin); '
+                             f'open {path} manually, or use --no-open to generate only')
+        run(launcher, path.as_uri())
 
 
 def profile(a):
@@ -393,59 +398,140 @@ def install_fonts(a):
     print(output('fc-scan', '--format=%{family}\n', *sorted(dest.glob('*.ttf')), *sorted(dest.glob('*.otf'))))
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    sub = parser.add_subparsers(dest='command')
-    def command(name, description):
-        p = sub.add_parser(name, help=description, description=description)
-        p.add_argument('--target', choices=('auto','kitty','console','firefox'), default='auto')
-        p.add_argument('--profile', help='Firefox profile name or absolute path')
+    parser = argparse.ArgumentParser(
+        prog='agentoo fonts', description=__doc__,
+        epilog='With no command, show status. Start with: agentoo fonts test\n'
+               'Use agentoo fonts COMMAND --help for arguments and examples.',
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest='command', title='commands', metavar='COMMAND',
+                                help='operation to perform (default: status)')
+    def command(name, description, *, targets=False, profiles=False, examples=''):
+        p = sub.add_parser(name, help=description, description=description,
+                           epilog=examples or None,
+                           formatter_class=argparse.RawDescriptionHelpFormatter)
+        p.set_defaults(target='auto', profile=None, style=None, console=None)
+        if targets:
+            p.add_argument('--target', choices=('auto','kitty','console','firefox'), default='auto',
+                           help='target application (default: auto detects Kitty/Linux console, including tmux clients; Firefox must be explicit)')
+        if profiles:
+            p.add_argument('--profile', metavar='NAME_OR_PATH',
+                           help='Firefox profile name or absolute path; default: unambiguous installation-default profile; changes require that profile closed')
         return p
-    command('status', 'Report configuration; running overrides may differ')
-    p = command('list', 'List installed families or the small installation catalog')
-    p.add_argument('--available', action='store_true'); p.add_argument('--nerd', action='store_true'); p.add_argument('--family', default='')
+    def role_options(p):
+        p.add_argument('--role', choices=ROLES, default='monospace',
+                       help='Firefox font role (default: monospace); leaves other roles unchanged')
+        p.add_argument('--script', default='x-western', metavar='GROUP',
+                       help='Firefox script/language preference group (default: x-western); e.g. x-unicode or el for Greek')
+    def size_option(p):
+        p.add_argument('--size', type=float, metavar='POINTS',
+                       help='Kitty only: font size, 4–96 points; default: keep existing size')
+    def console_option(p):
+        p.add_argument('--console', metavar='/dev/ttyN',
+                       help='Linux console device; default: current real console outside tmux; console operations request sudo as needed')
+    command('status', 'Report configuration; running overrides may differ', targets=True, profiles=True,
+            examples='Examples:\n  agentoo fonts status\n  agentoo fonts status --target firefox')
+    p = command('list', 'List installed font families/faces or the installation catalog',
+                examples='Examples:\n  agentoo fonts list --nerd\n  agentoo fonts list --available --family ubuntu')
+    p.add_argument('--available', action='store_true', help='show installable catalog entries instead of installed families')
+    p.add_argument('--nerd', action='store_true', help='show only Nerd Font families/catalog entries')
+    p.add_argument('--family', default='', metavar='TEXT', help='case-insensitive substring filter (default: no filter)')
     suites = ('smoke','nerd','greek','borders','braille','unicode','emoji','kaomoji','width','all')
+    suite_help = ('sample collection (default: all): smoke=styles/code/icons; nerd=icon spacing; '
+                  'greek=polytonic/composing marks; borders=thin/heavy/double lines; '
+                  'braille=spinners/dots; unicode=symbols/CJK/combining marks; '
+                  'emoji=joined/color sequences; kaomoji=text faces; width=terminal ruler; '
+                  'all=all collections except width')
     for name in ('test','preview'):
-        p = command(name, 'Visual samples in a terminal or local Firefox page' if name == 'test' else 'Try a font; accept or revert interactively')
+        p = command(name,
+                    'Display visual samples without changing font settings' if name == 'test' else
+                    'Try an installed font; a accepts/saves, r/Escape/Ctrl+C reverts',
+                    targets=True, profiles=(name == 'preview'),
+                    examples=('Examples:\n  agentoo fonts test\n  agentoo fonts test nerd --codepoints\n'
+                              '  agentoo fonts test greek --target firefox\n'
+                              '  agentoo fonts test all --target firefox --no-open --output /tmp/fonts.html\n\n'
+                              'Unrecognized/SSH terminals still display samples locally. Firefox requires\n'
+                              '--target firefox. Visual output is not an automated coverage result.') if name == 'test' else
+                             ('Examples:\n  agentoo fonts preview "UbuntuSansMono Nerd Font" --target kitty --size 12\n'
+                              '  agentoo fonts preview ter-v24n --target console\n'
+                              '  agentoo fonts preview "Noto Sans" --target firefox --fallback\n\n'
+                              'Kitty opens a separate preview window. Console temporarily saves/restores\n'
+                              'the loaded font. Firefox opens HTML: close Firefox, then accept/revert in\n'
+                              'the terminal. Acceptance saves the command-line family/role/script, not\n'
+                              'HTML control adjustments. No persistent backups; saves print revert commands.'))
         if name == 'test':
-            p.add_argument('suite', choices=suites, nargs='?', default='all')
+            p.add_argument('suite', choices=suites, nargs='?', default='all', help=suite_help)
         else:
-            p.add_argument('font'); p.add_argument('--suite', choices=suites, default='all')
-            p.add_argument('--role', choices=ROLES, default='monospace')
-            p.add_argument('--script', default='x-western')
-            p.add_argument('--fallback', action='store_true', help='accept as a Firefox fallback instead of primary font')
-        p.add_argument('--codepoints', action='store_true', help='include detailed codepoint tables (hidden by default)')
-        p.add_argument('--columns', type=int, default=6); p.add_argument('--plain', action='store_true')
-        p.add_argument('--output'); p.add_argument('--no-open', action='store_true')
-        p.add_argument('--console'); p.add_argument('--size', type=float); p.add_argument('--style')
-    for name in ('set','size'):
-        p = command(name, 'Persist a font selection' if name == 'set' else 'Persist Kitty font size (points)')
-        if name == 'set':
-            p.add_argument('font'); p.add_argument('--size', type=float)
-        else:
-            p.add_argument('size', type=float); p.set_defaults(font=None)
-        p.add_argument('--style'); p.add_argument('--console'); p.add_argument('--role', choices=ROLES, default='monospace'); p.add_argument('--script', default='x-western')
-    command('choose', 'Open Kitty chooser, console list, or Firefox sample page')
+            p.add_argument('font', metavar='FONT', help='installed graphical family name (quote spaces), or console PSF font name/path; use list or choose to discover fonts')
+            p.add_argument('--suite', choices=suites, default='all', help=suite_help)
+            role_options(p)
+            p.add_argument('--fallback', action='store_true', help='Firefox only: accept into the script/role fallback list instead of replacing its primary font')
+            console_option(p)
+            size_option(p)
+            p.add_argument('--style', metavar='STYLE', help='Kitty only: face style, e.g. Medium; default: family default')
+        p.add_argument('--codepoints', action='store_true', help='terminal only: append detailed codepoint tables to each group; default: hidden (Firefox uses expandable details)')
+        p.add_argument('--columns', type=int, default=6, metavar='N', help='terminal codepoint table columns, 1–6 (default: 6); does not set terminal width')
+        p.add_argument('--plain', action='store_true', help='terminal only: omit ANSI style demonstration; Unicode samples remain')
+        p.add_argument('--output', metavar='FILE', help='Firefox only: write HTML here; default: $XDG_CACHE_HOME/agentoo/fonts/preview.html or ~/.cache/agentoo/fonts/preview.html')
+        p.add_argument('--no-open', action='store_true', help='Firefox only: generate HTML without launching browser or accepting changes')
+    p = command('set', 'Apply and persist a font selection; print the revert command', targets=True, profiles=True,
+                examples='Examples:\n  agentoo fonts set "Liberation Mono" --target kitty --size 11\n  agentoo fonts set ter-v24n --target console\n  agentoo fonts set "Liberation Mono" --target firefox --role monospace\n\nKitty: reload configuration after saving. Firefox: close profile before saving;\nchanges apply on next start. Console: apply immediately and persist FONT.')
+    p.add_argument('font', metavar='FONT', help='graphical family name (quote spaces), or console PSF font name/path')
+    size_option(p)
+    p.add_argument('--style', metavar='STYLE', help='Kitty only: face style, e.g. Medium; default: family default')
+    console_option(p)
+    role_options(p)
+    p = command('size', 'Persist Kitty font size; reload Kitty configuration to apply', targets=True,
+                examples='Example:\n  agentoo fonts size 12 --target kitty\n\nOnly Kitty is supported. Console size is part of the selected bitmap font.')
+    p.add_argument('size', type=float, metavar='POINTS', help='Kitty font size, 4–96 points')
+    p.set_defaults(font=None)
+    command('choose', 'Open Kitty chooser, list console font files, or open Firefox samples', targets=True,
+            examples='Examples:\n  agentoo fonts choose --target kitty\n  agentoo fonts choose --target console\n\nKitty chooser saves a user font fragment; reload configuration to apply.\nConsole lists available files for preview/set. Firefox opens a visual page only.')
     for name in ('install','remove'):
-        p = command(name, 'Install latest official Nerd Fonts; terminus uses Gentoo' if name == 'install' else 'Remove only Agentoo-installed fonts')
-        p.add_argument('font'); p.add_argument('--system', action='store_true'); p.add_argument('--variant', choices=('standard','mono','propo'), default='standard')
-    p = command('fallback', 'Firefox script/role fallback lists; primary font preferences are untouched')
-    p.add_argument('operation', choices=('show','add','remove')); p.add_argument('font', nargs='?')
-    p.add_argument('--role', choices=ROLES, default='monospace'); p.add_argument('--script', default='x-western')
-    p = command('coverage', 'Check sample codepoints against one installed font face; shaping is a visual check')
-    p.add_argument('font'); p.add_argument('--suite', choices=suites, default='all')
-    p = command('explain', 'Show codepoints and fontconfig coverage candidates (not proof of browser rendering)')
-    p.add_argument('character'); p.add_argument('--font', default='monospace')
-    p = command('preference', 'Set/clear an exact Firefox preference; also used by printed revert commands')
-    p.add_argument('key'); g=p.add_mutually_exclusive_group(required=True); g.add_argument('--value'); g.add_argument('--clear', action='store_true')
-    p = command('kitty-config', 'Restore the exact prior Agentoo user font fragment')
-    p.add_argument('--value', required=True)
-    p = command('console-default', 'Clear persistent FONT and load the boot default')
-    p.add_argument('--console')
+        p = command(name, 'Install latest official Nerd Fonts or a curated Gentoo font package' if name == 'install' else
+                    'Remove an Agentoo-managed Nerd Font entry after confirmation',
+                    examples=('Examples:\n  agentoo fonts install ubuntu-sans-mono\n'
+                              '  agentoo fonts install fira-code --variant mono --system\n'
+                              '  agentoo fonts install noto-emoji\n\n'
+                              'Use list --available for catalog IDs. Nerd Fonts install per-user by default;\n'
+                              'Gentoo packages always install system-wide via emerge --ask. Downloads use\n'
+                              'the latest official release and verify upstream checksums when available.\n'
+                              'Installation does not activate a font.') if name == 'install' else
+                             ('Example:\n  agentoo fonts remove fira-code --variant mono\n\n'
+                              'Check active selections before removal. Only manifest-bearing Agentoo\n'
+                              'directories are removed; Gentoo packages must be removed through Portage.'))
+        p.add_argument('font', metavar='NAME', help='catalog ID from list --available (not the installed family name)')
+        p.add_argument('--system', action='store_true', help='use /usr/local/share/fonts/agentoo and request sudo as needed; default: $XDG_DATA_HOME/fonts/agentoo or ~/.local/share/fonts/agentoo')
+        p.add_argument('--variant', choices=('standard','mono','propo'), default='standard', help='Nerd Fonts variant: standard=regular icon sizing, mono=single-cell icons, propo=proportional icons (default: standard); not used for Gentoo packages; symbols entry includes all variants')
+    p = command('fallback', 'Inspect/edit Firefox script/role fallback lists without changing primary preferences', targets=True, profiles=True,
+                examples='Examples:\n  agentoo fonts fallback show --target firefox\n  agentoo fonts fallback add "Symbols Nerd Font" --target firefox\n  agentoo fonts fallback remove "Symbols Nerd Font" --target firefox\n\nRequires --target firefox. Close the profile before changes. Explicit lists\nreplace the built-in list for that role/script; primary preferences stay intact.\nWebsite CSS, privacy settings, and existing primary glyphs can affect results.')
+    p.add_argument('operation', choices=('show','add','remove'), help='show current explicit list, append a family, or remove a family')
+    p.add_argument('font', nargs='?', metavar='FONT', help='family name, required for add/remove; omit for show')
+    role_options(p)
+    p = command('coverage', 'Check sample codepoints in one fontconfig-selected face; not visual rendering',
+                examples='Example:\n  agentoo fonts coverage "Liberation Mono" --suite greek\n\nReports the matched face (which may be a substitute). Does not test fallback,\nshaping, ligatures, or emoji sequence appearance.')
+    p.add_argument('font', metavar='FONT', help='installed family name or fontconfig pattern')
+    p.add_argument('--suite', choices=suites, default='all', help=suite_help)
+    p = command('explain', 'Show Unicode codepoints and fontconfig candidate fonts',
+                examples='Example:\n  agentoo fonts explain "ᾧ" --font "Liberation Mono"\n\nCandidate lists do not prove which font Firefox or Kitty actually rendered.')
+    p.add_argument('character', metavar='TEXT', help='one or more characters to inspect; quote spaces or shell punctuation')
+    p.add_argument('--font', default='monospace', metavar='PATTERN', help='fontconfig family/pattern to query (default: monospace)')
+    p = command('preference', 'Set/clear an exact Firefox font preference, mainly for printed revert commands', targets=True, profiles=True,
+                examples='Requires --target firefox and a closed profile. --value takes JSON, so a\nstring needs JSON quotes inside shell quotes. Prefer the printed revert command.')
+    p.add_argument('key', metavar='KEY', help='Firefox preference name beginning with font.')
+    g=p.add_mutually_exclusive_group(required=True)
+    g.add_argument('--value', metavar='JSON', help='exact preference value encoded as JSON, e.g. \'"Liberation Mono"\'')
+    g.add_argument('--clear', action='store_true', help='remove explicit preference from user.js and prefs.js, restoring Firefox defaults')
+    p = command('kitty-config', 'Restore exact Agentoo user font fragment from a printed revert command',
+                examples='Use the complete printed revert command; --value may contain newlines.\nLeaves the include in kitty.conf intact. Reload Kitty configuration afterward.')
+    p.add_argument('--value', required=True, metavar='TEXT', help='complete previous fragment contents; empty string clears Agentoo selections')
+    p = command('console-default', 'Clear persistent FONT and reset the active console to its boot font',
+                examples='Example:\n  agentoo fonts console-default --console /dev/tty1\n\nRequests sudo as needed. Boot font may differ from a previously manually loaded\nfont; this does not restore a saved font snapshot.')
+    console_option(p)
     a = parser.parse_args()
     if a.command is None:
         a.command = 'status'; a.target = 'auto'; a.profile = None
-    if getattr(a,'columns',1) < 1 or getattr(a,'columns',1) > 32:
-        parser.error('--columns must be between 1 and 32')
+    if getattr(a,'columns',1) < 1 or getattr(a,'columns',1) > 6:
+        parser.error('--columns must be between 1 and 6')
     if getattr(a,'size',None) is not None and not (4 <= a.size <= 96):
         parser.error('size must be between 4 and 96 points')
     if getattr(a,'font',None) and any(c in a.font for c in '\r\n\0'):
@@ -571,7 +657,7 @@ def main():
             cmd=['kitty','--class','agentoo-font-preview','-o','font_family='+('family='+shlex.quote(a.font)+((' style='+shlex.quote(a.style)) if a.style else ''))]
             if a.size: cmd+=['-o',f'font_size={a.size}']
             cmd += [sys.executable, str(Path(__file__).resolve()), '_kitty-preview']
-            env=os.environ.copy(); env['AGENTOO_PREVIEW']=json.dumps({'font':a.font,'size':a.size,'style':a.style,'suite':a.suite})
+            env=os.environ.copy(); env['AGENTOO_PREVIEW']=json.dumps({'font':a.font,'size':a.size,'style':a.style,'suite':a.suite,'columns':a.columns,'plain':a.plain,'codepoints':a.codepoints})
             run(*cmd,env=env)
         return
     if a.command in ('set','size'):
@@ -590,7 +676,6 @@ if __name__ == '__main__':
     try:
         if sys.argv[1:] == ['_kitty-preview']:
             a=argparse.Namespace(**json.loads(os.environ['AGENTOO_PREVIEW']))
-            a.columns=6; a.plain=False
             terminal_test(a)
             if accept(): kitty_set(a)
             else: print('Preview reverted; original Kitty configuration unchanged.')

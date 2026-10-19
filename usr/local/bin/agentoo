@@ -50,6 +50,16 @@ Desktop and power:
   power                  Show charge, battery wattage, and estimated runtime
   power show-all         Show detailed battery and CPU power settings
 
+Fonts:
+  fonts test [SUITE]      Show all visual samples by default in the current terminal
+  fonts test --target firefox
+                         Open the shared samples in Firefox
+  fonts list --available Show the installation catalog
+  fonts preview FONT --target {kitty|console|firefox}
+                         Try an installed font; accept or revert interactively
+  fonts <subcommand> --help
+                         Explain every argument, target scope, and default
+
 Options:
   -h, --help             Show help
 
