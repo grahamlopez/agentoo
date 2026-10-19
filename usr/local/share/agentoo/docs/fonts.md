@@ -2,7 +2,13 @@
 
 `agentoo fonts` reports font configuration. It never installs or activates fonts
 implicitly. Use `agentoo help fonts` for commands and command-specific `--help`
-for options. Python 3 and fontconfig tools are required. Kitty previews need
+for options. `agentoo fonts test` defaults to the full `all` collection and
+prints in the current terminal. Detection recognizes Kitty and Linux console;
+inside tmux it checks attached client terminal types rather than inherited Kitty
+variables. Ambiguous or other terminals (including SSH) still receive visual
+tests without needing a target. Firefox previews always require
+`--target firefox`. Configuration commands require an identifiable supported
+target or an explicit `--target`. Python 3 and fontconfig tools are required. Kitty previews need
 Kitty; console operations need kbd's `setfont`; HTML opening needs Firefox.
 
 ```sh

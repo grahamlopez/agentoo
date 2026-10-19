@@ -66,13 +66,41 @@ def undo(*args):
 def target(a):
     if a.target != 'auto':
         return a.target
+    # Visual tests can always print to the invoking terminal, including over SSH.
+    # Configuration commands must identify a supported local target reliably.
+    testing = getattr(a, 'command', None) == 'test'
     if os.environ.get('SSH_CONNECTION'):
+        if testing:
+            return 'terminal'
         raise ValueError('SSH cannot select your local terminal; specify --target')
-    if os.environ.get('KITTY_WINDOW_ID'):
+    term = os.environ.get('TERM', '')
+    if os.environ.get('TMUX'):
+        # Inherited KITTY_WINDOW_ID can belong to the terminal which started
+        # the server, rather than the client currently viewing this session.
+        try:
+            session = subprocess.run(
+                ['tmux', 'display-message', '-p', '-t', os.environ.get('TMUX_PANE', ''), '#{session_id}'],
+                check=True, capture_output=True, text=True, timeout=2).stdout.strip()
+            clients = subprocess.run(
+                ['tmux', 'list-clients', '-t', session, '-F', '#{client_termname}'],
+                check=True, capture_output=True, text=True, timeout=2).stdout.splitlines()
+            terms = set(clients) - {''}
+            if len(terms) != 1:
+                raise ValueError('tmux clients have ambiguous terminal types')
+            term = terms.pop()
+        except (OSError, subprocess.SubprocessError, ValueError):
+            if testing:
+                return 'terminal'
+            raise ValueError('cannot identify tmux client; specify --target kitty|console|firefox') from None
+    elif os.environ.get('KITTY_WINDOW_ID'):
         return 'kitty'
-    if os.environ.get('TERM') == 'linux':
+    if term == 'linux':
         return 'console'
-    raise ValueError('cannot identify target (possibly inside tmux); specify --target kitty|console|firefox')
+    if term == 'xterm-kitty':
+        return 'kitty'
+    if testing:
+        return 'terminal'
+    raise ValueError('cannot identify target; specify --target kitty|console|firefox')
 
 def samples(suite):
     data = json.loads((DATA / 'samples.json').read_text())
@@ -379,7 +407,7 @@ def main():
     for name in ('test','preview'):
         p = command(name, 'Visual samples in a terminal or local Firefox page' if name == 'test' else 'Try a font; accept or revert interactively')
         if name == 'test':
-            p.add_argument('suite', choices=suites, nargs='?', default='smoke')
+            p.add_argument('suite', choices=suites, nargs='?', default='all')
         else:
             p.add_argument('font'); p.add_argument('--suite', choices=suites, default='all')
             p.add_argument('--role', choices=ROLES, default='monospace')
