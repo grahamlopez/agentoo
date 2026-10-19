@@ -218,6 +218,107 @@ including suppression during replacement. On Gentoo, run package QA and emerge
 the dependency packages, then install upstream clients as a normal user and check
 versions and sandbox operation. Do not run upstream installers from Portage phases.
 
+## ChatGPT desktop
+
+`app-misc/chatgpt-desktop-bin` repackages the official Linux `.deb` for amd64.
+It is optional, with its testing keyword accepted in Agentoo's common keyword
+configuration; no package set selects it. Gentoo is not supported upstream.
+See the [official Linux guide](https://learn.chatgpt.com/docs/linux/linux-app).
+
+```sh
+sudo emerge --ask app-misc/chatgpt-desktop-bin
+chatgpt
+```
+
+On systems without Agentoo's keyword configuration, accept
+`app-misc/chatgpt-desktop-bin::agentoo ~amd64` first. The proprietary application
+uses Gentoo's `all-rights-reserved` license identifier; accept that license for
+this package if your local license policy requires it.
+
+Portage owns `/opt/chatgpt`, `/usr/bin/chatgpt`, and desktop integration. The
+application payload includes its bundled Codex, browser, plugins, and
+other resources. Unusable Android, ARM, and musl device-module binaries are
+removed. GTK is available without Qt; `USE=qt6` retains the optional Qt6 shim and
+installs its dependencies. The obsolete Qt5 shim is removed. It does not replace a separately installed Codex CLI. Debian
+maintainer scripts are not executed, and APT repositories, keys, and the
+Debian-specific AppArmor profile are not installed. Systems enforcing AppArmor
+user-namespace restrictions need a local policy for `/opt/chatgpt/ChatGPT`.
+No installer or Portage phase signs in or changes user home directories.
+
+### Optional desktop dependencies
+
+| USE flag | Ebuild default | Dependency and tradeoff |
+| --- | --- | --- |
+| `notifications` | Enabled | Supplies libnotify. Gentoo also pulls in a notification daemon and notify-send selection. Disable to omit these dependencies; desktop notifications may be unavailable. |
+| `portal` | Disabled | Supplies xdg-desktop-portal, whose Gentoo package requires FUSE with `suid`, JSON-GLib, and possibly libgudev. Enable for portal integration such as Wayland screen sharing; install and configure a suitable backend too. |
+| `qt6` | Disabled | Retains the Qt6 integration shim and supplies Qt6 GUI/widgets. Global or profile USE settings can enable it. GTK remains available without it. |
+
+For a smaller installation, add this to a file under
+`/etc/portage/package.use/`:
+
+```text
+app-misc/chatgpt-desktop-bin -notifications -portal -qt6
+```
+
+These flags control optional runtime dependencies (and, for Qt6, its shim).
+They do not rebuild the proprietary application or forcibly disable features;
+already-installed libraries and desktop services may still be used. The minimal configuration was tested on Thinktop as recorded below. NSS/NSPR and the TPM
+libraries remain mandatory because bundled binaries link to them directly. TPM
+libraries do not imply a requirement for TPM hardware.
+
+Update the Agentoo overlay, then update through Portage:
+
+```sh
+sudo emerge --ask --update app-misc/chatgpt-desktop-bin
+```
+
+Upstream documents Linux updates through the distribution package manager.
+Do not run the app as root or use another installer to overwrite Portage files.
+Removing the package preserves user settings, credentials, history, and shared
+OpenAI client state:
+
+```sh
+sudo emerge --ask --unmerge app-misc/chatgpt-desktop-bin
+```
+
+Sandboxing needs unprivileged user namespaces; the dependency list supplies
+bubblewrap for the bundled agent. Do not work around launch failures with
+`--no-sandbox`. The default Wayland-session behavior uses XWayland when
+available (install `x11-base/xwayland` for that path). For experimental native
+Wayland, fully quit the app and run `chatgpt --ozone-platform=wayland`.
+Use a running Secret Service provider if the app needs keyring storage; installing
+`app-crypt/libsecret` alone does not start a provider. Hyprland file/screen
+integration also needs a working desktop portal backend.
+
+### Packaging validation and version bumps
+
+The initial package is amd64 only. Its `.deb` SHA-256 was compared with the
+publisher's `deb/dists/stable/main/binary-amd64/Packages` index, and its versioned
+URL was checked. The Portage Manifest records BLAKE2B and SHA512 hashes. Downloads
+remain in the local distfile cache, outside Git. For a new release, inspect the
+control metadata, maintainer scripts, launcher, desktop entries, and ELF runtime
+dependencies again; preserve bundled resources and license notices, and
+regenerate the Manifest from the new artifact. Never use a mutable `latest` URL
+in an ebuild. Do not add arm64 keywords without inspecting that artifact too.
+
+The ebuild unpack, prepare, and install phases were checked in an isolated
+Portage configuration, alongside dependency resolution and desktop-entry
+validation. Install-phase QA reports the TPM libraries as absent on the build
+host; `app-crypt/tpm2-tss` is an explicit runtime dependency supplying them.
+On 2026-10-19, the user confirmed installation and desktop operation on Thinktop
+with `-notifications -portal -qt6`: app launch, chat, opening a local project,
+running a sandboxed agent command, and restarting with sign-in preserved.
+This validates the core workflow with those USE flags disabled; it does not
+establish that optional libraries or services were absent from the system.
+
+Further desktop checks include launch from both a terminal and application
+menu, browser sign-in callbacks, file dialogs, notifications, and screen sharing
+when those optional features are enabled.
+Test XWayland and native Wayland separately. Confirm that a separate user can
+sign in independently and that unmerge removes package files while preserving
+user data. Native Wayland has upstream limitations around focus, floating
+windows, positioning, and shortcuts.
+
 ## Nerd Fonts
 
 Five `media-fonts/*-nerd` packages provide Ubuntu Sans Mono, Ubuntu Mono,

@@ -15,3 +15,6 @@ media-fonts/ubuntu-mono-nerd::agentoo ~amd64 ~arm64
 media-fonts/jetbrains-mono-nerd::agentoo ~amd64 ~arm64
 media-fonts/fira-code-nerd::agentoo ~amd64 ~arm64
 media-fonts/liberation-mono-nerd::agentoo ~amd64 ~arm64
+
+# Optional ChatGPT desktop binary; not selected by a package set.
+app-misc/chatgpt-desktop-bin::agentoo ~amd64
