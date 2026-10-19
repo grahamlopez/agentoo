@@ -406,21 +406,16 @@ Connecting an external output while closed also disables internal outputs.
 Removing the last external output restores the configured rules if the lid
 handler had disabled the panel, avoiding a persistent disabled-panel rule.
 
-`/usr/local/share/agentoo/hypr/lid-resume.py` listens for logind's
-[`PrepareForSleep(false)` signal](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.login1.html).
-It asks the running session to reconcile after 250 ms and again after a bounded
-delay (about 1.75 seconds after resume), allowing a connected dock to enumerate.
-Later monitor-added events also reconcile. This covers resuming with the lid
-still closed, including when a lid-switch event was missed during sleep.
-The observer uses Python's standard library and GLib's `gdbus` (selected by
-`@gui-base`), needs no root permissions, performs no periodic polling, and exits
-when the compositor's event socket closes. A per-instance lock prevents duplicate
-observers on config reloads. It does not depend on a graphical systemd target.
+There is no separate resume listener or background display process. Lid opening
+and monitor hotplug trigger reconciliation through native Hyprland events.
+Resume with the lid still closed and no monitor event has no explicit handler;
+add one only if an ordinary suspend/resume test demonstrates a need.
 
 Plugging in a dock can only resume a sleeping laptop if the hardware/firmware
 supports waking on that connection. Hyprland cannot trigger that while suspended.
-USB/Thunderbolt wake was enabled on thinktop, but cable-insertion wake still needs
-a physical test. No wake or firmware settings are changed by this handler.
+USB/Thunderbolt wake was enabled on thinktop, but the tested dock connection did
+not wake it; opening the lid did. Cable-insertion wake is deferred. No wake or
+firmware settings are changed by this handler.
 
 The handler never requests suspend or takes a logind inhibitor. The stock
 logind policy keeps a docked system awake and suspends an undocked laptop on
@@ -432,15 +427,11 @@ and `hyprctl devices`.
 Physical acceptance: close/open the lid with the Dell connected, check that
 workspaces remain reachable and the panel returns, then test lid-close suspend
 without external displays. Also test dock/undock while closed, a config
-reload while closed, and connecting the dock while suspended with the lid closed.
-After a supported wake event, confirm that only the Dell is active and the
-machine stays awake. Parser and simulated tests cannot verify physical suspend
+reload while closed. Parser and simulated tests cannot verify physical suspend
 or the monitor's visible output.
 
 Run the simulated lid/hotplug regression checks from the repository root with
 `lua usr/local/share/agentoo/tests/test_hypr_lid.lua`.
-Run the observer signal/lifecycle tests with
-`python3 -B usr/local/share/agentoo/tests/test_lid_resume.py`.
 
 ## Configuration and launch
 

@@ -13,7 +13,6 @@ end
 local closed = read_lid()
 local disabled_by_lid = false
 local pending
-local resume_pending
 
 local function internal(name)
     return name:match("^eDP%-") or name:match("^LVDS%-") or name:match("^DSI%-")
@@ -51,18 +50,6 @@ local function schedule()
     pending = hl.timer(reconcile, { timeout = 250, type = "oneshot" })
 end
 
--- Called by the session-scoped logind signal listener after PrepareForSleep(false).
--- Hotplug events handle a dock that becomes ready after the bounded second pass.
-function agentoo_lid_resume()
-    schedule()
-    if resume_pending then resume_pending:set_enabled(false) end
-    resume_pending = hl.timer(schedule, { timeout = 1500, type = "oneshot" })
-end
-
-local function start_resume_listener()
-    hl.exec_cmd("python3 /usr/local/share/agentoo/hypr/lid-resume.py")
-end
-
 hl.bind("switch:on:Lid Switch", function()
     closed = true
     schedule()
@@ -73,13 +60,11 @@ hl.bind("switch:off:Lid Switch", function()
 end, { locked = true })
 
 hl.on("hyprland.start", schedule)
-hl.on("hyprland.start", start_resume_listener)
 hl.on("config.reloaded", function()
     -- --verify-config has no event loop: creating a timer there crashes 0.56.2.
     -- Session startup handles the initial configuration with no outputs yet.
     if #hl.get_monitors() > 0 then
         schedule()
-        start_resume_listener() -- A per-instance lock makes reloads idempotent.
     end
 end)
 hl.on("monitor.added", schedule)

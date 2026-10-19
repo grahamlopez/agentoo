@@ -1,7 +1,7 @@
 -- Run with: lua usr/local/share/agentoo/tests/test_hypr_lid.lua [lid.lua path]
 local source = arg[1] or "etc/xdg/hypr/lid.lua"
 local function session(state, monitors)
-    local env = { binds = {}, events = {}, timers = {}, changes = {}, reloads = 0, listeners = 0 }
+    local env = { binds = {}, events = {}, timers = {}, changes = {}, reloads = 0 }
     env.state = state
     env.monitors = monitors
     local api = {}
@@ -28,15 +28,11 @@ local function session(state, monitors)
         env.events["monitor.removed"]()
     end
     function api.exec_cmd(command)
-        if command == "python3 /usr/local/share/agentoo/hypr/lid-resume.py" then
-            env.listeners = env.listeners + 1
-            return
-        end
         assert(command == "hyprctl reload")
         env.reloads = env.reloads + 1
     end
     function api.timer(callback, options)
-        assert((options.timeout == 250 or options.timeout == 1500) and options.type == "oneshot")
+        assert(options.timeout == 250 and options.type == "oneshot")
         local timer = { enabled = true, callback = callback }
         function timer:set_enabled(value) self.enabled = value end
         env.timers[#env.timers + 1] = timer
@@ -66,7 +62,6 @@ local function session(state, monitors)
         env.state = "state: open"
         env.binds["switch:off:Lid Switch"](); env.flush()
     end
-    env.resume = context.agentoo_lid_resume
     return env
 end
 local function outputs(...)
@@ -122,24 +117,15 @@ assert(#rapid.changes == 0 and rapid.reloads == 0)
 local verify = session("state: closed", outputs())
 verify.events["config.reloaded"]()
 assert(#verify.timers == 0)
-assert(verify.listeners == 0)
 
--- A lid transition missed during sleep is corrected from physical state.
+-- A missed switch event is corrected by physical state on the next hotplug.
 local missed = session("state: open", outputs("eDP-1", "DP-4"))
 missed.state = "state: closed"
-missed.resume(); missed.flush()
+missed.events["monitor.added"](); missed.flush()
 assert(missed.changes[1] == "eDP-1")
 missed.state = "state: open"
-missed.resume(); missed.flush()
+missed.events["monitor.removed"](); missed.flush()
 assert(missed.reloads == 1)
-
--- A dock can appear after the immediate resume pass without a switch event.
-local resume = session("state: closed", outputs("eDP-1"))
-resume.resume(); resume.flush()
-assert(#resume.changes == 0)
-resume.monitors = outputs("eDP-1", "DP-4")
-resume.flush() -- Delayed resume pass queued the normal debounce.
-assert(resume.changes[1] == "eDP-1")
 
 -- An unreadable ACPI state must not override a valid close-switch event.
 local unknown = session("", outputs("eDP-1", "DP-4"))
