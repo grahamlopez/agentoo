@@ -33,3 +33,7 @@ if not config_home or config_home:sub(1, 1) ~= "/" then
     config_home = home .. "/.config"
 end
 include_optional(config_home .. "/hypr/agentoo-local.lua")
+
+-- Apply remembered appearance overrides after authored defaults. Reloading with
+-- no saved overrides exposes those defaults again, including personal rules.
+require("/etc/xdg/hypr/transparency.lua")

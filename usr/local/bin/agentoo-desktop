@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Manage personal desktop preferences."""
 import fcntl
+import argparse
 import hashlib
 import json
 import os
@@ -29,6 +30,40 @@ def build_parser():
     setter.add_argument('file', metavar='FILE', help='Readable image file').completion = 'files'
     actions.add_parser('clear', help='Forget the image and stop the managed wallpaper')
     actions.add_parser('restore', help='Apply the remembered image at session startup')
+    transparency = commands.add_parser('transparency', help='Show or adjust window transparency',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Show or adjust window transparency.\n\n'
+                    'Changes apply immediately and persist across desktop sessions.\n'
+                    'Without --focused, --unfocused, or --reset, show current settings.\n'
+                    'Use --window to limit which settings are shown or adjusted.',
+        epilog='0 means fully opaque; 90 is the maximum transparency.\n'
+               '--focused and --unfocused can be set independently.\n'
+               'Supplying only one leaves the other unchanged.\n\n'
+               'The all group sets shared values and clears corresponding Kitty/browser\n'
+               'overrides. Kitty/browser overrides take precedence over shared values.\n'
+               'Resetting either group restores inheritance; resetting all removes every\n'
+               'override and restores configured defaults, including personal settings.\n\n'
+               'Kitty uses background-only transparency; other windows fade text too.\n'
+               'Browser includes Firefox- and Chromium-family windows. Floating windows,\n'
+               'dialogs, fullscreen windows, and the Kitty dropdown are included.\n'
+               'Panels, menus, and notifications are excluded.\n'
+               'Kitty processes started before integration was installed need a restart.\n\n'
+               'Examples:\n'
+               '  agentoo desktop transparency\n'
+               '  agentoo desktop transparency --focused 5 --unfocused 10\n'
+               '  agentoo desktop transparency --window kitty --unfocused 20\n'
+               '  agentoo desktop transparency --window browser --focused 0 --unfocused 0\n'
+               '  agentoo desktop transparency --window browser --reset\n'
+               '  agentoo desktop transparency --reset\n\n'
+               'Exit 0: success; 1: operational failure; 2: invalid arguments.')
+    transparency.add_argument('--window', choices=('all', 'kitty', 'browser'), default='all',
+                              help='Windows to show or adjust (default: all)')
+    from desktop_transparency import percentage
+    transparency.add_argument('--focused', type=percentage, metavar='PERCENT',
+                              help='Focused-window transparency, from 0 to 90')
+    transparency.add_argument('--unfocused', type=percentage, metavar='PERCENT',
+                              help='Unfocused-window transparency, from 0 to 90')
+    transparency.add_argument('--reset', action='store_true', help='Remove selected overrides; cannot combine with adjustments')
     return parser
 
 
@@ -50,7 +85,7 @@ def selection(path):
 def atomic_write(path, value):
     descriptor, temporary = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
     try:
-        with os.fdopen(descriptor, 'w') as stream:
+        with os.fdopen(descriptor, 'wb' if isinstance(value, bytes) else 'w') as stream:
             stream.write(value)
         os.replace(temporary, path)
     finally:
@@ -144,6 +179,11 @@ def main():
     if args.command is None:
         parser.print_help()
         return 0
+    if args.command == 'transparency':
+        from desktop_transparency import run
+        if args.reset and (args.focused is not None or args.unfocused is not None):
+            parser.error('--reset cannot be combined with --focused or --unfocused')
+        return run(args, state_directory(), atomic_write)
     state = state_directory()
     saved = state / 'wallpaper'
     if args.action is None:

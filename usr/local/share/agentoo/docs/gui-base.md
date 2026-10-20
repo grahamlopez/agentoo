@@ -456,6 +456,8 @@ is required. The shared entry loads, in order:
    existing installer-managed `/etc/agentoo/target-host`.
 3. `$XDG_CONFIG_HOME/hypr/agentoo-local.lua`, or
    `~/.config/hypr/agentoo-local.lua`: optional real personal override.
+4. `/etc/xdg/hypr/transparency.lua`: remembered Agentoo transparency overrides,
+   when present. Resetting them exposes the preceding authored settings.
 
 Monitors use preferred modes and auto placement/scaling by default. Host-specific
 exceptions belong in tracked `/etc/xdg/hypr/hosts/NAME.lua` fragments. The shared
@@ -465,7 +467,7 @@ The installer already creates this one local host identity; no separate Hyprland
 selector or manual include is needed. Missing selectors/fragments retain shared
 defaults; malformed selectors produce a configuration error. The former
 `/etc/agentoo/hyprland-host.lua` selector is no longer read and may be removed.
-Personal scalar settings applied last override earlier values; bindings and
+Personal scalar settings override earlier values; bindings and
 monitor rules have their own semantics, so check duplicates when extending them.
 
 An existing personal `hyprland.lua` takes precedence over the system Lua entry.
@@ -686,3 +688,83 @@ and startup restoration in a real Hyprland session. Confirm ordinary config
 reloads do not create another swaybg process, images appear on connected and
 newly attached monitors, and clients exit on session shutdown. Repository tests
 use a fake client and do not establish physical rendering correctness.
+
+## Window transparency
+
+```sh
+agentoo desktop transparency
+agentoo desktop transparency --focused 5 --unfocused 10
+agentoo desktop transparency --window kitty --unfocused 20
+agentoo desktop transparency --window browser --focused 0 --unfocused 0
+agentoo desktop transparency --window browser --reset
+agentoo desktop transparency --reset
+```
+
+Percentages measure transparency: 0 is opaque, 90 is the maximum, and fractional
+percentages are accepted. Focused and unfocused values change independently.
+Without adjustment options or `--reset`, the command prints settings without
+creating state or changing windows. `--window` defaults to `all`; a query of
+`all` shows all three groups with override, inherited, or configured-default
+sources. Queries without a reachable compositor show saved values and label
+unavailable defaults as `configured default` rather than guessing them.
+
+Setting `all` clears Kitty/browser overrides for each supplied focus state.
+An omitted focus state retains its shared value and category overrides.
+Resetting Kitty or browser removes that category's overrides, restoring shared
+inheritance. Resetting all removes every override and restores authored defaults,
+including personal configuration. `--reset` cannot accompany either percentage.
+Shared defaults currently set no opacity, so absent host or personal settings
+the underlying defaults are fully opaque.
+
+Transparency is saved at `$XDG_STATE_HOME/agentoo/transparency.json`, defaulting
+to `~/.local/state/agentoo/transparency.json`; relative XDG paths are ignored.
+This is personal, untracked state, like the wallpaper selection. Updates use a
+private directory, atomic replacement, and an exclusive `transparency.lock`.
+Hyprland reads the JSON through a validating Python helper at startup and every
+configuration reload; there is no separate restore command or generated config
+to keep in sync. Updates require the shared integration in a running Hyprland
+session, reload configuration without reconfiguring monitors, and restore the
+previous saved record if reload fails. Operational messages go to stderr,
+queries/help to stdout, and exit status is 0/1/2 for success/failure/invalid input.
+Help and completion use the command's shared parser and require no session.
+
+Hyprland uses absolute, focus-specific opacity rules for normal, floating,
+dialog, fullscreen, and dropdown windows. Layer surfaces such as panels and
+notifications and compositor/application popup menus are not targeted. Kitty
+uses native **background-only** transparency, preserving text opacity. A shared
+Kitty watcher tracks focus and notices saved changes within approximately 250ms,
+without external remote-control permissions, sockets, or an extra daemon.
+Reset re-reads Kitty's configuration, including its original command-line
+overrides, before restoring background opacity. Kitty backgrounds supplied by an
+application or background images follow Kitty's own transparency limitations.
+
+Kitty must start with `dynamic_background_opacity yes` and the shared watcher.
+The shared configuration provides both; personal settings can override them.
+Kitty processes started before installation need a one-time restart: a reload
+cannot retrofit dynamic opacity reliably. No running application is restarted
+by this command. Kitty's standard `kitty` class and `agentoo-dropdown` are
+recognized by the compositor. Browser classes include Firefox, Chromium,
+Chrome, Brave, Edge, Vivaldi, Opera, LibreWolf, Floorp, and Zen. Custom application
+classes require extending the class expressions in `transparency.lua`.
+
+Authored window opacity/opaque/force_rgbx rules in the personal Hyprland config
+tree and selected host file cause adjustments to fail with file/line locations;
+they are never rewritten. Queries warn about them. This scan is conservative:
+unused files in the personal tree may be reported, while dynamically constructed
+Lua or includes outside those locations require manual inspection. Decoration
+opacity settings and Kitty `background_opacity` are underlying defaults, not
+conflicts. A full reset remains available even with conflicting rules or a
+damaged state file. Separate sessions share the saved choice; a different
+already-running Hyprland session picks it up on its next configuration reload.
+
+Verification: run `python3 -m unittest discover -s usr/local/share/agentoo/tests
+-p test_transparency.py`, `lua usr/local/share/agentoo/tests/test_hypr_transparency.lua`,
+and the CLI/wallpaper tests. Before deployment is considered visually validated,
+check focus changes, existing/new Kitty windows, browser dialogs, fullscreen,
+the dropdown, personal defaults after reset, and logout/login in a real session.
+Parser and mocked API tests do not establish actual rendering correctness.
+
+Implementation references: [Hyprland 0.56.2 opacity parser](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/desktop/rule/windowRule/WindowRule.cpp),
+[window rules](https://wiki.hypr.land/configuring/core/rules/window-rules/),
+and Kitty's installed 0.48.2 watcher and background-opacity documentation
+(`/usr/share/doc/kitty-0.48.2/html/launch.html` and `conf.html`).

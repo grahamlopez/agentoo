@@ -169,6 +169,13 @@ User configuration, such as `~/.config/kitty/kitty.conf`, takes precedence;
 remove a local `font_size` override to inherit the managed host setting.
 No home configuration file, launch wrapper, or generated host include is needed.
 
+The shared configuration also enables dynamic background opacity and loads the
+Agentoo transparency watcher. `agentoo desktop transparency` stores personal
+focused/unfocused choices in XDG state; Kitty text stays opaque. Processes
+started before this integration was installed need a one-time restart. See
+[window transparency](../../usr/local/share/agentoo/docs/gui-base.md#window-transparency)
+for inheritance, reset, conflict handling, and validation.
+
 ## Optional systemd features and snapshot boundaries
 
 - /srv, /var/lib/machines, and /var/lib/portables use ordinary directories.

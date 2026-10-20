@@ -78,7 +78,7 @@ class CliTest(unittest.TestCase):
                  ('checkpoint', 'inspect'), ('checkpoint', 'restore'),
                  ('power',), ('fonts',), ('fonts', 'status'),
                  ('fonts', 'test'), ('fonts', 'set'), ('fonts', 'doctor'),
-                 ('desktop',), ('desktop', 'wallpaper'), ('desktop', 'wallpaper', 'set'),
+                 ('desktop',), ('desktop', 'transparency'), ('desktop', 'wallpaper'), ('desktop', 'wallpaper', 'set'),
                  ('desktop', 'wallpaper', 'clear'), ('desktop', 'wallpaper', 'restore')]
         for path in paths:
             with self.subTest(path=path):
