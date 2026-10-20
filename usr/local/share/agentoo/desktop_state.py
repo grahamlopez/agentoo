@@ -43,71 +43,8 @@ def validate_sections(data, *, partial=False):
     return result
 
 
-def portable_animations(values):
-    """Translate the old private snapshots once; never write them again."""
-    result = {k: v for k, v in values.items() if k != 'branches'}
-    branches = values.get('branches', {})
-    for node, key in (('windowsIn', 'windows'), ('workspacesIn', 'workspaces')):
-        if node not in branches:
-            continue
-        parts = branches[node]['style'].split()
-        if parts:
-            result[key] = parts[0]
-        if len(parts) > 1:
-            if parts[1].endswith('%'):
-                parameter = 'window_size' if key == 'windows' else 'workspace_distance'
-                result[parameter] = int(parts[1][:-1])
-            elif key == 'windows':
-                result['window_direction'] = parts[1]
-    if branches:
-        speeds = {branch['speed'] for branch in branches.values()}
-        if len(speeds) == 1 and not any(branch['bezier'].startswith('spring:') for branch in branches.values()):
-            result['duration'] = round(next(iter(speeds)) * 100)
-        print('agentoo desktop: migrated animation snapshots to portable style and duration preferences; '
-              'easing and branch enable states now follow authored settings.', file=sys.stderr)
-    return result
-
-
-def migrate(path):
-    """Only legacy installations write during a read; new/read-only queries don't."""
-    legacy = [path.parent / name for name in ('transparency.json', 'blur.json', 'effects.json')]
-    if path.exists() or not any(item.exists() for item in legacy):
-        return
-    previous_umask = os.umask(0o077)
-    try:
-        with (path.parent / 'appearance.lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            if path.exists():
-                return
-            data = {}
-            if legacy[0].exists():
-                data['transparency'] = read_json(legacy[0])
-            if legacy[1].exists():
-                data['blur'] = read_json(legacy[1])
-            if legacy[2].exists():
-                effects = read_json(legacy[2])
-                if 'animations' in effects:
-                    from desktop_effects import validate_branches
-                    if 'branches' in effects['animations']:
-                        validate_branches(effects['animations']['branches'])
-                    effects['animations'] = portable_animations(effects['animations'])
-                if set(data) & set(effects):
-                    raise RuntimeError('Duplicate sections in legacy appearance files')
-                data.update(effects)
-            data = validate_sections(data)
-            atomic_write(path, json.dumps(data, indent=2, sort_keys=True) + '\n')
-            for item in legacy:
-                item.unlink(missing_ok=True)
-            print(f'agentoo desktop: migrated appearance preferences to {path}', file=sys.stderr)
-    except (ValueError, TypeError, KeyError) as error:
-        raise RuntimeError(f'Cannot migrate legacy appearance preferences: {error}') from error
-    finally:
-        os.umask(previous_umask)
-
-
 def read(path=None):
     path = state_path() if path is None else Path(path)
-    migrate(path)
     return read_json(path) if path.exists() else {}
 
 
@@ -176,8 +113,6 @@ def update(args, directory, write=atomic_write, parser=None):
         if not reset and effects.hyprctl('repl', 'return agentoo_effects_report and "ready" or "missing"') != 'ready':
             raise RuntimeError('Load the shared Agentoo effects.lua integration before changing effects')
     path = directory / 'appearance.json'
-    # Migrate before taking the write lock. Readers during reload never need it.
-    read(path)
     previous_umask = os.umask(0o077)
     try:
         directory.mkdir(parents=True, exist_ok=True)

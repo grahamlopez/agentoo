@@ -1,4 +1,4 @@
-"""Combined appearance imports and one-time migration, using disposable files."""
+"""Combined appearance imports, using disposable files."""
 import contextlib
 import importlib.machinery
 import importlib.util
@@ -98,18 +98,10 @@ class DesktopStateTest(unittest.TestCase):
             reload.assert_not_called()
             self.assertFalse(self.path.exists())
 
-    def test_query_selects_only_relevant_section_and_failed_migration_keeps_legacy_files(self):
+    def test_query_selects_only_relevant_section(self):
         self.directory.mkdir()
         self.path.write_text(json.dumps({'borders': {'width': 2}, 'gaps': {'typo': 10}}))
         self.assertEqual(effects.read_state(self.path, selected='borders'), {'borders': {'width': 2}})
-        self.path.unlink()
-        legacy = self.directory / 'transparency.json'
-        legacy.write_text('{"all":{"focused":true}}')
-        original = legacy.read_bytes()
-        with self.assertRaises(RuntimeError):
-            state.read(self.path)
-        self.assertEqual(legacy.read_bytes(), original)
-        self.assertFalse(self.path.exists())
 
     def test_partial_import_preserves_animation_parameters_and_drops_incompatible_ones(self):
         self.save_import({'animations': {'windows': 'popin', 'window_size': 80}})
@@ -131,30 +123,6 @@ class DesktopStateTest(unittest.TestCase):
             self.apply('--file', str(self.file))
         self.assertEqual(self.path.read_bytes(), original)
         self.assertEqual(self.file.read_bytes(), imported)
-
-    def test_one_time_migration_combines_legacy_sections_and_public_animations(self):
-        self.directory.mkdir()
-        (self.directory / 'wallpaper').write_text('/tmp/image.png\n')
-        (self.directory / 'transparency.json').write_text(json.dumps({'all': {'focused': 5}}))
-        (self.directory / 'blur.json').write_text(json.dumps({'strength': {'size': 3}}))
-        (self.directory / 'effects.json').write_text(json.dumps({'borders': {'width': 2}, 'animations': {'enabled': 'on', 'branches': {
-            'windowsIn': {'enabled': True, 'speed': 2.5, 'bezier': 'default', 'style': 'popin 80%'},
-            'workspacesIn': {'enabled': True, 'speed': 2.5, 'bezier': 'default', 'style': 'slidefade 30%'},
-        }}}))
-        with contextlib.redirect_stderr(io.StringIO()):
-            data = state.read(self.path)
-        self.assertEqual(data['animations'], {'enabled': 'on', 'windows': 'popin', 'window_size': 80,
-                                              'workspaces': 'slidefade', 'workspace_distance': 30, 'duration': 250})
-        self.assertEqual(data['transparency'], {'all': {'focused': 5}})
-        self.assertEqual(data['blur'], {'strength': {'size': 3}})
-        self.assertEqual((self.directory / 'wallpaper').read_text(), '/tmp/image.png\n')
-        self.assertEqual(list(self.directory.glob('*.json')), [self.path])
-        self.assertEqual(transparency.read_state(self.path), {'all': {'focused': 5}})
-        self.assertEqual(blur.read_state(self.path), {'strength': {'size': 3}})
-        self.assertEqual(effects.read_state(self.path)['borders'], {'width': 2})
-        self.path.write_text('{}\n')
-        (self.directory / 'effects.json').write_text('{"gaps":{"inner":99}}')
-        self.assertEqual(state.read(self.path), {})  # Old formats are never reread.
 
     def test_file_argument_conflicts_help_and_completion_are_safe(self):
         entry = ROOT / 'usr/local/bin/agentoo'

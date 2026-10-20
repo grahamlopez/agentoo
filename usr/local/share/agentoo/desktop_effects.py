@@ -183,20 +183,6 @@ def validate_sections(data, *, partial=False):
         raise RuntimeError(f'Invalid appearance settings: {error}') from error
 
 
-def validate_branches(branches):
-    if not isinstance(branches, dict) or set(branches) - set(WINDOW_NODES + WORKSPACE_NODES):
-        raise ValueError('invalid animation branches')
-    for value in branches.values():
-        if not isinstance(value, dict) or set(value) != {'enabled', 'speed', 'bezier', 'style'}:
-            raise ValueError('invalid animation branch settings')
-        if type(value['enabled']) is not bool or type(value['speed']) not in (int, float):
-            raise ValueError('invalid animation branch timing')
-        number(0.01, 100)(value['speed'])
-        for key in ('bezier', 'style'):
-            if not isinstance(value[key], str) or re.search(r'[\t\r\n\x00]', value[key]):
-                raise ValueError('invalid animation curve or style')
-
-
 def live_animations():
     nodes = {v['name']: v for v in json.loads(hyprctl('-j', 'animations'))[0]}
     result = {}

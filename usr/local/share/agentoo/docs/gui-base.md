@@ -1092,18 +1092,11 @@ Kitty/browser window category. Files apply and persist: their supplied values ar
 copied into normal state, with no ongoing dependency on the source file. The
 import file is left untouched (unless it is itself the normal saved state file).
 Reset remains command-specific; it removes preferences rather than writing fixed
-system defaults. An empty saved object is retained so old files cannot be revived.
+system defaults. An empty saved object is retained after removing all preferences.
 
-On the first read after upgrading, existing `transparency.json`, `blur.json`, and
-`effects.json` are validated and combined atomically into `appearance.json`. Only
-after that succeeds are the old files removed. Subsequent reads use only the new
-file. Ordinary queries are read-only except for this one-time migration. Old
-animation snapshots become portable choices: window-open and workspace-in styles
-are retained, and a common timed duration is retained when available. Distinct
-per-branch timing, captured easing, and captured enable flags give way to authored
-settings, with a migration notice. Invalid legacy files are left intact for repair.
-Wallpaper remains untouched. Restart Kitty processes running the old watcher when
-deploying this update, so their watcher reads the unified file.
+Only `appearance.json` is read for appearance preferences. Older per-command
+state files and compositor snapshots are not supported or imported. Wallpaper
+retains its separate selection file. Queries do not create or change state.
 
 Additional verification:
 
@@ -1113,5 +1106,5 @@ python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_desktop_st
 
 These checks cover all-section and selected-section imports, validation before
 writes, partial merges, one reload per import, rollback of the entire saved
-appearance, migration, and using one portable animation file with different
+appearance, and using one portable animation file with different
 authored animation settings in native Hyprland config verification.
