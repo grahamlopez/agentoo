@@ -9,7 +9,8 @@ import sys
 
 _share = str(Path(__file__).resolve().parents[1])
 # Kitty does not add the watcher's parent directory to its Python search path.
-# Allow the state module's shared imports, without changing Kitty's lasting path.
+# Allow shared imports while loading and reading state, without changing Kitty's
+# lasting search path. Some state imports are intentionally deferred until read.
 sys.path.insert(0, _share)
 try:
     _state = runpy.run_path(str(Path(_share) / 'desktop_transparency.py'),
@@ -21,12 +22,20 @@ _last_error = None
 _previous_state = None
 
 
+def read_preferences():
+    sys.path.insert(0, _share)
+    try:
+        return _state['read_state'](_state['state_path']())
+    finally:
+        sys.path.remove(_share)
+
+
 def refresh(boss):
     global _last_error, _previous_state
     from kitty.fast_data_types import current_focused_os_window_id, get_options
     from kitty.utils import log_error
     try:
-        data = _state['read_state'](_state['state_path']())
+        data = read_preferences()
         if _previous_state is not None and data != _previous_state and any(
             _state['effective'](_previous_state, 'kitty', focus) is not None
             and _state['effective'](data, 'kitty', focus) is None
