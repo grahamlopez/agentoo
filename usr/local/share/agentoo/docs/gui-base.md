@@ -433,6 +433,25 @@ This follows the previously tested fix in
 [the historical Omarchy notes](omarchy-configuration-changes.md#1-keep-the-closed-laptop-awake-during-monitor-inputpbp-switching).
 If monitor reconfiguration also removes external power, the battery lid policy
 can still suspend the laptop; this rule adds no timed disconnect grace period.
+USB-C power readings can settle after logind's last display/USB hotplug event.
+On thinktop this left a closed laptop awake after unplugging one Thunderbolt
+port under both the custom kernel and the matching Gentoo distribution kernel.
+The same ACPI `BRNS`/`_Q27` errors also occurred on a port that suspended
+successfully, so they do not by themselves explain the missed suspend.
+
+`80-agentoo-lid-recheck.rules` queues `agentoo-lid-recheck.timer` when a power
+supply reports offline. Each event restarts a two-second timer; its oneshot
+service sends logind a D-Bus Ping, waking its event loop so it re-evaluates
+closed-lid policy against the settled power readings. It neither requests
+suspend nor changes inhibitors or lid settings. The timer adds a retry, not
+a minimum grace period: logind can still suspend earlier. No polling daemon
+or timer enablement is needed. A temporary delayed-Ping experiment successfully
+suspended the previously failing port on the distribution kernel; the permanent
+udev/timer path and the custom kernel still require physical acceptance.
+After installing the rule and both units, run `sudo systemctl daemon-reload`
+and `sudo udevadm control --reload-rules`. Future power-supply events activate
+the timer; do not enable it at boot.
+
 Apply a changed drop-in with `sudo systemctl reload systemd-logind`; a service
 restart is unnecessary. Systems with custom logind policy or a differently named
 lid switch need their settings reviewed

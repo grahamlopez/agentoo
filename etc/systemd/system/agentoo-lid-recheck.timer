@@ -1,0 +1,7 @@
+[Unit]
+Description=Recheck closed-lid policy after power loss settles
+
+[Timer]
+OnActiveSec=2s
+AccuracySec=250ms
+Unit=agentoo-lid-recheck.service

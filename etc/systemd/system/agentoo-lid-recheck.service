@@ -1,0 +1,10 @@
+[Unit]
+Description=Notify logind after an external power supply goes offline
+
+[Service]
+Type=oneshot
+# A D-Bus event makes logind re-evaluate a closed lid using its own policy.
+# Do not request suspend here: AC power, external displays and inhibitors
+# must continue to be evaluated by logind.
+ExecStart=/usr/bin/busctl --system --timeout=5 call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.DBus.Peer Ping
+TimeoutStartSec=10s

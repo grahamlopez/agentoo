@@ -1,0 +1,45 @@
+# Purpose: make logind reconsider a closed lid after external power disappears.
+# On thinktop, unplugging one Thunderbolt/USB-C port removed the display before
+# its USB-C power_supply changed online from 1 to 0. Logind's last hotplug check
+# still saw external power and applied HandleLidSwitchExternalPower=ignore;
+# it did not recheck when the power reading later settled, so the laptop stayed
+# awake on battery. This occurred on both the custom and Gentoo distribution
+# 6.18.54 kernels. ACPI BRNS/_Q27 errors also occurred on a port that suspended
+# successfully; do not assume those errors alone explain this failure.
+#
+# Match a change event carrying POWER_SUPPLY_ONLINE=0, rather than a display
+# disconnect: monitor input/PiP/PbP switching can remove video while retaining
+# external power, and must continue to respect the configured stay-awake policy.
+# This also matches offline updates with no preceding observed online event;
+# that is harmless. Battery-only status events have no ONLINE field and do not
+# match. Multiple matching events restart the timer and coalesce into one retry.
+#
+# Required companion files in /etc/systemd/system/:
+#   agentoo-lid-recheck.timer: OnActiveSec=2s, AccuracySec=250ms, starts service.
+#   agentoo-lid-recheck.service: sends org.freedesktop.DBus.Peer.Ping to
+#     org.freedesktop.login1 at /org/freedesktop/login1 using busctl --system.
+# The Ping wakes logind's event loop, which rechecks closed-lid policy using the
+# current power/display state and inhibitors. Neither this rule nor the service
+# requests suspend or changes policy. Open lids need no action from logind.
+# Two seconds lets power readings settle; it is a retry delay, not a guaranteed
+# disconnect grace period, since logind may suspend earlier on its own.
+# A temporary delayed Ping caused the previously failing port to suspend;
+# the installed rule/timer path still needs physical validation on each kernel.
+#
+# --no-block is essential: udev must not wait for systemd jobs, which can depend
+# on udev themselves. Do not add sleeps or suspend commands to the udev worker.
+# This timer is event-triggered; do not enable it at boot or add a polling daemon.
+# After installing/changing this rule and its companion units, run:
+#   sudo systemctl daemon-reload
+#   sudo udevadm control --reload-rules
+# No synthetic udev trigger is needed. To validate, connect the monitor, close
+# the lid, unplug with no other charger, and check that it suspends. Also verify
+# input switching stays awake while power remains, and opening the lid restores
+# the panel. Inspect journalctl -b -u agentoo-lid-recheck.service and
+# journalctl -b -u systemd-logind; logind debug logging can show its decision:
+#   sudo systemctl service-log-level systemd-logind.service debug
+# Restore that level to info after diagnosis. A successful Ping alone does not
+# prove suspend: confirm kernel journal entries for PM: suspend entry/exit.
+# To remove this workaround, remove this rule, reload udev rules, stop the timer,
+# then remove its two companion units and run systemctl daemon-reload.
+ACTION=="change", SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="/usr/bin/systemctl --no-block restart agentoo-lid-recheck.timer"
