@@ -56,10 +56,15 @@ def brief(device):
     return f'{charge} | {rate} | {remaining}'
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(prog='agentoo power', description=__doc__)
     parser.add_argument('action', nargs='?', choices=['show-all'],
                         help='show detailed battery and CPU power information (default: brief battery status)')
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     supplies = Path('/sys/class/power_supply')
     batteries = []

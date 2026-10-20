@@ -84,3 +84,20 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn('unknown secrets command', result.stderr)
         self.assertNotIn('requesting sudo', result.stderr)
+
+    def test_completion_never_dispatches_operations(self):
+        commands = self.root / 'completion-commands'
+        commands.mkdir()
+        (commands / 'cli.py').write_text((COMMANDS / 'cli.py').read_text())
+        marker = self.root / 'operation-ran'
+        for name in ('checkpoint', 'secrets', 'permissions.py', 'git'):
+            (commands / name).write_text(f'touch {marker}\nexit 99\n')
+        self.entry.write_text(self.entry.read_text().replace(str(COMMANDS), str(commands)))
+        for words in [('checkpoint', 'restore', 'saved', ''),
+                      ('secrets', 'install', ''), ('permissions', 'fix', ''),
+                      ('git', 'enable-write', '')]:
+            with self.subTest(words=words):
+                result = self.run_cli('__complete', str(len(words)), *words)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn('requesting sudo', result.stderr)
+                self.assertFalse(marker.exists())

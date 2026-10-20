@@ -1,0 +1,64 @@
+#compdef agentoo
+
+# Agentoo owns command knowledge; this adapter only handles zsh presentation.
+# Records are data. Never eval completion output or request elevated privileges.
+local curcontext="$curcontext" record kind value description display item group heading
+local -a records matches descriptions labels rows expl
+local -i use_git=0 width index available
+records=("${(@f)$(command agentoo __complete $(( CURRENT - 1 )) "${(@Q)words[2,-1]}" 2>/dev/null)}")
+for record in $records; do
+    [[ ${record%%$'\t'*} == prefix ]] && compset -P '*='
+done
+
+# Keep each section in a separate completion group, with one aligned row per
+# candidate. Display labels may include a metavar; insertion uses only the value.
+for group heading in command Commands option Options candidate Values; do
+    matches=() descriptions=() labels=() rows=()
+    width=0
+    for record in $records; do
+        kind=${record%%$'\t'*}
+        [[ $kind == $group ]] || continue
+        item=${record#*$'\t'}
+        value=${item%%$'\t'*}
+        item=${item#*$'\t'}
+        description=${item%%$'\t'*}
+        display=${item#*$'\t'}
+        display=${display:-$value}
+        matches+=("$value")
+        descriptions+=("$description")
+        labels+=("$display")
+        (( ${#display} > width )) && width=${#display}
+    done
+    for (( index=1; index <= $#matches; index++ )); do
+        display="  ${(r:width:)labels[index]}"
+        if [[ -n $descriptions[index] ]]; then
+            description=$descriptions[index]
+            available=$(( COLUMNS - width - 5 ))
+            if (( available > 4 && ${#description} > available )); then
+                description="${description[1,available-3]}..."
+            fi
+            display+="  $description"
+        fi
+        rows+=("$display")
+    done
+    (( $#matches )) && _wanted "agentoo-$group" expl "$heading" \
+        compadd -V "agentoo-$group" -X "$heading:" -l -d rows -a matches -
+done
+
+for record in $records; do
+    kind=${record%%$'\t'*}
+    case $kind in
+        files) _files ;;
+        directories) _files -/ ;;
+        users) _users ;;
+        git) use_git=1 ;;
+    esac
+done
+if (( use_git )); then
+    # Query Git directly, bypassing Agentoo's operational wrapper.
+    local -x GIT_DIR=/var/lib/agentoo/repository.git GIT_WORK_TREE=/
+    local service=git
+    words=(git "${words[@]:2}")
+    (( CURRENT-- ))
+    _git
+fi

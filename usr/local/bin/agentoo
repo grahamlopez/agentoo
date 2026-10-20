@@ -9,15 +9,9 @@ Usage: agentoo <command> [options]
 Manage Agentoo system configuration and desktop utilities.
 
 Commands:
-  git          Run Git against the Agentoo system repository
-  checkpoint   Create, list, inspect, and restore system checkpoints
-  permissions  Check or repair managed ownership and permissions
-  secrets      Install secret files from Proton Pass
-  backlight    Adjust display brightness
-  screenshot   Capture all displays or a selected region
-  power        Show battery and CPU power status
-  fonts        Diagnose, preview, and select installed fonts
-  help         Show help for a command
+HELP
+    python3 "$commands/cli.py" commands
+    cat <<'HELP'
 
 Repository:
   git [<git-options>] <command> [args...]
@@ -89,6 +83,12 @@ HELP
 }
 fail() { printf 'agentoo: %s\n' "$*" >&2; exit 2; }
 
+# Completion is handled before dispatch and privilege checks.
+if [[ ${1:-} == __complete ]]; then
+    shift
+    exec python3 "$commands/cli.py" complete "$@"
+fi
+
 # Normalize help before any privilege check. Never inspect forwarded Git arguments.
 if [[ ${1:-} == help ]]; then
     shift
@@ -125,8 +125,8 @@ case $command in
             ''|-h|--help)
                 printf 'Usage: agentoo permissions {check|fix} [--root PATH]\n\ncheck reports mismatches; fix restores ownership and modes. Both request sudo when needed.\n--root selects a mounted target root (default: /).\n'
                 exit 0 ;;
-            check) shift; set -- --check "$@" ;;
-            fix) shift; set -- --fix "$@" ;;
+            check) python3 "$commands/cli.py" validate permissions "$@"; shift; set -- --check "$@" ;;
+            fix) python3 "$commands/cli.py" validate permissions "$@"; shift; set -- --fix "$@" ;;
             *) fail "unknown permissions command: $1" ;;
         esac
         ;;
@@ -143,5 +143,10 @@ case $command in
     permissions) exec python3 "$commands/permissions.py" "$@" ;;
     fonts) exec python3 "$commands/fonts.py" "$@" ;;
     power) exec python3 "$commands/power.py" "$@" ;;
-    *) exec bash "$commands/$command" "$@" ;;
+    *)
+        case $command in
+            checkpoint|secrets|backlight|screenshot)
+                python3 "$commands/cli.py" validate "$command" "$@" ;;
+        esac
+        exec bash "$commands/$command" "$@" ;;
 esac

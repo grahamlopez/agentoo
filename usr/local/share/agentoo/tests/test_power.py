@@ -40,9 +40,9 @@ class PowerTest(unittest.TestCase):
                           energy_now=88480000)
             for name, value in fields.items():
                 (device / name).write_text(str(value))
-            self.assertEqual(module['brief'](device), '97% -- 4.8 W -- ~18h 26m')
+            self.assertEqual(module['brief'](device), '97% | 4.8 W | ~18h 26m')
             (device / 'status').write_text('Charging')
-            self.assertEqual(module['brief'](device), '97% -- 4.8 W -- charging')
+            self.assertEqual(module['brief'](device), '97% | 4.8 W | charging')
             for path in device.iterdir():
                 path.unlink()
-            self.assertEqual(module['brief'](device), 'unavailable -- unavailable -- unavailable')
+            self.assertEqual(module['brief'](device), 'unavailable | unavailable | unavailable')

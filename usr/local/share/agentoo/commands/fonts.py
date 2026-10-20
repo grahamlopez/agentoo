@@ -574,7 +574,7 @@ def print_doctor(report):
         print('NOTE:', note)
 
 
-def main():
+def build_parser():
     parser = ArgumentParser(prog='agentoo fonts', usage='%(prog)s [COMMAND] [options]', description=__doc__,
         epilog='Default: show current Kitty settings and installed families (same as status).\n'
                'Install and remove fonts with Portage.\n\n'
@@ -631,6 +631,11 @@ def main():
     mode.add_argument('--render', action='store_true', help='open a fresh diagnostic Kitty using current configuration and capture fallback tracing; cannot save')
     p.add_argument('--json', action='store_true', help='emit one JSON document instead of human-readable text')
     p.add_argument('--output', help='rendering trace path (requires --render); default: a unique temporary .log file')
+    return parser
+
+
+def main():
+    parser = build_parser()
     a = parser.parse_args()
     if a.command not in (None, 'status') and (a.filter or a.nerd):
         parser.error('--filter and --nerd only apply to status')
