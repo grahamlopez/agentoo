@@ -16,6 +16,18 @@ hl.config({
 })
 
 hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"))
+-- A persistent terminal overlay; Kitty sizes the content in columns and rows.
+hl.workspace_rule({
+    workspace = "special:terminal",
+    on_created_empty = "kitty --class agentoo-dropdown -o remember_window_size=no -o initial_window_width=200c -o initial_window_height=30c",
+})
+hl.window_rule({
+    match = { class = "agentoo-dropdown" },
+    float = true,
+    workspace = "special:terminal",
+    move = "(monitor_w-window_w)/2 monitor_h/4",
+})
+hl.bind("SUPER + grave", hl.dsp.workspace.toggle_special("terminal"))
 hl.bind("SUPER + SHIFT + Return", hl.dsp.exec_cmd("firefox-bin"))
 hl.bind("SUPER + Q", hl.dsp.window.close())
 hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
