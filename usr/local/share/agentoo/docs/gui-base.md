@@ -508,8 +508,8 @@ Caps Lock acts as Control, matching the shared console keymap. The background
 is plain dark gray.
 
 The terminal overlay uses a named special workspace and launches Kitty on demand.
-It requests 200 columns by 30 rows, centered horizontally with its top edge one
-quarter of the monitor height from the top. Hiding it keeps the shell and running
+It requests 160 columns by 45 rows, centered horizontally with its top edge
+15% of the monitor height from the top. Hiding it keeps the shell and running
 programs alive; closing the terminal lets the next toggle create a fresh one.
 The cell size follows the normal Kitty font settings; the requested geometry
 requires enough monitor space at the selected font size and display scale.
