@@ -21,16 +21,50 @@ end
 for line in contents:gmatch("([^\n]+)\n") do
     if line ~= "end" then
         local group, key, value = line:match("^(%a+)\t([%w_]+)\t(.*)$")
-        if group == "animation" then
-            local enabled, speed, curve, style = value:match("^([^\t]+)\t([^\t]+)\t([^\t]*)\t([^\t]*)$")
-            local settings = { leaf = key, enabled = enabled == "on", speed = tonumber(speed), style = style }
-            if curve:sub(1, 7) == "spring:" then settings.spring = curve:sub(8)
-            else settings.bezier = curve end
-            hl.animation(settings)
-        else
-            saved[group] = saved[group] or {}
-            saved[group][key] = value
+        saved[group] = saved[group] or {}
+        saved[group][key] = value
+    end
+end
+local animation = saved.animations or {}
+local parents = {
+    windowsIn = "windows", windowsOut = "windows", windows = "global",
+    workspacesIn = "workspaces", workspacesOut = "workspaces", workspaces = "global",
+    specialWorkspaceIn = "specialWorkspace", specialWorkspaceOut = "specialWorkspace", specialWorkspace = "workspaces",
+}
+local function baseline(name)
+    local authored = agentoo_animation_defaults or {}
+    local settings = authored[name]
+    if not settings then
+        if parents[name] then return baseline(parents[name]) end
+        -- Native Hyprland 0.56.2 global animation defaults.
+        return { enabled = true, speed = 8, bezier = "default", style = "" }
+    end
+    if settings.enabled == false then return { enabled = false, speed = 1, bezier = "default", style = "" } end
+    return settings
+end
+for _, name in ipairs({ "windowsIn", "windowsOut", "workspacesIn", "workspacesOut", "specialWorkspaceIn", "specialWorkspaceOut" }) do
+    local windows = name:sub(1, 7) == "windows"
+    local style = windows and animation.windows or (not windows and animation.workspaces or nil)
+    if style or animation.duration then
+        local current = baseline(name)
+        local settings = {}
+        for key, value in pairs(current) do settings[key] = value end
+        settings.leaf = name
+        if animation.duration then
+            assert(not settings.spring, "Agentoo --duration requires a bezier animation curve")
+            settings.speed = tonumber(animation.duration) / 100
         end
+        if style then
+            settings.style = style
+            if windows and style == "slide" and animation.window_direction and animation.window_direction ~= "auto" then
+                settings.style = style .. " " .. animation.window_direction
+            elseif windows and style == "popin" and animation.window_size then
+                settings.style = style .. " " .. animation.window_size .. "%"
+            elseif not windows and style:sub(1, 5) == "slide" and animation.workspace_distance then
+                settings.style = style .. " " .. animation.workspace_distance .. "%"
+            end
+        end
+        hl.animation(settings)
     end
 end
 local config = {}

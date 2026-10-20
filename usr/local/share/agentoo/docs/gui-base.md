@@ -725,10 +725,11 @@ including personal configuration. `--reset` cannot accompany either percentage.
 Shared defaults currently set no opacity, so absent host or personal settings
 the underlying defaults are fully opaque.
 
-Transparency is saved at `$XDG_STATE_HOME/agentoo/transparency.json`, defaulting
-to `~/.local/state/agentoo/transparency.json`; relative XDG paths are ignored.
-This is personal, untracked state, like the wallpaper selection. Updates use a
-private directory, atomic replacement, and an exclusive `transparency.lock`.
+Transparency occupies the `transparency` section of the shared
+`$XDG_STATE_HOME/agentoo/appearance.json` (normally
+`~/.local/state/agentoo/appearance.json`); relative XDG paths are ignored.
+This is personal, untracked state. Updates use a private directory, atomic
+replacement, and the shared `appearance.lock`.
 Hyprland reads the JSON through a validating Python helper at startup and every
 configuration reload; there is no separate restore command or generated config
 to keep in sync. Updates require the shared integration in a running Hyprland
@@ -821,8 +822,9 @@ fullscreen, dialog, and dropdown windows follow the focus/category rules.
 Custom class families are defined once in `window-classes.lua` for both blur and
 transparency.
 
-Choices live at `$XDG_STATE_HOME/agentoo/blur.json`, defaulting to
-`~/.local/state/agentoo/blur.json`, with a private `blur.lock` serializing updates.
+Choices occupy the `blur` section of `$XDG_STATE_HOME/agentoo/appearance.json`,
+defaulting to `~/.local/state/agentoo/appearance.json`, with the shared
+`appearance.lock` serializing updates.
 Relative XDG paths are ignored. Writes are atomic; the command reloads Hyprland
 with `config-only` and verifies that the compositor has loaded the saved revision.
 The reload request and verification calls share a two-second timeout budget.
@@ -834,7 +836,8 @@ restoring the file does not guarantee that the live compositor recovered.
 No generated configuration or separate restore command is needed:
 `blur.lua` reads validated data on startup and config reload. Concurrent sessions
 share choices; another existing session adopts them on its next reload. A full
-reset can recover even from corrupt state or a conflicting-rule config error.
+reset can recover a malformed blur section or a conflicting-rule config error;
+malformed JSON itself requires repairing the shared file.
 
 Authored `no_blur`, `noblur`, `opaque`, and `force_rgbx` rules in the selected
 host file or personal Hyprland config tree are conservatively reported with
@@ -980,22 +983,26 @@ Optional parameters must accompany a compatible style selection:
 - `--windows popin --window-size PERCENT` (integer 0–100)
 - `--workspaces STYLE --workspace-distance PERCENT` (integer 0–100; sliding styles only)
 
-Selecting a style without parameters uses its native default parameters. Duration
-alone retains the existing styles and parameters. Window style adjustments target
+Compatible saved style parameters are retained when omitted. Switching to an
+incompatible style removes obsolete parameters; when no parameter is saved, the
+native default applies. Duration alone retains the existing styles and parameters. Window style adjustments target
 opening/closing, not dragging or resizing. Workspace adjustments also cover special
 workspaces. Layer animations, independent fade branches, and gradient rotation
 are not managed. The master enable switch still controls all Hyprland animations.
 
-When a branch is first adjusted, its effective timing, easing curve, style, and
-individual enable state are read from the running compositor. Supplied values
-replace only the requested parts. The resulting branch preferences persist, so
-later authored branch changes take effect after `animations --reset`. This small
-snapshot is needed because Hyprland's Lua animation setter requires a complete
-branch definition. Existing custom curves must remain defined in the authored
-configuration. Spring curves set their own timing: style changes preserve them,
-but `--duration` rejects affected spring branches instead of silently replacing
-their easing. Enabling the master switch preserves individually disabled branches;
-queries show their states.
+Only public animation choices are saved: `enabled`, `windows`, `window_size`,
+`window_direction`, `workspaces`, `workspace_distance`, and `duration`. There are
+no saved compositor branches or machine-specific curve references. During every
+configuration load, the entry file records authored `hl.animation` calls, restores
+the native setter, and fills omitted details from those definitions. Thus the
+same portable preferences retain the receiving desktop's timings, custom easing,
+and individual branch enable states. The fallback is Hyprland 0.56.2's native
+global default (800 ms, `default` bezier, enabled). Authored changes to omitted
+settings take effect on the next reload without resetting preferences.
+
+Spring curves set their own timing: style changes preserve them, but `--duration`
+rejects affected spring branches instead of replacing their easing. Enabling the
+master switch preserves individually disabled branches; queries show their states.
 
 The style list and parameter handling were checked against
 [Hyprland 0.56.2's validator](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/animation/AnimationManager.cpp)
@@ -1003,12 +1010,13 @@ and [Lua setter](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/config/lua/
 
 ### Persistence and verification
 
-All six commands share `$XDG_STATE_HOME/agentoo/effects.json`, defaulting to
-`~/.local/state/agentoo/effects.json`. A private lock serializes changes and writes
+All eight appearance commands share `$XDG_STATE_HOME/agentoo/appearance.json`,
+defaulting to `~/.local/state/agentoo/appearance.json`. The `appearance.lock`
+serializes changes and writes
 are atomic. Changes require the running shared integration. Reload uses
 `hyprctl reload config-only`, retaining monitor configuration. A reported reload
 failure restores the previous saved state and attempts to reload it. No daemon,
-configuration scanner, or generated configuration file is involved. Hyprland reads
+new configuration scanner, or generated configuration file is involved. Hyprland reads
 validated data through `desktop_effects.py settings` at startup and reload.
 
 Malformed values are reported clearly. Reset can recover a malformed command
@@ -1023,7 +1031,87 @@ python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_effects.py
 ```
 
 Tests cover parser/completion behavior, independent updates, scoped reset,
-failed-reload recovery, animation inheritance and preservation, and isolated
+failed-reload recovery, portable animation inheritance, and isolated
 `Hyprland --verify-config` checks for settings, colors, every exposed style, and
 reset-to-authored defaults. They do not change a live desktop or verify rendered
 appearance; those checks remain part of installed-session validation.
+
+
+### Importing a desktop appearance
+
+The saved state and import files use the same JSON structure. Wallpaper is
+excluded: it retains its separate selection and lifecycle.
+
+```json
+{
+  "borders": {
+    "width": 2,
+    "focused": "#79618f,#41434f,#527b69",
+    "focused_angle": 45
+  },
+  "corners": {"radius": 10, "power": 4},
+  "gaps": {"inner": 4, "outer": 8},
+  "animations": {
+    "enabled": "on",
+    "windows": "popin",
+    "window_size": 80,
+    "workspaces": "slidefade",
+    "duration": 250
+  },
+  "shadows": {"enabled": "on", "size": 12, "opacity": 35},
+  "dimming": {"enabled": "on", "strength": 15},
+  "transparency": {"all": {"focused": 5, "unfocused": 10}},
+  "blur": {"all": {"focused": true, "unfocused": true}, "strength": {"size": 3, "passes": 1}}
+}
+```
+
+```sh
+agentoo desktop --file appearance.json
+agentoo desktop borders --file appearance.json
+agentoo desktop blur --file appearance.json
+```
+
+The top-level command validates every supplied section before saving and reloads
+once. A subcommand selects and validates only its own section, ignoring other
+sections; a missing selected section is an error. Unknown sections at the top
+level and unknown fields in selected sections are errors. Invalid JSON or values
+never partially apply. Imports require a running shared desktop integration.
+
+Every section is optional, and each section is a partial update: omitted fields,
+window groups, and focus states remain unchanged. Importing a shared `all` value
+retains category overrides that the file does not explicitly supply (unlike an
+explicit CLI `--window all` adjustment, which clears corresponding overrides).
+Compatible saved animation parameters persist; changing styles discards parameters
+that cannot apply to the new style. JSON keys follow option names with underscores
+instead of hyphens. Blur's focus values are JSON booleans; other on/off choices
+use the strings `"on"` and `"off"`, matching their CLI values. Empty sections make
+no changes; an empty top-level file is rejected.
+
+`--file` cannot accompany adjustment flags, `--reset`, `--diagnose`, or a selected
+Kitty/browser window category. Files apply and persist: their supplied values are
+copied into normal state, with no ongoing dependency on the source file. The
+import file is left untouched (unless it is itself the normal saved state file).
+Reset remains command-specific; it removes preferences rather than writing fixed
+system defaults. An empty saved object is retained so old files cannot be revived.
+
+On the first read after upgrading, existing `transparency.json`, `blur.json`, and
+`effects.json` are validated and combined atomically into `appearance.json`. Only
+after that succeeds are the old files removed. Subsequent reads use only the new
+file. Ordinary queries are read-only except for this one-time migration. Old
+animation snapshots become portable choices: window-open and workspace-in styles
+are retained, and a common timed duration is retained when available. Distinct
+per-branch timing, captured easing, and captured enable flags give way to authored
+settings, with a migration notice. Invalid legacy files are left intact for repair.
+Wallpaper remains untouched. Restart Kitty processes running the old watcher when
+deploying this update, so their watcher reads the unified file.
+
+Additional verification:
+
+```sh
+python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_desktop_state.py
+```
+
+These checks cover all-section and selected-section imports, validation before
+writes, partial merges, one reload per import, rollback of the entire saved
+appearance, migration, and using one portable animation file with different
+authored animation settings in native Hyprland config verification.

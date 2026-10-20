@@ -4,7 +4,6 @@ One parser supplies help, completion and saved-value validation. The private
 settings entry point emits tab-separated data for effects.lua, never user code.
 """
 import argparse
-import fcntl
 import json
 import math
 import os
@@ -13,7 +12,7 @@ import sys
 
 sys.dont_write_bytecode = True
 from cli import ArgumentParser
-from desktop_common import hyprctl, xdg_directory
+from desktop_common import hyprctl
 
 COMMANDS = ('corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')
 WINDOW_STYLES = ('slide', 'popin', 'gnome', 'gnomed')
@@ -74,6 +73,8 @@ def add_parsers(commands):
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog='Exit 0: success; 1: operational failure; 2: invalid arguments.')
         p.add_argument('--reset', action='store_true', help='Remove saved overrides; cannot combine with adjustments')
+        from desktop_state import file_option
+        file_option(p, child=True)
         parsers[name] = p
     p = parsers['corners']
     p.add_argument('--radius', type=number(0, 20, True), metavar='PIXELS', help='Corner radius, 0–20; 0 makes square corners')
@@ -125,7 +126,9 @@ def add_parsers(commands):
 
 
 def validate(args, parser):
-    values = {k: v for k, v in vars(args).items() if k not in ('command', 'reset') and v is not None}
+    values = {k: v for k, v in vars(args).items() if k not in ('command', 'reset', 'appearance_file') and v is not None}
+    from desktop_state import check_file_args
+    check_file_args(args, parser, bool(values))
     if args.reset and values:
         parser.error('--reset cannot be combined with adjustments')
     if args.command == 'animations':
@@ -139,38 +142,45 @@ def validate(args, parser):
 
 
 def state_path():
-    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo/effects.json'
+    from desktop_state import state_path as shared_path
+    return shared_path()
 
 
-def read_state(path, reset_group=None):
+def read_state(path, reset_group=None, selected=None):
+    from desktop_state import read
+    data = {k: v for k, v in read(path).items() if k in COMMANDS and k != reset_group and (selected is None or k == selected)}
+    return validate_sections(data)
+
+
+def validate_sections(data, *, partial=False):
     try:
-        data = json.loads(path.read_text())
-        if reset_group and isinstance(data, dict):
-            data.pop(reset_group, None)
         root = ArgumentParser()
         parsers = add_parsers(root.add_subparsers())
         if not isinstance(data, dict) or set(data) - set(COMMANDS):
             raise ValueError('unknown effect')
+        result = {}
         for group, values in data.items():
             if not isinstance(values, dict):
                 raise ValueError('expected effect settings')
-            actions = {a.dest: a for a in parsers[group]._actions if a.dest not in ('help', 'reset')}
+            actions = {a.dest: a for a in parsers[group]._actions if a.dest not in ('help', 'reset', 'appearance_file')}
+            result[group] = {}
             for key, value in values.items():
-                if group == 'animations' and key == 'branches':
-                    validate_branches(value)
-                    continue
-                if (group == 'animations' and key != 'enabled') or key not in actions or type(value) not in (int, float, str):
+                if key not in actions or type(value) not in (int, float, str):
                     raise ValueError(f'invalid {group}.{key}')
                 action = actions[key]
-                if action.type:
-                    values[key] = action.type(str(value))
                 if action.choices and value not in action.choices:
                     raise ValueError(f'invalid {group}.{key}')
-        return data
-    except FileNotFoundError:
-        return {}
+                result[group][key] = action.type(str(value)) if action.type else value
+        animation = result.get('animations', {})
+        if 'window_direction' in animation and (not partial or 'windows' in animation) and animation.get('windows') != 'slide':
+            raise ValueError('window_direction requires windows: slide')
+        if 'window_size' in animation and (not partial or 'windows' in animation) and animation.get('windows') != 'popin':
+            raise ValueError('window_size requires windows: popin')
+        if 'workspace_distance' in animation and (not partial or 'workspaces' in animation) and not animation.get('workspaces', '').startswith('slide'):
+            raise ValueError('workspace_distance requires a sliding workspaces style')
+        return result
     except (ValueError, TypeError, argparse.ArgumentTypeError) as error:
-        raise RuntimeError(f'Invalid effects state in {path}: {error}; reset the affected command or repair the file') from error
+        raise RuntimeError(f'Invalid appearance settings: {error}') from error
 
 
 def validate_branches(branches):
@@ -200,32 +210,14 @@ def live_animations():
 
 def animation_update(previous, values):
     updated = dict(previous)
-    if 'enabled' in values:
-        updated['enabled'] = values['enabled']
-    windows = 'windows' in values or 'duration' in values
-    workspaces = 'workspaces' in values or 'duration' in values
-    if not windows and not workspaces:
-        return updated
-    branches = dict(previous.get('branches', {}))
-    live = live_animations()
-    for name in (WINDOW_NODES if windows else ()) + (WORKSPACE_NODES if workspaces else ()):
-        branch = dict(branches.get(name, live[name]))
-        if 'duration' in values:
-            if branch['bezier'].startswith('spring:'):
-                raise RuntimeError('Spring curves control their own timing; configure a bezier curve before using --duration')
-            branch['speed'] = values['duration'] / 100
-        if name in WINDOW_NODES and 'windows' in values:
-            branch['style'] = values['windows']
-            if values.get('window_direction', 'auto') != 'auto':
-                branch['style'] += ' ' + values['window_direction']
-            if 'window_size' in values:
-                branch['style'] += f" {values['window_size']}%"
-        if name in WORKSPACE_NODES and 'workspaces' in values:
-            branch['style'] = values['workspaces']
-            if 'workspace_distance' in values:
-                branch['style'] += f" {values['workspace_distance']}%"
-        branches[name] = branch
-    updated['branches'] = branches
+    if 'windows' in values:
+        if values['windows'] != 'slide':
+            updated.pop('window_direction', None)
+        if values['windows'] != 'popin':
+            updated.pop('window_size', None)
+    if 'workspaces' in values and not values['workspaces'].startswith('slide'):
+        updated.pop('workspace_distance', None)
+    updated.update(values)
     return updated
 
 
@@ -243,11 +235,11 @@ def show(data, group):
     print(group.capitalize() + ':')
     for action in parser._actions:
         key = action.dest
-        if key in ('help', 'reset') or (group == 'animations' and key != 'enabled'):
+        if key in ('help', 'reset', 'appearance_file'):
             continue
         saved = values.get(key)
         if isinstance(saved, (int, float)):
-            unit = ' deg' if key.endswith('_angle') else '%' if key in ('opacity', 'strength') else '' if key == 'power' else ' px'
+            unit = ' ms' if key == 'duration' else ' deg' if key.endswith('_angle') else '%' if key in ('opacity', 'strength', 'window_size', 'workspace_distance') else '' if key == 'power' else ' px'
             saved = f'{saved:g}{unit}'
         current = report.get(f'{group}.{key}')
         if saved is not None:
@@ -261,8 +253,8 @@ def show(data, group):
             live = {}
             print(f'agentoo desktop: cannot query animation branches: {error}', file=sys.stderr)
         for name in WINDOW_NODES + WORKSPACE_NODES:
-            branch = live.get(name, values.get('branches', {}).get(name))
-            source = 'saved override' if name in values.get('branches', {}) else 'configured default'
+            branch = live.get(name)
+            source = 'current branch'
             if branch:
                 print(f'  {name}: {branch["style"] or "default"}, {branch["speed"] * 100:g} ms, '
                       f'{branch["bezier"]}, {"on" if branch["enabled"] else "off"} ({source}{"; current unavailable" if not live else ""})')
@@ -286,47 +278,11 @@ def reload_settings():
 
 def run(args, directory, atomic_write, parser):
     values = validate(args, parser)
-    path = directory / 'effects.json'
-    if not args.reset and not values:
-        show(read_state(path), args.command)
+    if not args.reset and not values and getattr(args, 'appearance_file', None) is None:
+        show(read_state(directory / 'appearance.json', selected=args.command), args.command)
         return 0
-    if not os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
-        raise RuntimeError('A running Hyprland session is required to change desktop effects')
-    if not args.reset and hyprctl('repl', 'return agentoo_effects_report and "ready" or "missing"') != 'ready':
-        raise RuntimeError('Load the shared Agentoo effects.lua integration before changing effects')
-    previous_umask = os.umask(0o077)
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-        with (directory / 'effects.lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            original = path.read_bytes() if path.exists() else None
-            data = read_state(path, args.command if args.reset else None)
-            if args.reset:
-                data.pop(args.command, None)
-            elif args.command == 'animations':
-                data['animations'] = animation_update(data.get('animations', {}), values)
-            else:
-                data[args.command] = {**data.get(args.command, {}), **values}
-            if data:
-                atomic_write(path, json.dumps(data, indent=2, sort_keys=True) + '\n')
-            else:
-                path.unlink(missing_ok=True)
-            try:
-                reload_settings()
-            except RuntimeError:
-                if original is None:
-                    path.unlink(missing_ok=True)
-                else:
-                    atomic_write(path, original)
-                try:
-                    reload_settings()
-                except RuntimeError as error:
-                    print(f'agentoo desktop: could not reload restored preferences: {error}', file=sys.stderr)
-                raise
-    finally:
-        os.umask(previous_umask)
-    print(f'{args.command.capitalize()} ' + ('overrides reset.' if args.reset else 'updated.'), file=sys.stderr)
-    return 0
+    from desktop_state import update
+    return update(args, directory, atomic_write, parser)
 
 
 def settings():
@@ -334,12 +290,7 @@ def settings():
     lines = []
     for group, values in data.items():
         for key, value in values.items():
-            if key == 'branches':
-                for name, branch in value.items():
-                    lines.append('\t'.join(('animation', name, 'on' if branch['enabled'] else 'off',
-                                            str(branch['speed']), branch['bezier'], branch['style'])))
-            else:
-                lines.append(f'{group}\t{key}\t{value}')
+            lines.append(f'{group}\t{key}\t{value}')
     print('\n'.join([*lines, 'end']))
 
 

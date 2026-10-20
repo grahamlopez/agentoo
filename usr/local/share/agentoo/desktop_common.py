@@ -34,3 +34,15 @@ def hyprctl(*arguments, timeout=10):
     if result.returncode:
         raise RuntimeError('Hyprland: ' + (result.stderr or result.stdout).strip())
     return result.stdout.strip()
+
+
+def atomic_write(path, value):
+    """Replace one preference file without exposing a partial write to readers."""
+    import tempfile
+    descriptor, temporary = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'wb' if isinstance(value, bytes) else 'w') as stream:
+            stream.write(value)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)

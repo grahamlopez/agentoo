@@ -1,3 +1,15 @@
+-- Remember authored animation calls while loading defaults and personal files.
+-- The native setter requires complete definitions; appearance.json stores only
+-- public preferences, so omitted animation fields are filled here on each load.
+local native_animation = hl.animation
+agentoo_animation_defaults = {}
+hl.animation = function(settings)
+    local copy = {}
+    for key, value in pairs(settings) do copy[key] = value end
+    agentoo_animation_defaults[settings.leaf] = copy
+    return native_animation(settings)
+end
+
 -- Hyprland discovers this system fallback without a user entry file.
 -- require() tracks included files for reload in the selected release.
 require("/etc/xdg/hypr/agentoo.lua")
@@ -33,6 +45,8 @@ if not config_home or config_home:sub(1, 1) ~= "/" then
     config_home = home .. "/.config"
 end
 include_optional(config_home .. "/hypr/agentoo-local.lua")
+
+hl.animation = native_animation
 
 -- Keep closed panels disabled before reload applies monitor rules, including
 -- host/personal rules. Do not briefly enable them during appearance changes.

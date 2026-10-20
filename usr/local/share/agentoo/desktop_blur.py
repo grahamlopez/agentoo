@@ -4,7 +4,6 @@ The private `rules` entry point emits validated data, never executable Lua.
 Saved choices are distinct from the compositor's authored defaults.
 """
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -13,7 +12,7 @@ import sys
 import time
 
 sys.dont_write_bytecode = True
-from desktop_common import authored_hypr_paths, hyprctl, xdg_directory
+from desktop_common import authored_hypr_paths, hyprctl
 
 GROUPS = ('all', 'kitty', 'browser')
 STATES = ('focused', 'unfocused')
@@ -80,11 +79,15 @@ def add_parser(commands):
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument('--reset', action='store_true', help='Remove selected overrides')
     actions.add_argument('--diagnose', action='store_true', help='Show version, renderer/GPU, settings, compatibility, and conflicts')
+    from desktop_state import file_option
+    file_option(parser, child=True)
     return parser
 
 
 def validate(args, parser):
     adjustments = any(getattr(args, name) is not None for name in (*STATES, 'size', 'passes'))
+    from desktop_state import check_file_args
+    check_file_args(args, parser, adjustments)
     if (args.reset or args.diagnose) and adjustments:
         parser.error('--reset and --diagnose cannot be combined with adjustment options')
     if args.window != 'all' and (args.size is not None or args.passes is not None):
@@ -92,29 +95,29 @@ def validate(args, parser):
 
 
 def state_path():
-    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo/blur.json'
+    from desktop_state import state_path as shared_path
+    return shared_path()
 
 
 def read_state(path):
-    try:
-        data = json.loads(path.read_text())
-    except FileNotFoundError:
-        return {}
-    except (ValueError, UnicodeError) as error:
-        raise RuntimeError(f'Invalid blur state in {path}: {error}') from error
+    from desktop_state import section
+    return validate_data(section('blur', path))
+
+
+def validate_data(data):
     if not isinstance(data, dict) or set(data) - {*GROUPS, 'strength'}:
-        raise RuntimeError(f'Invalid blur groups in {path}')
+        raise RuntimeError(f'Invalid blur groups in blur section')
     for group, values in data.items():
         allowed = LIMITS if group == 'strength' else STATES
         if not isinstance(values, dict) or set(values) - set(allowed):
-            raise RuntimeError(f'Invalid blur settings for {group} in {path}')
+            raise RuntimeError(f'Invalid blur settings for {group} in blur section')
         for key, value in values.items():
             if group == 'strength':
                 valid = type(value) is int and 1 <= value <= LIMITS[key]
             else:
                 valid = type(value) is bool
             if not valid:
-                raise RuntimeError(f'Invalid blur value for {group}.{key} in {path}')
+                raise RuntimeError(f'Invalid blur value for {group}.{key} in blur section')
     return data
 
 
@@ -308,57 +311,16 @@ def reload_saved(data):
 
 
 def save(args, directory, atomic_write):
-    """Commit preferences only if Hyprland accepts them; otherwise restore bytes.
-
-    The lock covers reading, writing, verification, and rollback. Full reset
-    deliberately bypasses parsing so it can recover a damaged state file.
-    """
-    path = directory / 'blur.json'
-    require_integration(recover=args.reset and args.window == 'all')
-    previous_umask = os.umask(0o077)
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-        with (directory / 'blur.lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            original = path.read_bytes() if path.exists() else None
-            previous = {} if args.reset and args.window == 'all' else read_state(path)
-            updated = adjusted(previous, args)
-            check_conflicts(updated)
-            if updated:
-                atomic_write(path, json.dumps(updated, sort_keys=True, indent=2) + '\n')
-            else:
-                path.unlink(missing_ok=True)
-            try:
-                report = reload_saved(updated)
-            except BaseException:
-                if original is not None:
-                    atomic_write(path, original)
-                else:
-                    path.unlink(missing_ok=True)
-                try:
-                    hyprctl('reload', 'config-only')
-                except RuntimeError as error:
-                    print(f'agentoo desktop: warning: rollback reload failed: {error}', file=sys.stderr)
-                raise
-    finally:
-        os.umask(previous_umask)
-    if args.reset:
-        message = 'Blur overrides reset.'
-    elif all(getattr(args, focus) is None for focus in STATES):
-        message = 'Blur strength saved.'
-        if report['option.enabled'] == 'off':
-            message += ' Blur remains off; enable it with --focused on and/or --unfocused on.'
-    else:
-        message = 'Blur updated.'
-    print(message, file=sys.stderr)
-    return 0
+    from desktop_state import update
+    args.command = 'blur'
+    return update(args, directory, atomic_write)
 
 
 def run(args, directory, atomic_write):
-    path = directory / 'blur.json'
+    path = directory / 'appearance.json'
     if args.diagnose:
         return diagnose(path, args.window)
-    if args.reset or any(getattr(args, name) is not None for name in (*STATES, *LIMITS)):
+    if args.reset or getattr(args, 'appearance_file', None) is not None or any(getattr(args, name) is not None for name in (*STATES, *LIMITS)):
         return save(args, directory, atomic_write)
 
     data = read_state(path)

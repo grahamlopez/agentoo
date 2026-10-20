@@ -78,13 +78,13 @@ class EffectsTest(unittest.TestCase):
             self.run_effect('borders', '--focused', '#abcdef,#12345680', '--unfocused', '#654321')
             self.run_effect('borders', '--focused-angle', '45.5')
             self.run_effect('borders', '--unfocused-angle', '0')
-            self.assertEqual(effects.read_state(self.directory / 'effects.json')['borders'], {
+            self.assertEqual(effects.read_state(self.directory / 'appearance.json')['borders'], {
                 'focused': '#abcdef,#12345680', 'unfocused': '#654321',
                 'focused_angle': 45.5, 'unfocused_angle': 0})
             self.run_effect('borders', '--focused', '#000000')
-            self.assertEqual(effects.read_state(self.directory / 'effects.json')['borders']['focused_angle'], 45.5)
+            self.assertEqual(effects.read_state(self.directory / 'appearance.json')['borders']['focused_angle'], 45.5)
             self.run_effect('borders', '--reset')
-            self.assertFalse((self.directory / 'effects.json').exists())
+            self.assertEqual(json.loads((self.directory / 'appearance.json').read_text()), {})
 
     def test_query_creates_no_state_and_does_not_guess_defaults(self):
         with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE=''), contextlib.redirect_stdout(io.StringIO()) as output:
@@ -98,40 +98,32 @@ class EffectsTest(unittest.TestCase):
             self.run_effect('corners', '--radius', '8')
             self.run_effect('corners', '--power', '4')
             self.run_effect('shadows', '--size', '12')
-            data = effects.read_state(self.directory / 'effects.json')
+            data = effects.read_state(self.directory / 'appearance.json')
             self.assertEqual(data['corners'], {'radius': 8, 'power': 4})
             self.assertEqual(data['shadows'], {'size': 12})
-            original = (self.directory / 'effects.json').read_bytes()
+            original = (self.directory / 'appearance.json').read_bytes()
             with patch.object(effects, 'reload_settings', side_effect=[RuntimeError('bad config'), None]), self.assertRaises(RuntimeError):
                 self.run_effect('corners', '--radius', '10')
-            self.assertEqual((self.directory / 'effects.json').read_bytes(), original)
+            self.assertEqual((self.directory / 'appearance.json').read_bytes(), original)
             self.run_effect('corners', '--reset')
-            self.assertEqual(effects.read_state(self.directory / 'effects.json'), {'shadows': {'size': 12}})
+            self.assertEqual(effects.read_state(self.directory / 'appearance.json'), {'shadows': {'size': 12}})
             self.run_effect('shadows', '--reset')
-            self.assertFalse((self.directory / 'effects.json').exists())
+            self.assertEqual(json.loads((self.directory / 'appearance.json').read_text()), {})
 
     def test_bad_saved_values_fail_before_transport_and_group_reset_recovers(self):
         self.directory.mkdir()
-        path = self.directory / 'effects.json'
+        path = self.directory / 'appearance.json'
         path.write_text(json.dumps({'corners': {'radius': '3\nmalicious'}, 'gaps': {'outer': 4}}))
         with self.assertRaises(RuntimeError):
             effects.read_state(path)
         self.assertEqual(effects.read_state(path, 'corners'), {'gaps': {'outer': 4}})
 
-    def test_animation_updates_preserve_curves_timing_and_enable_states(self):
-        live = {name: {'enabled': name != 'windowsOut', 'speed': 3, 'bezier': 'custom', 'style': 'slide'}
-                for name in effects.WINDOW_NODES + effects.WORKSPACE_NODES}
-        with patch.object(effects, 'live_animations', return_value=live):
-            updated = effects.animation_update({}, {'windows': 'popin', 'window_size': 80})
-            branch = updated['branches']['windowsOut']
-            self.assertEqual(branch, {'enabled': False, 'speed': 3, 'bezier': 'custom', 'style': 'popin 80%'})
-            self.assertNotIn('enabled', updated)
-            updated = effects.animation_update(updated, {'duration': 250})
-            self.assertEqual(updated['branches']['windowsOut']['style'], 'popin 80%')
-            self.assertEqual(updated['branches']['workspacesIn']['speed'], 2.5)
-            live['workspacesIn']['bezier'] = 'spring:test'
-            with self.assertRaisesRegex(RuntimeError, 'Spring'):
-                effects.animation_update({}, {'duration': 200})
+    def test_animation_updates_store_only_public_preferences(self):
+        updated = effects.animation_update({}, {'windows': 'popin', 'window_size': 80})
+        self.assertEqual(updated, {'windows': 'popin', 'window_size': 80})
+        self.assertEqual(effects.animation_update(updated, {'duration': 250}),
+                         {'windows': 'popin', 'window_size': 80, 'duration': 250})
+        self.assertEqual(effects.animation_update(updated, {'windows': 'slide'}), {'windows': 'slide'})
 
     def test_inherited_native_animation_nodes_are_resolved(self):
         nodes = [{'name': name, 'overridden': False, 'enabled': False, 'speed': 0, 'bezier': '', 'style': ''}
@@ -183,12 +175,12 @@ assert(hl.get_config("decoration.blur.enabled") == false)
         ])
         for style in effects.WINDOW_STYLES:
             for extra in (['', ' left'] if style == 'slide' else ['', ' 80%'] if style == 'popin' else ['']):
-                cases.append(({'animations': {'branches': {'windowsIn': {'enabled': True, 'speed': 2.5, 'bezier': 'default', 'style': style + extra}}}}, ''))
+                cases.append(({'animations': {'windows': style, **({'window_direction': 'left'} if extra == ' left' else {'window_size': 80} if extra else {})}}, ''))
         for style in effects.WORKSPACE_STYLES:
-            cases.append(({'animations': {'branches': {'workspacesIn': {'enabled': True, 'speed': 2.5, 'bezier': 'default', 'style': style + (' 30%' if style.startswith('slide') else '')}}}}, ''))
+            cases.append(({'animations': {'workspaces': style, **({'workspace_distance': 30} if style.startswith('slide') else {})}}, ''))
         for data, assertions in cases:
             with self.subTest(data=data):
-                (self.directory / 'effects.json').write_text(json.dumps(data))
+                (self.directory / 'appearance.json').write_text(json.dumps(data))
                 config = self.root / 'hyprland.lua'
                 config.write_text('hl.config({general={["col.active_border"]={colors={"rgb(123456)","rgba(65432180)"},angle=30}},decoration={blur={enabled=false},shadow={color="rgba(12345640)",offset={7,8}}}})\n'
                                   'dofile(' + json.dumps(str(module)) + ')\n' + assertions + '\n'
@@ -196,7 +188,7 @@ assert(hl.get_config("decoration.blur.enabled") == false)
                 result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],
                                         capture_output=True, text=True, timeout=15, env=env)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        (self.directory / 'effects.json').unlink()
+        (self.directory / 'appearance.json').unlink()
         config.write_text('hl.config({decoration={rounding=6}})\ndofile(' + json.dumps(str(module)) + ')\n'
                           'assert(hl.get_config("decoration.rounding") == 6)\n')
         result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],

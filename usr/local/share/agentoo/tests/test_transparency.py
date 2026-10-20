@@ -17,6 +17,7 @@ from unittest.mock import patch
 SHARE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SHARE))
 import desktop_transparency as transparency
+import desktop_effects as effects
 
 
 class Transparency(unittest.TestCase):
@@ -73,11 +74,11 @@ class Transparency(unittest.TestCase):
 
     def test_state_validation_and_relative_xdg_fallback(self):
         with patch.dict(os.environ, XDG_STATE_HOME='relative'):
-            self.assertEqual(transparency.state_path(), self.root / '.local/state/agentoo/transparency.json')
+            self.assertEqual(transparency.state_path(), self.root / '.local/state/agentoo/appearance.json')
         path = self.root / 'invalid.json'
         for contents in ('[]', '{"all":{"focused":true}}', '{"all":{"focused":NaN}}',
                          '{"other":{}}', '{"kitty":{"focused":91}}', 'invalid'):
-            path.write_text(contents)
+            path.write_text(json.dumps({'transparency': json.loads(contents)}) if contents not in ('invalid', '[]') else contents)
             with self.assertRaises(RuntimeError):
                 transparency.read_state(path)
 
@@ -90,11 +91,11 @@ class Transparency(unittest.TestCase):
 
     def test_reload_failure_restores_exact_saved_record(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'transparency.json'
-        original = '{"browser": {"focused": 12}}\n'
+        path = self.directory / 'appearance.json'
+        original = '{"transparency": {"browser": {"focused": 12}}}\n'
         path.write_text(original)
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
-             patch.object(transparency, 'hyprctl', side_effect=[RuntimeError('reload failed'), 'ok']) as call:
+             patch.object(effects, 'reload_settings', side_effect=[RuntimeError('reload failed'), None]) as call:
             with self.assertRaisesRegex(RuntimeError, 'reload failed'):
                 transparency.run(self.args(), self.directory, self.write)
         self.assertEqual(path.read_text(), original)
@@ -102,17 +103,17 @@ class Transparency(unittest.TestCase):
 
     def test_successful_save_and_full_reset_recover_corrupt_state(self):
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
-             patch.object(transparency, 'hyprctl', side_effect=['ok', '']):
+             patch.object(effects, 'reload_settings'):
             transparency.run(self.args(), self.directory, lambda path, text: path.write_text(text))
-        path = self.directory / 'transparency.json'
-        self.assertEqual(json.loads(path.read_text()), {'browser': {'focused': 5}})
-        path.write_bytes(b'corrupt\xff')
+        path = self.directory / 'appearance.json'
+        self.assertEqual(json.loads(path.read_text()), {'transparency': {'browser': {'focused': 5}}})
+        path.write_text(json.dumps({'transparency': {'bad': True}, 'gaps': {'inner': 4}}))
         args = argparse.Namespace(window='all', focused=None, unfocused=None, reset=True)
         with patch.object(transparency, 'require_integration') as require, \
-             patch.object(transparency, 'hyprctl', side_effect=['ok', '']):
+             patch.object(effects, 'reload_settings'):
             transparency.run(args, self.directory, lambda path, text: path.write_text(text))
         require.assert_called_once_with(recover=True)
-        self.assertFalse(path.exists())
+        self.assertEqual(json.loads(path.read_text()), {'transparency': {}, 'gaps': {'inner': 4}})
 
     def test_authored_rule_conflict_prevents_any_saved_change(self):
         folder = self.root / 'config/hypr'
@@ -162,9 +163,9 @@ class Transparency(unittest.TestCase):
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser is required')
     def test_native_hyprland_parser_accepts_saved_focus_rules(self):
         self.directory.mkdir(parents=True)
-        (self.directory / 'transparency.json').write_text(json.dumps({
+        (self.directory / 'appearance.json').write_text(json.dumps({'transparency': {
             'all': {'focused': 5, 'unfocused': 10}, 'kitty': {'unfocused': 90},
-            'browser': {'focused': 0.000001}}))
+            'browser': {'focused': 0.000001}}}))
         repository = SHARE.parents[3]
         module = self.root / 'transparency.lua'
         module.write_text((repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(

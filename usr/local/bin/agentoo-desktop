@@ -11,15 +11,17 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
 from cli import ArgumentParser
+from desktop_common import atomic_write
 
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo desktop', description=__doc__)
+    from desktop_state import file_option
+    file_option(parser)
     commands = parser.add_subparsers(dest='command', prog=parser.prog)
     wallpaper = commands.add_parser('wallpaper', help='Show or change the static wallpaper',
         description='Print the remembered absolute image path; print nothing if none is selected.',
@@ -64,6 +66,7 @@ def build_parser():
     transparency.add_argument('--unfocused', type=percentage, metavar='PERCENT',
                               help='Unfocused-window transparency, from 0 to 90')
     transparency.add_argument('--reset', action='store_true', help='Remove selected overrides; cannot combine with adjustments')
+    file_option(transparency, child=True)
     from desktop_blur import add_parser
     add_parser(commands)
     from desktop_effects import add_parsers
@@ -84,16 +87,6 @@ def selection(path):
     if not value or not Path(value).is_absolute() or '\n' in value or '\0' in value:
         raise RuntimeError(f'Invalid wallpaper selection in {path}')
     return value
-
-
-def atomic_write(path, value):
-    descriptor, temporary = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
-    try:
-        with os.fdopen(descriptor, 'wb' if isinstance(value, bytes) else 'w') as stream:
-            stream.write(value)
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
 
 
 def process_identity(pid):
@@ -180,11 +173,18 @@ def apply_image(image, runtime):
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == 'wallpaper' and args.appearance_file is not None:
+        parser.error('--file is not supported for wallpaper')
+    if args.command is None and args.appearance_file is not None:
+        from desktop_state import update
+        return update(args, state_directory(), atomic_write, parser)
     if args.command is None:
         parser.print_help()
         return 0
     if args.command == 'transparency':
         from desktop_transparency import run
+        from desktop_state import check_file_args
+        check_file_args(args, parser, args.focused is not None or args.unfocused is not None)
         if args.reset and (args.focused is not None or args.unfocused is not None):
             parser.error('--reset cannot be combined with --focused or --unfocused')
         return run(args, state_directory(), atomic_write)

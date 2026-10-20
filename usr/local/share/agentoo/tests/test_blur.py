@@ -15,6 +15,7 @@ from unittest.mock import patch
 SHARE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SHARE))
 import desktop_blur as blur
+import desktop_effects as effects
 
 
 class Blur(unittest.TestCase):
@@ -95,31 +96,30 @@ class Blur(unittest.TestCase):
 
     def test_bad_saved_state_and_relative_xdg(self):
         with patch.dict(os.environ, XDG_STATE_HOME='relative'):
-            self.assertEqual(blur.state_path(), self.root / '.local/state/agentoo/blur.json')
+            self.assertEqual(blur.state_path(), self.root / '.local/state/agentoo/appearance.json')
         path = self.root / 'invalid.json'
         for contents in ('[]', '{"other":{}}', '{"all":{"focused":"on"}}', '{"kitty":{"focused":1}}',
                          '{"strength":{"passes":true}}', '{"strength":{"size":1.5}}',
                          '{"strength":{"size":0}}', '{"all":{"focus":true}}', 'bad'):
-            path.write_text(contents)
+            path.write_text(json.dumps({'blur': json.loads(contents)}) if contents not in ('bad', '[]') else contents)
             with self.assertRaises(RuntimeError):
                 blur.read_state(path)
         path.write_bytes(b'\xff')
         with self.assertRaises(RuntimeError):
             blur.read_state(path)
 
-    def test_save_uses_separate_state_and_preserves_strength_and_transparency(self):
+    def test_save_preserves_other_sections(self):
         self.directory.mkdir(parents=True)
-        transparency = self.directory / 'transparency.json'
-        transparency.write_text('{"all":{"focused":15,"unfocused":25}}\n')
-        original = transparency.read_bytes()
+        path = self.directory / 'appearance.json'
+        path.write_text(json.dumps({'transparency': {'all': {'focused': 15, 'unfocused': 25}}}))
         with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved') as reload:
             blur.run(self.args(size=3, passes=1), self.directory, self.write)
             blur.run(self.args(window='kitty', focused='on'), self.directory, self.write)
-        data = blur.read_state(self.directory / 'blur.json')
+        data = blur.read_state(path)
         self.assertEqual(data, {'strength': {'size': 3, 'passes': 1}, 'kitty': {'focused': True}})
         reload.assert_called_with(data)
-        self.assertEqual(transparency.read_bytes(), original)
+        self.assertEqual(json.loads(path.read_text())['transparency'], {'all': {'focused': 15, 'unfocused': 25}})
 
     def test_strength_update_explains_when_blur_remains_off(self):
         for enabled in ('off', 'on'):
@@ -134,31 +134,31 @@ class Blur(unittest.TestCase):
                 self.assertIn('--focused on and/or --unfocused on', messages.getvalue())
             else:
                 self.assertNotIn('Blur remains off', messages.getvalue())
-            self.assertEqual(blur.read_state(self.directory / 'blur.json'),
+            self.assertEqual(blur.read_state(self.directory / 'appearance.json'),
                              {'strength': {'size': 10, 'passes': 3}})
 
     def test_failure_rolls_back_exact_bytes_and_reloads_old_configuration(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'blur.json'
-        original = b'{"all": {"focused": false}}\n'
+        path = self.directory / 'appearance.json'
+        original = b'{"blur": {"all": {"focused": false}}}\n'
         path.write_bytes(original)
         with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved', side_effect=RuntimeError('bad reload')), \
-             patch.object(blur, 'hyprctl', return_value='ok') as command:
+             patch.object(effects, 'reload_settings') as command:
             with self.assertRaisesRegex(RuntimeError, 'bad reload'):
                 blur.run(self.args(focused='on'), self.directory, self.write)
         self.assertEqual(path.read_bytes(), original)
-        command.assert_called_once_with('reload', 'config-only')
+        command.assert_called_once_with()
 
     def test_full_reset_recovers_corrupt_state(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'blur.json'
-        path.write_bytes(b'broken\xff')
+        path = self.directory / 'appearance.json'
+        path.write_text(json.dumps({'blur': {'bad': True}, 'gaps': {'inner': 4}}))
         with patch.object(blur, 'require_integration') as require, patch.object(blur, 'reload_saved') as reload:
             blur.run(self.args(reset=True), self.directory, self.write)
         require.assert_called_once_with(recover=True)
         reload.assert_called_once_with({})
-        self.assertFalse(path.exists())
+        self.assertEqual(json.loads(path.read_text()), {'blur': {}, 'gaps': {'inner': 4}})
 
     def test_authored_conflict_blocks_change_but_not_full_reset(self):
         directory = self.root / 'config/hypr'
@@ -170,7 +170,7 @@ class Blur(unittest.TestCase):
         with patch.object(blur, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
                 blur.run(self.args(focused='on'), self.directory, self.write)
-        self.assertFalse((self.directory / 'blur.json').exists())
+        self.assertFalse((self.directory / 'appearance.json').exists())
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'):
             blur.run(self.args(reset=True), self.directory, self.write)
 
@@ -178,14 +178,14 @@ class Blur(unittest.TestCase):
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'), \
              patch.object(blur, 'conflicts', return_value=['authored.lua:2']):
             blur.run(self.args(size=3), self.directory, self.write)
-            self.assertEqual(blur.read_state(self.directory / 'blur.json'), {'strength': {'size': 3}})
+            self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
                 blur.check_conflicts({'kitty': {'focused': True}})
             blur.check_conflicts({})
             blur.check_conflicts({'strength': {'size': 3}})
-            self.write(self.directory / 'blur.json', json.dumps({'kitty': {'focused': True}, 'strength': {'size': 3}}))
+            self.write(self.directory / 'appearance.json', json.dumps({'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}}}))
             blur.run(self.args(window='kitty', reset=True), self.directory, self.write)
-            self.assertEqual(blur.read_state(self.directory / 'blur.json'), {'strength': {'size': 3}})
+            self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
 
     def test_queries_show_sources_without_creating_state(self):
         data = {'all': {'focused': True}, 'kitty': {'focused': False}, 'strength': {'passes': 2}}
@@ -279,7 +279,7 @@ class Blur(unittest.TestCase):
 
     def test_diagnostics_continue_after_corrupt_state_and_fail_on_unavailable_core_options(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'blur.json'
+        path = self.directory / 'appearance.json'
         path.write_bytes(b'broken\xff')
         def command(*arguments, **keywords):
             if arguments[0] == 'repl':
@@ -290,7 +290,7 @@ class Blur(unittest.TestCase):
             self.assertEqual(blur.run(self.args(diagnose=True), self.directory, self.write), 1)
         self.assertIn('Saved blur preferences: unavailable', output.getvalue())
         self.assertIn('Effective compositor options:', output.getvalue())
-        self.assertIn('Invalid blur state', errors.getvalue())
+        self.assertIn('Cannot read appearance file', errors.getvalue())
         self.assertIn('Incomplete compositor snapshot: option.size', errors.getvalue())
         self.assertEqual(path.read_bytes(), b'broken\xff')
         path.unlink()
@@ -314,7 +314,7 @@ class Blur(unittest.TestCase):
             ({}, True, True),
         ):
             with self.subTest(data=data, baseline=baseline):
-                (self.directory / 'blur.json').write_text(json.dumps(data))
+                (self.directory / 'appearance.json').write_text(json.dumps({'blur': data}))
                 config = self.root / 'hyprland.lua'
                 config.write_text('hl.config({decoration={active_opacity=0.85,blur={enabled=' + str(baseline).lower()
                                   + ',size=8,passes=1}}})\ndofile(' + json.dumps(str(module)) + ')\n'

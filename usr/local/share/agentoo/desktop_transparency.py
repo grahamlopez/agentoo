@@ -4,16 +4,14 @@ The private `rules` entry point supplies validated numeric data to Hyprland.
 It is not a public Agentoo command. JSON is the only authoritative saved state.
 """
 import argparse
-import fcntl
 import json
 import math
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 sys.dont_write_bytecode = True
-from desktop_common import authored_hypr_paths, hyprctl, xdg_directory
+from desktop_common import authored_hypr_paths, hyprctl
 
 GROUPS = ('all', 'kitty', 'browser')
 STATES = ('focused', 'unfocused')
@@ -30,24 +28,24 @@ def percentage(value):
 
 
 def state_path():
-    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo/transparency.json'
+    from desktop_state import state_path as shared_path
+    return shared_path()
 
 
 def read_state(path):
-    try:
-        data = json.loads(path.read_text())
-    except FileNotFoundError:
-        return {}
-    except (ValueError, UnicodeError) as error:
-        raise RuntimeError(f'Invalid transparency state in {path}: {error}') from error
+    from desktop_state import section
+    return validate_data(section('transparency', path))
+
+
+def validate_data(data):
     if not isinstance(data, dict) or set(data) - set(GROUPS):
-        raise RuntimeError(f'Invalid transparency groups in {path}')
+        raise RuntimeError(f'Invalid transparency groups in transparency section')
     for group, values in data.items():
         if not isinstance(values, dict) or set(values) - set(STATES):
-            raise RuntimeError(f'Invalid transparency settings for {group} in {path}')
+            raise RuntimeError(f'Invalid transparency settings for {group} in transparency section')
         for value in values.values():
             if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 90:
-                raise RuntimeError(f'Invalid transparency percentage in {path}')
+                raise RuntimeError(f'Invalid transparency percentage in transparency section')
     return data
 
 
@@ -144,54 +142,12 @@ def show(data, selected):
 
 
 def run(args, directory, atomic_write):
-    path = directory / 'transparency.json'
-    if not args.reset and args.focused is None and args.unfocused is None:
-        show(read_state(path), args.window)
+    if not args.reset and args.focused is None and args.unfocused is None and getattr(args, 'appearance_file', None) is None:
+        show(read_state(directory / 'appearance.json'), args.window)
         return 0
-    require_integration(recover=args.reset and args.window == 'all')
-    if not args.reset:
-        found = conflicts()
-        if found:
-            raise RuntimeError('Conflicting transparency rules; edit them before adjusting:\n' + '\n'.join(found))
-    previous_umask = os.umask(0o077)
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-        with (directory / 'transparency.lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            original = path.read_bytes() if path.exists() else None
-            previous = {} if args.reset and args.window == 'all' else read_state(path)
-            updated = adjusted(previous, args.window, args.focused, args.unfocused, args.reset)
-            if any(effective(updated, 'kitty', focus) is not None for focus in STATES):
-                kitty = kitty_defaults()
-                watcher = str(Path(__file__).with_name('kitty') / 'transparency.py')
-                if not kitty or not kitty[1] or watcher not in kitty[2]:
-                    raise RuntimeError('Kitty needs the Agentoo watcher and dynamic_background_opacity yes; '
-                                       'install the shared Kitty configuration and restart older Kitty processes')
-            if updated:
-                atomic_write(path, json.dumps(updated, sort_keys=True, indent=2) + '\n')
-            else:
-                path.unlink(missing_ok=True)
-            try:
-                result = hyprctl('reload', 'config-only')
-                if result != 'ok':
-                    raise RuntimeError('Hyprland reload failed: ' + result)
-                errors = hyprctl('configerrors')
-                if errors:
-                    raise RuntimeError('Hyprland configuration errors: ' + errors)
-            except RuntimeError:
-                if original is not None:
-                    atomic_write(path, original)
-                else:
-                    path.unlink(missing_ok=True)
-                try:
-                    hyprctl('reload', 'config-only')
-                except RuntimeError as error:
-                    print(f'agentoo desktop: warning: rollback reload failed: {error}', file=sys.stderr)
-                raise
-    finally:
-        os.umask(previous_umask)
-    print('Transparency overrides reset.' if args.reset else 'Transparency updated.', file=sys.stderr)
-    return 0
+    from desktop_state import update
+    args.command = 'transparency'
+    return update(args, directory, atomic_write)
 
 
 def rules():
