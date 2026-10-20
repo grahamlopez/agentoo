@@ -2,6 +2,11 @@
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 require("/etc/xdg/hypr/lid.lua")
 
+-- Restore personal wallpaper once per session, never on config reload.
+hl.on("hyprland.start", function()
+    hl.exec_cmd("agentoo desktop wallpaper restore")
+end)
+
 hl.config({
     input = { kb_layout = "us", kb_options = "ctrl:nocaps" },
     general = { layout = "dwindle", gaps_in = 4, gaps_out = 8, border_size = 2 },

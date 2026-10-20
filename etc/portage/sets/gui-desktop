@@ -1,5 +1,9 @@
 # Desktop conveniences above the minimal graphics/audio base.
 @gui-base
+# Static Wayland wallpapers.
+gui-apps/swaybg
+# GdkPixbuf's WebP decoder is packaged separately.
+gui-libs/gdk-pixbuf-loader-webp
 # File-only Wayland screenshots and interactive region selection.
 gui-apps/grim
 gui-apps/slurp

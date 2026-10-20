@@ -5,7 +5,7 @@ An opinionated Gentoo distribution. See the
 and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
-secrets, display backlight, screenshots, power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
+secrets, display backlight, screenshots, desktop wallpaper, power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
 
 Each command also has an independently runnable executable: `agentoo power`
 and `agentoo-power` use the same implementation and arguments. Normal commands

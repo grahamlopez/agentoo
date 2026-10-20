@@ -1,0 +1,3 @@
+# Load JPEG, WebP and other supported static images as well as PNG.
+gui-apps/swaybg gdk-pixbuf
+x11-libs/gdk-pixbuf jpeg

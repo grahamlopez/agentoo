@@ -7,7 +7,7 @@ excluded by the normal Portage policy. Preview updates after syncing; new
 dependencies may require additional package-specific keyword decisions.
 Launch it explicitly from a normal user's TTY login with `start-hyprland`.
 There is no automatic session startup, greeter, UWSM, XWayland, launcher, panel,
-notification daemon, portal, wallpaper daemon, or screen locker. Suspend and
+notification daemon, portal, wallpaper daemon in the base, or screen locker. Suspend and
 lid-close suspend belong to systemd/logind. Hyprland routes displays for docked
 lid use as described below. Resume returns to an unlocked session.
 Networking remains dhcpcd and wpa_supplicant.
@@ -544,7 +544,7 @@ resolution or unsuitable panel curve may need a host-specific adjustment.
 ### Screenshots
 
 `@gui-desktop` extends `@gui-base` with desktop conveniences, initially
-`gui-apps/grim` and `gui-apps/slurp`. Install it with
+`gui-apps/grim`, `gui-apps/slurp`, and `gui-apps/swaybg`. Install it with
 `sudo emerge --ask @gui-desktop`; keep `@gui-base` as the minimal graphics/audio
 foundation and `@laptop` as an independent hardware-utility set. Run
 `agentoo screenshot full` to capture all outputs in one image, or
@@ -628,3 +628,61 @@ Sources inspected for the selected release:
 - [Hyprland 0.56.2 source and example](https://github.com/hyprwm/Hyprland/tree/v0.56.2)
 - [Hyprutils 0.14.2 configuration discovery](https://github.com/hyprwm/hyprutils/blob/v0.14.2/src/path/Path.cpp)
 - [Gentoo PipeWire ebuild and user-service guidance](https://github.com/gentoo/gentoo/blob/9ef593f1a819cdc0465b29afb11d03bac79ad5f8/media-video/pipewire/pipewire-1.6.8.ebuild)
+
+## Static wallpapers
+
+`@gui-desktop` includes swaybg with `gdk-pixbuf` image loading for JPEG, WebP,
+PNG, and other installed loader formats. Install or update the set with
+`sudo emerge --ask @gui-desktop`. Wallpaper commands run as the normal user:
+
+```sh
+agentoo desktop wallpaper set ~/Pictures/mountains.jpg
+agentoo desktop wallpaper
+agentoo desktop wallpaper clear
+agentoo help desktop wallpaper
+```
+
+`set FILE` displays one image across all monitors using fill scaling and remembers
+its absolute path, without copying the image. With no subcommand, `wallpaper`
+prints the remembered path, or nothing when none is selected. The system-owned
+collection lives at `/usr/local/share/agentoo/wallpapers/`, grouped into ordinary
+subdirectories as useful. No images or default selection are bundled yet.
+Personal images can live anywhere readable.
+
+The selection is a text file at `$XDG_STATE_HOME/agentoo/wallpaper`, defaulting to
+`~/.local/state/agentoo/wallpaper`; relative XDG paths are ignored. This is local
+user state outside Git. The helper atomically replaces the file and serializes
+changes with a lock beside it. It does not generate user configuration files.
+
+The shared `/etc/xdg/hypr/agentoo.lua` registers `agentoo desktop wallpaper restore`
+on `hyprland.start`, which runs once per session rather than on config reload.
+With no saved image, restore quietly succeeds, including when swaybg is not
+installed. A missing remembered image produces a warning and exit 1, retaining
+the path for a later retry. New sessions retain the solid background in this case.
+`clear` removes the selection and stops Agentoo's wallpaper processes, exposing
+the compositor's background; it also works outside Wayland.
+
+Setting/restoring an image requires a running Wayland session and an absolute
+`XDG_RUNTIME_DIR`. Process records and swaybg diagnostic logs live under
+`$XDG_RUNTIME_DIR/agentoo/`, separately for each Wayland display. Only recorded
+processes with matching Linux start times are stopped, using PID descriptors to
+avoid PID reuse races. Independently started swaybg instances are untouched.
+The client exits when its compositor connection closes; no user service is added.
+
+A replacement starts before the previous managed client stops. The helper checks
+for immediate process or image-loader errors for half a second before remembering
+the choice. swaybg provides no readiness acknowledgement: a delayed load or
+rendering error can still occur afterward. Inspect the runtime log if an image
+does not appear. Failed initial checks retain the previous selection and client.
+
+Help and queries do not start clients or create state. Results go to stdout;
+change summaries, warnings and errors go to stderr. Exit codes are 0 for success,
+1 for operational failure, and 2 for invalid arguments. `agentoo-desktop` is also
+independently runnable. Tab completion derives commands and file arguments from
+the same parser as help.
+
+After deployment and installation, test set, replacement, query, clear, logout,
+and startup restoration in a real Hyprland session. Confirm ordinary config
+reloads do not create another swaybg process, images appear on connected and
+newly attached monitors, and clients exit on session shutdown. Repository tests
+use a fake client and do not establish physical rendering correctness.
