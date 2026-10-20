@@ -6,7 +6,8 @@ and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
 secrets, display backlight, screenshots, desktop wallpaper, window transparency
-and blur, power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
+and blur, [desktop appearance](usr/local/share/agentoo/docs/gui-base.md#desktop-appearance),
+power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
 
 Each command also has an independently runnable executable: `agentoo power`
 and `agentoo-power` use the same implementation and arguments. Normal commands

@@ -465,6 +465,8 @@ is required. The shared entry loads, in order:
    when present. Resetting them exposes the preceding authored settings.
 5. `/etc/xdg/hypr/blur.lua`: remembered Agentoo blur preferences; authored blur
    defaults remain in effect until a preference is explicitly set.
+6. `/etc/xdg/hypr/effects.lua`: remembered corners, gaps, borders, animations,
+   shadows, and dimming preferences, applied after authored defaults.
 
 Monitors use preferred modes and auto placement/scaling by default. Host-specific
 exceptions belong in tracked `/etc/xdg/hypr/hosts/NAME.lua` fragments. The shared
@@ -903,3 +905,118 @@ and [application blur requests after 0.56](https://github.com/hyprwm/Hyprland/di
 User reports guide diagnostics; they are not treated as diagnoses or verified
 workarounds for this machine. Newer upstream blur variants are not exposed by
 this interface, which targets the installed 0.56.2 API.
+
+
+## Desktop appearance
+
+Six global commands complement `blur` and `transparency`. Run a command without
+adjustments to inspect settings; use `--help` for choices, units, and limits.
+Help and tab completion work without a desktop session. These are preferences
+for the current user, not edits to the tracked or personal Lua configuration.
+
+```sh
+agentoo desktop corners --radius 10 --power 4
+agentoo desktop gaps --inner 4 --outer 8
+agentoo desktop borders --width 2 --focused '#89b4fa' --unfocused '#45475a'
+agentoo desktop animations --enabled on
+agentoo desktop animations --windows popin --window-size 80 --duration 250
+agentoo desktop animations --workspaces slidefadevert --workspace-distance 30
+agentoo desktop shadows --enabled on --size 12 --opacity 35
+agentoo desktop shadows --color '#000000' --offset-y 3
+agentoo desktop dimming --enabled on --strength 15 --modal on
+agentoo desktop corners
+agentoo desktop corners --reset
+```
+
+Omitted settings keep their saved values or configured defaults. Zero and `off`
+are explicit choices. Each `--reset` removes only that command's preferences,
+revealing authored defaults, including personal configuration. Reset cannot be
+combined with adjustments. Queries distinguish saved overrides from current
+compositor values and configured defaults. Without a reachable integration,
+effective values are unavailable rather than guessed. Queries create no state.
+
+| Command | Controls and units |
+|---|---|
+| `corners` | `--radius` 0–20 layout pixels; zero is square. `--power` 2–10; 2 is circular, 4 is a squircle. |
+| `gaps` | `--inner` and `--outer`, each 0–1000 layout pixels. Inner spacing applies on each window side; adjacent sides add. Outer spacing adds at screen edges. Applies to tiled windows. |
+| `borders` | `--width` 0–20 layout pixels; zero hides borders. `--focused` and `--unfocused` accept quoted `#RRGGBB` or `#RRGGBBAA`. |
+| `animations` | Master `--enabled on\|off`; `--duration` 1–10000 milliseconds; window and workspace styles and their parameters below. |
+| `shadows` | `--enabled on\|off`; `--size` 0–100 layout pixels; `--opacity` 0–100 percent; quoted `--color '#RRGGBB'`; `--offset-x` and `--offset-y`, each -250–250 layout pixels. |
+| `dimming` | `--enabled on\|off` for inactive windows; independent `--modal on\|off` for modal parents; `--strength` 0–100 percent inactive-window darkening. |
+
+Appearance adjustments do not enable animations or shadows. Dimming strength
+enables neither dimming mode. Modal dimming independently adds 50% of remaining
+brightness: an otherwise undimmed parent becomes 50% dimmed; a parent already
+15% dimmed becomes 57.5% dimmed. Hyprland 0.56.2 does not expose an independent
+modal strength. See the [pinned window dimming implementation](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/desktop/view/Window.cpp). Shadow color and opacity can be changed separately;
+unspecified RGB/alpha, gradient angle, and the other offset coordinate are
+preserved. An authored inactive-shadow color remains an override. The shadow
+query shows the gradient and its first color's opacity. Opacity is quantized to
+8-bit alpha, so the current percentage can differ slightly from the saved value.
+Window/workspace rules and application decorations can override global settings;
+these commands do not inspect or rewrite such rules. Global corner, border,
+shadow, and dimming settings do not style panels, menus, or notifications.
+
+### Animation styles and timing
+
+For the pinned Hyprland **0.56.2**, all native styles for the exposed targets are
+available in help and completion:
+
+| Option | Styles |
+|---|---|
+| `--windows` | `slide`: from an edge; `popin`: grow into place; `gnome` / `gnomed`: the same grow-and-move effect. |
+| `--workspaces` | `slide`: horizontal; `slidevert`: vertical; `fade`: crossfade; `slidefade` / `slidefadevert`: horizontal / vertical movement plus fading. |
+
+Optional parameters must accompany a compatible style selection:
+
+- `--windows slide --window-direction auto\|top\|bottom\|left\|right`
+- `--windows popin --window-size PERCENT` (integer 0–100)
+- `--workspaces STYLE --workspace-distance PERCENT` (integer 0–100; sliding styles only)
+
+Selecting a style without parameters uses its native default parameters. Duration
+alone retains the existing styles and parameters. Window style adjustments target
+opening/closing, not dragging or resizing. Workspace adjustments also cover special
+workspaces. Layer animations, independent fade branches, and gradient rotation
+are not managed. The master enable switch still controls all Hyprland animations.
+
+When a branch is first adjusted, its effective timing, easing curve, style, and
+individual enable state are read from the running compositor. Supplied values
+replace only the requested parts. The resulting branch preferences persist, so
+later authored branch changes take effect after `animations --reset`. This small
+snapshot is needed because Hyprland's Lua animation setter requires a complete
+branch definition. Existing custom curves must remain defined in the authored
+configuration. Spring curves set their own timing: style changes preserve them,
+but `--duration` rejects affected spring branches instead of silently replacing
+their easing. Enabling the master switch preserves individually disabled branches;
+queries show their states.
+
+The style list and parameter handling were checked against
+[Hyprland 0.56.2's validator](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/animation/AnimationManager.cpp)
+and [Lua setter](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/config/lua/bindings/LuaBindingsConfigRules.cpp).
+
+### Persistence and verification
+
+All six commands share `$XDG_STATE_HOME/agentoo/effects.json`, defaulting to
+`~/.local/state/agentoo/effects.json`. A private lock serializes changes and writes
+are atomic. Changes require the running shared integration. Reload uses
+`hyprctl reload config-only`, retaining monitor configuration. A reported reload
+failure restores the previous saved state and attempts to reload it. No daemon,
+configuration scanner, or generated configuration file is involved. Hyprland reads
+validated data through `desktop_effects.py settings` at startup and reload.
+
+Malformed values are reported clearly. Reset can recover a malformed command
+section without discarding other effects; malformed JSON itself requires repairing
+the file. Operational summaries/errors go to stderr, queries/help to stdout.
+Exit codes: 0 success, 1 operational failure, 2 invalid arguments.
+
+Verification:
+
+```sh
+python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_effects.py
+```
+
+Tests cover parser/completion behavior, independent updates, scoped reset,
+failed-reload recovery, animation inheritance and preservation, and isolated
+`Hyprland --verify-config` checks for settings, colors, every exposed style, and
+reset-to-authored defaults. They do not change a live desktop or verify rendered
+appearance; those checks remain part of installed-session validation.

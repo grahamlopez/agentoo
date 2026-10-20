@@ -66,6 +66,8 @@ def build_parser():
     transparency.add_argument('--reset', action='store_true', help='Remove selected overrides; cannot combine with adjustments')
     from desktop_blur import add_parser
     add_parser(commands)
+    from desktop_effects import add_parsers
+    add_parsers(commands)
     return parser
 
 
@@ -190,6 +192,9 @@ def main():
         from desktop_blur import run, validate
         validate(args, parser)
         return run(args, state_directory(), atomic_write)
+    from desktop_effects import COMMANDS, run
+    if args.command in COMMANDS:
+        return run(args, state_directory(), atomic_write, parser)
     state = state_directory()
     saved = state / 'wallpaper'
     if args.action is None:

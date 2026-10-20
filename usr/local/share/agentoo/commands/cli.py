@@ -24,7 +24,7 @@ COMMANDS = {
     'screenshot': 'Capture all displays or a selected region',
     'power': 'Show battery and CPU power status',
     'fonts': 'Diagnose, preview, and select installed fonts',
-    'desktop': 'Manage wallpaper, window transparency, and blur',
+    'desktop': 'Manage wallpaper and desktop appearance',
     'help': 'Show help for a command',
 }
 

@@ -79,6 +79,7 @@ class CliTest(unittest.TestCase):
                  ('power',), ('fonts',), ('fonts', 'status'),
                  ('fonts', 'test'), ('fonts', 'set'), ('fonts', 'doctor'),
                  ('desktop',), ('desktop', 'transparency'), ('desktop', 'blur'),
+                 *(('desktop', effect) for effect in ('corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')),
                  ('desktop', 'wallpaper'), ('desktop', 'wallpaper', 'set'),
                  ('desktop', 'wallpaper', 'clear'), ('desktop', 'wallpaper', 'restore')]
         for path in paths:

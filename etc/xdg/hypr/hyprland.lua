@@ -42,3 +42,4 @@ require("/etc/xdg/hypr/lid.lua")
 -- no saved overrides exposes those defaults again, including personal rules.
 require("/etc/xdg/hypr/transparency.lua")
 require("/etc/xdg/hypr/blur.lua")
+require("/etc/xdg/hypr/effects.lua")
