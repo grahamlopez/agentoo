@@ -63,6 +63,29 @@ class EffectsTest(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
         self.assertFalse(self.directory.exists())
 
+    def test_border_gradient_validation_and_independent_updates(self):
+        self.assertEqual(effects.gradient('#ABCDEF, #12345680'), '#abcdef,#12345680')
+        self.assertEqual(len(effects.gradient(','.join(['#abcdef'] * 10)).split(',')), 10)
+        for value in ('', '#abcdef,', ',#abcdef', '#abcdef,,#123456',
+                      '#12345g,#abcdef', ','.join(['#abcdef'] * 11)):
+            with self.subTest(value=value), self.assertRaises(effects.argparse.ArgumentTypeError):
+                effects.gradient(value)
+        for value in ('-1', '361', 'nan'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.args('borders', '--focused-angle', value)
+        with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE='test'), \
+             patch.object(effects, 'hyprctl', return_value='ready'), patch.object(effects, 'reload_settings'):
+            self.run_effect('borders', '--focused', '#abcdef,#12345680', '--unfocused', '#654321')
+            self.run_effect('borders', '--focused-angle', '45.5')
+            self.run_effect('borders', '--unfocused-angle', '0')
+            self.assertEqual(effects.read_state(self.directory / 'effects.json')['borders'], {
+                'focused': '#abcdef,#12345680', 'unfocused': '#654321',
+                'focused_angle': 45.5, 'unfocused_angle': 0})
+            self.run_effect('borders', '--focused', '#000000')
+            self.assertEqual(effects.read_state(self.directory / 'effects.json')['borders']['focused_angle'], 45.5)
+            self.run_effect('borders', '--reset')
+            self.assertFalse((self.directory / 'effects.json').exists())
+
     def test_query_creates_no_state_and_does_not_guess_defaults(self):
         with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE=''), contextlib.redirect_stdout(io.StringIO()) as output:
             self.run_effect('corners')
@@ -141,6 +164,23 @@ assert(hl.get_config("decoration.dim_modal") == false)
 assert(hl.get_config("decoration.blur.enabled") == false)
 '''), ({'shadows': {'opacity': 50}}, 'assert(hl.get_config("decoration.shadow.color").colors[1] == "0x80123456")'),
                  ({'shadows': {'color': '#abcdef'}}, 'assert(hl.get_config("decoration.shadow.color").colors[1] == "0x40ABCDEF")')]
+        cases.extend([
+            ({'borders': {'focused': '#112233,#44556680,#778899', 'focused_angle': 45.5,
+                          'unfocused': '#abcdef,#fedcba', 'unfocused_angle': 90}},
+             'local g=hl.get_config("general.col.active_border")\n'
+             'assert(#g.colors == 3 and g.colors[2] == "0x80445566")\n'
+             'assert(math.abs(g.angle - 45.5) < 0.01)\n'
+             'assert(math.abs(hl.get_config("general.col.inactive_border").angle - 90) < 0.01)\n'),
+            ({'borders': {'focused_angle': 0}},
+             'local g=hl.get_config("general.col.active_border")\n'
+             'assert(#g.colors == 2 and g.colors[2] == "0x80654321")\n'
+             'assert(g.angle == 0)\n'),
+            ({'borders': {'focused': '#abcdef'}},
+             'local g=hl.get_config("general.col.active_border")\n'
+             'assert(#g.colors == 1 and math.abs(g.angle - 30) < 0.01)\n'),
+            ({'borders': {'focused': ','.join(['#123456'] * 10)}},
+             'assert(#hl.get_config("general.col.active_border").colors == 10)\n'),
+        ])
         for style in effects.WINDOW_STYLES:
             for extra in (['', ' left'] if style == 'slide' else ['', ' 80%'] if style == 'popin' else ['']):
                 cases.append(({'animations': {'branches': {'windowsIn': {'enabled': True, 'speed': 2.5, 'bezier': 'default', 'style': style + extra}}}}, ''))
@@ -150,7 +190,7 @@ assert(hl.get_config("decoration.blur.enabled") == false)
             with self.subTest(data=data):
                 (self.directory / 'effects.json').write_text(json.dumps(data))
                 config = self.root / 'hyprland.lua'
-                config.write_text('hl.config({decoration={blur={enabled=false},shadow={color="rgba(12345640)",offset={7,8}}}})\n'
+                config.write_text('hl.config({general={["col.active_border"]={colors={"rgb(123456)","rgba(65432180)"},angle=30}},decoration={blur={enabled=false},shadow={color="rgba(12345640)",offset={7,8}}}})\n'
                                   'dofile(' + json.dumps(str(module)) + ')\n' + assertions + '\n'
                                   'assert(agentoo_effects_report():find("corners.radius"))\n')
                 result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],

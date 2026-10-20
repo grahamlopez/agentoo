@@ -37,12 +37,27 @@ local config = {}
 for group, fields in pairs(options) do
     for key, option in pairs(fields) do
         local value = (saved[group] or {})[key]
-        if value then
+        if value and not (group == "borders" and key ~= "width") then
             if value == "on" or value == "off" then config[option] = value == "on"
-            elseif value:sub(1, 1) == "#" then config[option] = color(value)
             else config[option] = assert(tonumber(value)) end
             if group == "dimming" and key == "strength" then config[option] = config[option] / 100 end
         end
+    end
+end
+-- A color-only edit retains the angle; an angle-only edit retains all colors.
+local borders = saved.borders or {}
+for _, focus in ipairs({ "focused", "unfocused" }) do
+    local option = options.borders[focus]
+    if borders[focus] or borders[focus .. "_angle"] then
+        local gradient = hl.get_config(option)
+        if borders[focus] then
+            gradient.colors = {}
+            for hex in borders[focus]:gmatch("[^,]+") do
+                gradient.colors[#gradient.colors + 1] = color(hex)
+            end
+        end
+        gradient.angle = tonumber(borders[focus .. "_angle"]) or gradient.angle
+        config[option] = gradient
     end
 end
 local shadow = saved.shadows or {}
@@ -86,6 +101,9 @@ agentoo_effects_report = function()
             if key == "radius" or key == "width" or key == "size" then value = tostring(value) .. " px" end
             lines[#lines + 1] = group .. "." .. key .. "\t" .. display(value)
         end
+    end
+    for _, focus in ipairs({ "focused", "unfocused" }) do
+        lines[#lines + 1] = "borders." .. focus .. "_angle\t" .. tostring(hl.get_config(options.borders[focus]).angle) .. " deg"
     end
     local gradient = hl.get_config("decoration.shadow.color")
     lines[#lines + 1] = "shadows.color\t" .. display(gradient)

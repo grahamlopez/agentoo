@@ -44,6 +44,13 @@ def color(value):
     return value.lower()
 
 
+def gradient(value):
+    colors = value.split(',')
+    if not 1 <= len(colors) <= 10:
+        raise argparse.ArgumentTypeError('expected 1–10 comma-separated colors')
+    return ','.join(color(part.strip()) for part in colors)
+
+
 def opaque_color(value):
     value = color(value)
     if len(value) != 7:
@@ -76,8 +83,15 @@ def add_parsers(commands):
     p.add_argument('--outer', type=number(0, 1000, True), metavar='PIXELS', help='Additional gap at screen edges, 0–1000')
     p = parsers['borders']
     p.add_argument('--width', type=number(0, 20, True), metavar='PIXELS', help='Border width, 0–20; 0 hides borders')
-    p.add_argument('--focused', type=color, metavar='COLOR', help='Focused border color, quoted #RRGGBB or #RRGGBBAA')
-    p.add_argument('--unfocused', type=color, metavar='COLOR', help='Unfocused border color, quoted #RRGGBB or #RRGGBBAA')
+    p.add_argument('--focused', type=gradient, metavar='COLORS', help='1–10 comma-separated focused colors, quoted #RRGGBB or #RRGGBBAA')
+    p.add_argument('--unfocused', type=gradient, metavar='COLORS', help='1–10 comma-separated unfocused colors, quoted #RRGGBB or #RRGGBBAA')
+    p.add_argument('--focused-angle', type=number(0, 360), metavar='DEGREES', help='Focused gradient angle, 0–360; preserves colors')
+    p.add_argument('--unfocused-angle', type=number(0, 360), metavar='DEGREES', help='Unfocused gradient angle, 0–360; preserves colors')
+    p.epilog = ('Colors and angles change independently; omitted values remain unchanged.\n'
+                'One color is solid. Each color may include its own alpha value.\n\n'
+                'Example:\n'
+                "  agentoo desktop borders --focused '#89b4fa,#cba6f7,#f38ba8' --focused-angle 45\n\n"
+                'Exit 0: success; 1: operational failure; 2: invalid arguments.')
     p = parsers['animations']
     p.add_argument('--enabled', choices=('on', 'off'), help='Master animation switch; other adjustments do not enable it')
     p.add_argument('--duration', type=number(1, 10000, True), metavar='MILLISECONDS', help='Duration for window open/close and workspace transitions, 1–10000 ms')
@@ -233,7 +247,7 @@ def show(data, group):
             continue
         saved = values.get(key)
         if isinstance(saved, (int, float)):
-            unit = '%' if key in ('opacity', 'strength') else '' if key == 'power' else ' px'
+            unit = ' deg' if key.endswith('_angle') else '%' if key in ('opacity', 'strength') else '' if key == 'power' else ' px'
             saved = f'{saved:g}{unit}'
         current = report.get(f'{group}.{key}')
         if saved is not None:

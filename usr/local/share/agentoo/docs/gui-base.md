@@ -918,6 +918,7 @@ for the current user, not edits to the tracked or personal Lua configuration.
 agentoo desktop corners --radius 10 --power 4
 agentoo desktop gaps --inner 4 --outer 8
 agentoo desktop borders --width 2 --focused '#89b4fa' --unfocused '#45475a'
+agentoo desktop borders --focused '#89b4fa,#cba6f7,#f38ba8' --focused-angle 45
 agentoo desktop animations --enabled on
 agentoo desktop animations --windows popin --window-size 80 --duration 250
 agentoo desktop animations --workspaces slidefadevert --workspace-distance 30
@@ -939,10 +940,16 @@ effective values are unavailable rather than guessed. Queries create no state.
 |---|---|
 | `corners` | `--radius` 0–20 layout pixels; zero is square. `--power` 2–10; 2 is circular, 4 is a squircle. |
 | `gaps` | `--inner` and `--outer`, each 0–1000 layout pixels. Inner spacing applies on each window side; adjacent sides add. Outer spacing adds at screen edges. Applies to tiled windows. |
-| `borders` | `--width` 0–20 layout pixels; zero hides borders. `--focused` and `--unfocused` accept quoted `#RRGGBB` or `#RRGGBBAA`. |
+| `borders` | `--width` 0–20 layout pixels; zero hides borders. `--focused` and `--unfocused` accept 1–10 comma-separated, quoted `#RRGGBB` or `#RRGGBBAA` colors. `--focused-angle` and `--unfocused-angle` take 0–360 degrees. |
 | `animations` | Master `--enabled on\|off`; `--duration` 1–10000 milliseconds; window and workspace styles and their parameters below. |
 | `shadows` | `--enabled on\|off`; `--size` 0–100 layout pixels; `--opacity` 0–100 percent; quoted `--color '#RRGGBB'`; `--offset-x` and `--offset-y`, each -250–250 layout pixels. |
 | `dimming` | `--enabled on\|off` for inactive windows; independent `--modal on\|off` for modal parents; `--strength` 0–100 percent inactive-window darkening. |
+
+Border colors and angles change independently for each focus state. A single
+color gives a solid border; two to ten colors give a gradient. Each color can
+include alpha. A color-only change retains the saved or authored angle; an
+angle-only change retains all colors. Omitting both retains the authored gradient
+unchanged. `borders --reset` removes all saved border colors, angles, and width.
 
 Appearance adjustments do not enable animations or shadows. Dimming strength
 enables neither dimming mode. Modal dimming independently adds 50% of remaining
