@@ -6,3 +6,4 @@ media-sound/alsaplayer -gtk
 net-libs/nodejs npm
 x11-misc/xscreensaver glx
 app-emulation/qemu -alsa keyutils -opengl -oss -pipewire -pulseaudio smartcard -wayland
+app-misc/chatgpt-desktop-bin -qt6 -notifications
