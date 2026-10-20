@@ -35,9 +35,11 @@ editing a tracked file changes the live configuration and appears in Git.
 │   └── 002-agentoo-setup-user.sh       # Create Graham’s account and access
 ├── usr/local/
 │   ├── bin/
-│   │   └── agentoo                    # Unified CLI; privilege handling and help
+│   │   ├── agentoo                    # Thin command dispatcher and root help
+│   │   └── agentoo-*                  # Independently runnable command implementations
 │   └── share/agentoo/
-│       ├── commands/                 # Git, checkpoints, permissions, and secrets
+│       ├── cli.py                    # Concise CLI policy and small shared Python helpers
+│       ├── commands/                 # Completion service and internal Git deployment helper
 │       ├── docs/                     # Project documentation
 │       │   └── skills/qemu-nbd/       # QEMU/NBD procedures and recovery reference
 │       ├── kanban/

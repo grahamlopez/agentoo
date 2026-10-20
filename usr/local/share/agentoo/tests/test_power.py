@@ -1,10 +1,14 @@
 """Verify units, missing data, and discharge runtime calculations."""
+import contextlib
+import io
+import json
 from pathlib import Path
+from unittest.mock import patch
 import runpy
 import tempfile
 import unittest
 
-module = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'commands/power.py'))
+module = runpy.run_path(str(Path(__file__).resolve().parents[3] / 'bin/agentoo-power'))
 values = module['battery_values']
 
 
@@ -46,3 +50,27 @@ class PowerTest(unittest.TestCase):
             for path in device.iterdir():
                 path.unlink()
             self.assertEqual(module['brief'](device), 'unavailable | unavailable | unavailable')
+
+    def test_json_partial_report_and_units(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / 'sys/class/power_supply/BAT0'
+            device.mkdir(parents=True)
+            for name, value in dict(type='Battery', status='Discharging',
+                    capacity=50, power_now=10000000, energy_now=40000000).items():
+                (device / name).write_text(str(value))
+            output = io.StringIO()
+            main = module['main']
+            with patch.dict(main.__globals__, Path=lambda path: root / str(path).lstrip('/')):
+                with patch('sys.argv', ['agentoo-power', '--json']), contextlib.redirect_stdout(output):
+                    main()
+            report = json.loads(output.getvalue())
+            self.assertEqual(report['batteries'][0], dict(name='BAT0', status='Discharging',
+                capacity_percent=50, power_watts=10, remaining_hours=4, health_percent=None))
+            self.assertEqual(report['cpu_policies'], [])
+            self.assertIsNone(report['platform_profile'])
+
+    def test_abbreviated_options_rejected(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            module['build_parser']().parse_args(['--js'])
+        self.assertEqual(error.exception.code, 2)

@@ -21,7 +21,7 @@ With package/configuration writers idle, as root:
 
 ```sh
 agentoo git status --short
-agentoo checkpoint create before-gui-base --no-clean-distfiles
+agentoo checkpoint create before-gui-base --no-clean-package-caches
 agentoo checkpoint list
 agentoo checkpoint inspect <exact-checkpoint-name>
 ```

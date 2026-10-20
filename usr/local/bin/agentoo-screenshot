@@ -1,3 +1,97 @@
-#!/bin/sh
-# Compatibility entry point.
-exec /usr/local/bin/agentoo screenshot "$@"
+#!/usr/bin/env python3
+"""Capture Wayland displays to private files in ~/Downloads/Screenshots."""
+from datetime import datetime
+import os
+from pathlib import Path
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
+from cli import ArgumentParser
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo screenshot', description=__doc__,
+                            epilog='Prints the saved path. Cancelling region selection never captures the full screen.')
+    parser.add_argument('capture', choices=('full', 'region'), help='All displays, or an interactively selected region')
+    parser.add_argument('--no-input', action='store_true', help='Reject interactive region selection')
+    return parser
+
+
+def status(code):
+    return code if code >= 0 else 128 - code
+
+
+def capture_process(command, *, output=False):
+    # subprocess.run waits for its child when interrupted. Stop selectors/capture
+    # explicitly so a PID-only termination cannot leave a hung desktop tool.
+    child = subprocess.Popen(command, text=True,
+                             stdout=subprocess.PIPE if output else None)
+    try:
+        stdout, _ = child.communicate()
+        return subprocess.CompletedProcess(command, child.returncode, stdout)
+    except BaseException:
+        try:
+            child.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            child.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait()
+        raise
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.no_input and args.capture == 'region':
+        parser.error('region requires interactive selection; use full without interaction')
+    for tool in ('grim', 'slurp') if args.capture == 'region' else ('grim',):
+        if not shutil.which(tool):
+            raise RuntimeError(f'Install @gui-desktop for {tool}')
+    geometry = None
+    if args.capture == 'region':
+        selected = capture_process(['slurp'], output=True)
+        if selected.returncode:
+            return status(selected.returncode)
+        geometry = selected.stdout.rstrip('\n')
+        if not geometry:
+            return 1
+    home = os.environ.get('HOME')
+    if not home:
+        raise RuntimeError('HOME is required')
+    os.umask(0o077)
+    directory = Path(home) / 'Downloads/Screenshots'
+    directory.mkdir(parents=True, exist_ok=True)
+    descriptor, output = tempfile.mkstemp(prefix=datetime.now().strftime('Screenshot-%Y%m%d-%H%M%S-'), suffix='.png', dir=directory)
+    os.close(descriptor)
+    saved = False
+    try:
+        command = ['grim'] + (['-g', geometry] if geometry is not None else []) + [output]
+        result = capture_process(command)
+        if result.returncode:
+            return status(result.returncode)
+        saved = True
+    finally:
+        if not saved:
+            Path(output).unlink(missing_ok=True)
+    print(output)
+    return 0
+
+
+if __name__ == '__main__':
+    def interrupted(number, _frame):
+        raise SystemExit(128 + number)
+    for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(number, interrupted)
+    try:
+        sys.exit(main())
+    except (OSError, RuntimeError) as error:
+        print(f'agentoo screenshot: {error}', file=sys.stderr)
+        sys.exit(1)

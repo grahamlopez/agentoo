@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Installed-font diagnostics, Kitty selection, and read-only browser previews."""
 import argparse
-import contextlib
-import io
 import fcntl
 import html
 import json
@@ -20,7 +18,11 @@ import termios
 import tty
 import unicodedata
 
-DATA = Path(__file__).resolve().parent.parent / 'fonts'
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
+from cli import ArgumentParser as BaseArgumentParser
+
+DATA = Path(__file__).resolve().parent.parent / 'share/agentoo/fonts'
 ROLES = ('monospace', 'sans-serif', 'serif', 'emoji')
 
 class HelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -38,7 +40,7 @@ class HelpFormatter(argparse.RawDescriptionHelpFormatter):
         return super()._format_usage(usage, actions, groups, prefix or 'Usage: ')
 
 
-class ArgumentParser(argparse.ArgumentParser):
+class ArgumentParser(BaseArgumentParser):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault('formatter_class', HelpFormatter)
         if sys.version_info >= (3, 14):
@@ -52,7 +54,7 @@ def run(*args, **kw):
     return subprocess.run([str(x) for x in args], check=True, **kw)
 
 def output(*args):
-    return run(*args, capture_output=True, text=True).stdout.strip()
+    return run(*args, capture_output=True, text=True, timeout=15).stdout.strip()
 
 def read(path):
     return path.read_text() if path.exists() else ''
@@ -80,7 +82,7 @@ def shell(*args):
     return shlex.join([str(x) for x in args])
 
 def undo(*args):
-    print('To revert: ' + shell('agentoo', 'fonts', *args))
+    print('To revert: ' + shell('agentoo', 'fonts', *args), file=sys.stderr)
 
 def samples(suite):
     data = json.loads((DATA / 'samples.json').read_text())
@@ -142,7 +144,7 @@ def fontconfig_rules():
             report = output('eselect', 'fontconfig', 'list')
             names = re.findall(r'^\s*\[\d+\]\s+(\S+)\s+\*\s*$', report, re.M)
             return names, 'eselect fontconfig list'
-        except (OSError, subprocess.CalledProcessError):
+        except (OSError, subprocess.SubprocessError):
             pass
     directory = Path('/etc/fonts/conf.d')
     return sorted(p.name for p in directory.glob('*.conf')), '/etc/fonts/conf.d (eselect unavailable or failed)'
@@ -178,7 +180,7 @@ def kitty_settings(extra=None):
     if extra:
         env['AGENTOO_KITTY_EXTRA'] = str(extra)
     code = 'import runpy; runpy.run_path(' + repr(str(DATA / 'kitty-settings.py')) + ')'
-    return json.loads(run('kitty', '+runpy', code, env=env, capture_output=True, text=True).stdout)
+    return json.loads(run('kitty', '+runpy', code, env=env, capture_output=True, text=True, timeout=15).stdout)
 
 
 def validate_font(family, style=None):
@@ -245,10 +247,10 @@ def reload_kitties():
             failures.append(proc.name)
         except FileNotFoundError:
             pass
-    print(f'Requested configuration reload in {count} Kitty processes owned by this user.')
+    print(f'Requested configuration reload in {count} Kitty processes owned by this user.', file=sys.stderr)
     if failures:
-        print('Could not signal Kitty PIDs: ' + ', '.join(failures))
-    print('Instances using custom config paths or launch overrides may retain their own settings.')
+        print('Could not signal Kitty PIDs: ' + ', '.join(failures), file=sys.stderr)
+    print('Instances using custom config paths or launch overrides may retain their own settings.', file=sys.stderr)
 
 
 def save_selection(text, expected=None):
@@ -261,10 +263,11 @@ def save_selection(text, expected=None):
     # Validate both destinations before writing either.
     if fragment.is_symlink() or config.is_symlink():
         raise ValueError('refusing to replace a symlinked Kitty configuration')
+    include_missing = include not in [line.strip() for line in before.splitlines()]
     existed = fragment.exists()
     write(fragment, text)
     try:
-        if include not in [line.strip() for line in before.splitlines()]:
+        if include_missing:
             write(config, before.rstrip() + '\n\n# Font selections made by agentoo fonts\n' + include + '\n')
     except OSError:
         if existed:
@@ -272,7 +275,9 @@ def save_selection(text, expected=None):
         else:
             fragment.unlink(missing_ok=True)
         raise
-    print(f'Updated {fragment}')
+    print(f'Updated {fragment}', file=sys.stderr)
+    if include_missing:
+        print(f'Updated {config} (added font fragment include)', file=sys.stderr)
     undo('set', '--restore', previous)
     reload_kitties()
 
@@ -305,13 +310,13 @@ def preview(a, chooser=False, trace=None):
         if trace:
             with Path(trace).open('w') as log:
                 run(*cmd, stderr=log, env=env)
-            print('Kitty rendering trace:', trace)
+            print('Kitty rendering trace:', trace, file=sys.stderr)
         else:
             run(*cmd, env=env)
         if accepted.exists():
             save_selection(read(accepted), expected=original)
         else:
-            print('Preview closed without saving.')
+            print('Preview closed without saving.', file=sys.stderr)
 
 
 def adjust_geometry(value, direction):
@@ -401,7 +406,7 @@ def query(*args):
     """Diagnostics keep useful evidence when an optional tool fails."""
     try:
         return output(*args)
-    except (OSError, subprocess.CalledProcessError) as error:
+    except (OSError, subprocess.SubprocessError) as error:
         return {'error': str(error)}
 
 
@@ -464,7 +469,7 @@ def status(filter_text='', nerd=False):
             print('  Cell adjustments:', snapshot['geometry'])
             for error in snapshot['errors']:
                 print('  Configuration error:', error)
-        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
             print('  Could not resolve Kitty settings:', error)
     else:
         print('  Kitty is not installed.')
@@ -483,6 +488,7 @@ def status(filter_text='', nerd=False):
 
 
 def doctor_report(a):
+    print('Collecting font coverage and configuration evidence...', file=sys.stderr, flush=True)
     names, source = fontconfig_rules()
     faces = installed_faces()
     report = {
@@ -513,6 +519,7 @@ def doctor_report(a):
         report['packages'][package.name] = {'USE': read(package / 'USE').strip(),
                                           'repository': read(package / 'repository').strip()}
     # Package ownership is exact, including fonts installed outside media-fonts.
+    print('Checking installed font package ownership...', file=sys.stderr, flush=True)
     font_files = {face['file'] for face in faces}
     owners = {}
     for contents in Path('/var/db/pkg').glob('*/*/CONTENTS'):
@@ -537,7 +544,7 @@ def doctor_report(a):
             report['kitty'] = kitty_settings()
             report['kitty']['fragment'] = read(kitty_paths()[1])
             report['kitty']['version'] = query('kitty', '--version')
-        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
             report['kitty'] = {'error': str(error)}
     return report
 
@@ -583,6 +590,7 @@ def build_parser():
                '  agentoo fonts set --font \'Liberation Mono\' --size 11\n'
                '  agentoo fonts doctor --text TEXT --json\n\n'
                'Guide: ' + str(DATA.parent / 'docs/fonts.md'))
+    parser.add_argument('--no-input', action='store_true', help='do not open interactive windows or choosers')
     parser.add_argument('--filter', default='', help='filter installed families/styles in default status output; case-insensitive substring')
     parser.add_argument('--nerd', action='store_true', help='show only Nerd faces in default status output')
     sub = parser.add_subparsers(dest='command', title='Commands', metavar='COMMAND', prog=parser.prog)
@@ -631,12 +639,25 @@ def build_parser():
     mode.add_argument('--render', action='store_true', help='open a fresh diagnostic Kitty using current configuration and capture fallback tracing; cannot save')
     p.add_argument('--json', action='store_true', help='emit one JSON document instead of human-readable text')
     p.add_argument('--output', help='rendering trace path (requires --render); default: a unique temporary .log file')
+    for child in sub.choices.values():
+        child.add_argument('--no-input', action='store_true', default=argparse.SUPPRESS,
+                           help='do not open interactive windows or choosers')
     return parser
 
 
 def main():
     parser = build_parser()
     a = parser.parse_args()
+    if a.no_input:
+        interactive = (
+            a.command == 'set' and not (a.font or a.restore is not None)
+            or a.command == 'doctor' and a.render
+            or a.command == 'test' and (
+                a.target == 'firefox' and not a.no_open
+                or a.target == 'kitty' and (a.font or a.size is not None or a.style or a.interactive)))
+        if interactive:
+            parser.error('--no-input prohibits interactive windows; supply an explicit selection, '
+                         'omit preview options, or use Firefox --no-open')
     if a.command not in (None, 'status') and (a.filter or a.nerd):
         parser.error('--filter and --nerd only apply to status')
     if getattr(a, 'size', None) is not None and not 4 <= a.size <= 96:
@@ -682,10 +703,7 @@ def main():
                 fd, name = tempfile.mkstemp(prefix='agentoo-font-trace-', suffix='.log')
                 os.close(fd)
                 trace = Path(name)
-            with contextlib.redirect_stdout(io.StringIO()) as messages:
-                preview(argparse.Namespace(font=None, style=None, size=None, suite=a.suite, text=a.text), trace=trace)
-            if not a.json:
-                print(messages.getvalue(), end='')
+            preview(argparse.Namespace(font=None, style=None, size=None, suite=a.suite, text=a.text), trace=trace)
             report['render_trace'] = str(trace)
         print(json.dumps(report, ensure_ascii=False, indent=2)) if a.json else print_doctor(report)
 
@@ -696,7 +714,7 @@ if __name__ == '__main__':
             preview_child(sys.argv[2])
         else:
             main()
-    except (ValueError, OSError, subprocess.CalledProcessError, KeyError) as error:
+    except (ValueError, OSError, subprocess.SubprocessError, KeyError) as error:
         print(f'agentoo fonts: {error}', file=sys.stderr)
         sys.exit(2)
     except KeyboardInterrupt:

@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Run Git against Agentoo's system repository, preserving Git arguments verbatim.
+
+Only enable-write/setup-hooks are Agentoo operations. Their options are never
+interpreted in forwarded Git arguments; an initial `git` explicitly forwards.
+"""
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+SHARE = Path(__file__).resolve().parent.parent / 'share/agentoo'
+sys.path.insert(0, str(SHARE))
+from cli import ArgumentParser
+
+GIT_DIR = '/var/lib/agentoo/repository.git'
+HOOKS = '/usr/local/share/agentoo/git-hooks'
+SSH_REMOTE = 'git@github.com:grahamlopez/agentoo.git'
+GUARD_BYPASS = {'status', 'diff', 'log', 'show', 'blame', 'grep', 'ls-files', 'ls-tree',
+             'rev-parse', 'rev-list', 'describe', 'config', 'remote', 'fetch', 'push',
+             'help', '--help', '--version'}
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo git', description=__doc__,
+                            epilog='Other arguments are passed unchanged to Git. Use `agentoo git git ...` '
+                                   'to explicitly forward an Agentoo operation name to Git.')
+    sub = parser.add_subparsers(dest='operation', required=True)
+    for name, description in [('enable-write', 'Switch origin fetch/push URL to SSH'),
+                              ('setup-hooks', 'Install managed permission hooks')]:
+        child = sub.add_parser(name, help=description, description=description)
+        child.add_argument('--no-input', action='store_true', help='Use sudo without prompting (sudo -n)')
+    return parser
+
+
+def git_command(args):
+    if os.geteuid() != 0 and Path(GIT_DIR).is_dir() and not os.access(GIT_DIR + '/HEAD', os.R_OK):
+        raise RuntimeError(f'cannot read {GIT_DIR}/HEAD; system repository metadata requires root.\n'
+                           'Run this system repository operation with sudo agentoo git ...')
+    command = ['git', '--git-dir=' + GIT_DIR, '--work-tree=/', *args]
+    if os.geteuid() == 0 and (not args or args[0] not in GUARD_BYPASS):
+        command = [sys.executable, str(SHARE / 'commands/git-transaction.py'), *command]
+    return command
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] in ('-h', '--help'):
+        build_parser().print_help()
+        return 0
+    if args[0] not in ('enable-write', 'setup-hooks'):
+        if args[0] == 'git':
+            args = args[1:]
+        command = git_command(args)
+        os.execvp(command[0], command)
+    parsed = build_parser().parse_args(args)
+    if os.geteuid() != 0:
+        print(f'agentoo: git {parsed.operation} requires root; requesting sudo authorization.', file=sys.stderr)
+        os.execvp('sudo', ['sudo', *(['-n'] if parsed.no_input else []), '--', sys.executable,
+                          str(Path(__file__).resolve()), *args])
+    if parsed.operation == 'enable-write':
+        subprocess.run(git_command(['remote', 'set-url', 'origin', SSH_REMOTE]), check=True)
+        print(f'origin now uses SSH for fetch and push: {SSH_REMOTE}', file=sys.stderr)
+    else:
+        top = subprocess.run(git_command(['rev-parse', '--show-toplevel']), check=True,
+                             stdout=subprocess.PIPE, text=True).stdout.strip()
+        if top != '/':
+            raise RuntimeError('system repository work tree must be /')
+        for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
+            if not os.access(f'{HOOKS}/{name}', os.X_OK):
+                raise RuntimeError(f'missing hook: {HOOKS}/{name}')
+        result = subprocess.run(git_command(['config', '--get', 'core.hooksPath']),
+                                stdout=subprocess.PIPE, text=True)
+        if result.returncode not in (0, 1):
+            raise RuntimeError('could not read core.hooksPath')
+        existing = result.stdout.strip()
+        if existing and existing != HOOKS:
+            raise RuntimeError(f'refusing to replace existing hooksPath: {existing}')
+        subprocess.run([str(Path(__file__).resolve().parent / 'agentoo-permissions'), 'fix', *(['--no-input'] if parsed.no_input else [])], check=True)
+        subprocess.run(git_command(['config', 'core.hooksPath', HOOKS]), check=True)
+        print('agentoo permission hooks enabled.', file=sys.stderr)
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except subprocess.CalledProcessError as error:
+        sys.exit(error.returncode if error.returncode >= 0 else 128 - error.returncode)
+    except (OSError, RuntimeError) as error:
+        print(f'agentoo git: {error}', file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)

@@ -1,6 +1,7 @@
 """Run with python3 -m unittest discover -s usr/local/share/agentoo/tests."""
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import random
@@ -10,7 +11,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-MODULE = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'commands/permissions.py'))
+MODULE = runpy.run_path(str(Path(__file__).resolve().parents[3] / 'bin/agentoo-permissions'))
 
 
 class PermissionsTest(unittest.TestCase):
@@ -45,7 +46,7 @@ class PermissionsTest(unittest.TestCase):
     def repair(self):
         output = io.StringIO()
         # Exercise real chmod as an ordinary developer; ownership is unchanged.
-        with patch('sys.argv', ['agentoo permissions', '--root', str(self.root), '--fix']), \
+        with patch('sys.argv', ['agentoo permissions', 'fix', '--root', str(self.root)]), \
                 patch('os.geteuid', return_value=0), patch('os.fchown'), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
             result = MODULE['main']()
@@ -156,7 +157,7 @@ class PermissionsTest(unittest.TestCase):
     def test_check_reports_without_changes(self):
         managed = self.write('share/managed', mode=0o600)
         self.git('add', '.')
-        with patch('sys.argv', ['agentoo permissions', '--root', str(self.root), '--check']), \
+        with patch('sys.argv', ['agentoo permissions', 'check', '--root', str(self.root)]), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(MODULE['main'](), 1)
         self.assertEqual(managed.stat().st_mode & 0o777, 0o600)
@@ -177,6 +178,27 @@ class PermissionsTest(unittest.TestCase):
         self.root.mkdir()
         with self.assertRaises(ValueError):
             MODULE['tracked_files'](self.root)
+
+    def test_json_check_findings_and_exit(self):
+        self.write('share/wrong', mode=0o600)
+        self.git('add', '.')
+        output = io.StringIO()
+        with patch('sys.argv', ['agentoo-permissions', 'check', '--root', str(self.root), '--json']), \
+                contextlib.redirect_stdout(output):
+            result = MODULE['main']()
+        self.assertEqual(result, 1)
+        report = json.loads(output.getvalue())
+        finding = next(item for item in report['mismatches'] if item['path'] == '/share/wrong')
+        self.assertEqual(finding['actual']['mode'], '0600')
+        self.assertEqual(finding['expected']['mode'], '0644')
+        self.assertEqual(report['errors'], [])
+
+    def test_no_input_privilege_request_uses_sudo_noninteractive(self):
+        with patch('sys.argv', ['agentoo-permissions', 'fix', '--no-input']), \
+                patch('os.execvp', side_effect=SystemExit(37)) as execute, \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            MODULE['elevate']()
+        self.assertEqual(execute.call_args.args[1][:3], ['sudo', '-n', '--'])
 
 
 if __name__ == '__main__':

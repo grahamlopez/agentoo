@@ -24,7 +24,7 @@ class CompletionTests(unittest.TestCase):
             (work / '_agentoo').write_text((SHARE / 'zsh/_agentoo').read_text())
             entry = SHARE.parent.parent / 'bin/agentoo'
             (work / 'agentoo').write_text(entry.read_text().replace(
-                '/usr/local/share/agentoo/commands', str(SHARE / 'commands')))
+                "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(SHARE)!r})"))
             (work / 'agentoo').chmod(0o755)
             (work / 'fc-list').write_text('#!/bin/sh\nprintf "%s\\n" "Example Font"\n')
             (work / 'fc-list').chmod(0o755)
@@ -110,8 +110,8 @@ class CompletionTests(unittest.TestCase):
                         self.assertRegex(output, r'(?m)^  --help\s+.*help')
                 for text, usage in (
                     ('agentoo checkpoint restore ', 'Usage: agentoo checkpoint restore '),
-                    ('agentoo secrets ', 'Usage: agentoo secrets install --profile FILE --user USER CATEGORY...'),
-                    ('agentoo secrets install ', 'Usage: agentoo secrets install --profile FILE --user USER CATEGORY...'),
+                    ('agentoo secrets ', 'usage: agentoo secrets '),
+                    ('agentoo secrets install ', 'usage: agentoo secrets install '),
                     ('agentoo fonts test --target ', 'Usage: agentoo fonts test '),
                     ('agentoo fonts doctor --text ', 'Usage: agentoo fonts doctor '),
                 ):

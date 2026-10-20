@@ -1,0 +1,3 @@
+#!/bin/sh
+# Recovery exception: standalone POSIX sh implementation, never invoke Python.
+exec sh /boot/agentoo/checkpoint.sh "$@"

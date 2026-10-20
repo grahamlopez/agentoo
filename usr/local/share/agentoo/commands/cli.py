@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared shell-command argument parsers and read-only completion service.
+"""Read-only completion service; normal commands own their parsers.
 
 Protocol: one tab-separated record per line: command/option/candidate VALUE
 DESCRIPTION DISPLAY, a usage line, or files/directories/users/git. Values are
@@ -27,94 +27,74 @@ COMMANDS = {
     'help': 'Show help for a command',
 }
 
-# Shell help and completion use these same compact usage lines. Checkpoint's
-# standalone recovery script keeps its own help; parity tests cover that copy.
-USAGE = {
-    'agentoo': 'agentoo <command> [options]',
-    'git': 'agentoo git [<git-options>] <command> [args...]',
-    'permissions': 'agentoo permissions {check|fix} [--root PATH]',
-    'secrets': 'agentoo secrets install --profile FILE --user USER CATEGORY...',
-    'backlight': 'agentoo backlight {up|down} [CONTROLLER]',
-    'screenshot': 'agentoo screenshot {full|region} (saved under ~/Downloads/Screenshots)',
-}
+# Checkpoint is the deliberate sh exception. These completion declarations mirror
+# its standalone help; parity tests check the small duplicate syntax surface.
+ROOT_USAGE = 'agentoo <command> [options]'
 CHECKPOINT_USAGE = {
-    'create': 'agentoo checkpoint create LABEL [component flags] [--[no-]clean-distfiles]',
-    'list': 'agentoo checkpoint list [--device DEVICE]',
-    'inspect': 'agentoo checkpoint inspect NAME [--device DEVICE] [--efi-mount PATH]',
-    'restore': 'agentoo checkpoint restore NAME --device DEVICE [--efi-mount PATH] [component flags]',
+    'create': 'agentoo checkpoint create LABEL [options]',
+    'list': 'agentoo checkpoint list [options]',
+    'inspect': 'agentoo checkpoint inspect NAME [options]',
+    'restore': 'agentoo checkpoint restore NAME --device DEVICE [options]',
 }
 
 
-class ShellHelpFormatter(argparse.HelpFormatter):
+class CompletionHelpFormatter(argparse.HelpFormatter):
     def _format_usage(self, usage, actions, groups, prefix=None):
         return super()._format_usage(usage, actions, groups, prefix or 'Usage: ')
 
 
-class ShellArgumentParser(argparse.ArgumentParser):
+class CompletionParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault('formatter_class', ShellHelpFormatter)
+        kwargs.setdefault('formatter_class', CompletionHelpFormatter)
         super().__init__(*args, **kwargs)
 
 
 def python_parser(name):
-    spec = importlib.util.spec_from_file_location('agentoo_' + name, HERE / (name + '.py'))
+    from importlib.machinery import SourceFileLoader
+    path = HERE.parents[2] / 'bin' / ('agentoo-' + name)
+    spec = importlib.util.spec_from_loader('agentoo_' + name, SourceFileLoader('agentoo_' + name, str(path)))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.build_parser()
+    parser = module.build_parser()
+    return parser
 
 
 def parser_for(name):
-    if name in ('fonts', 'power'):
+    if name != 'checkpoint':
         return python_parser(name)
-    parser = ShellArgumentParser(prog='agentoo ' + name, usage=USAGE.get(name))
-    if name == 'checkpoint':
-        parser.usage = CHECKPOINT_USAGE['create']
-    if name == 'permissions':
-        operation = parser.add_argument('operation', choices=['check', 'fix'])
-        operation.completion = 'commands'
-        operation.completion_descriptions = {
-            'check': 'Report ownership and permission mismatches',
-            'fix': 'Restore declared ownership and permissions',
-        }
-        parser.add_argument('--root', metavar='PATH', help='Mounted target root').completion = 'directories'
-    elif name == 'backlight':
-        parser.add_argument('direction', choices=['up', 'down'])
-        parser.add_argument('controller', nargs='?').completion = 'controllers'
-    elif name == 'screenshot':
-        parser.add_argument('capture', choices=['full', 'region'])
-    elif name in ('checkpoint', 'secrets'):
-        sub = parser.add_subparsers(dest='operation', required=True, prog=parser.prog)
-        operations = ('create', 'list', 'inspect', 'restore') if name == 'checkpoint' else ('install',)
-        for operation in operations:
-            descriptions = {
-                'create': 'Capture system, home, and EFI',
-                'list': 'List checkpoints and storage usage',
-                'inspect': 'Show metadata and verify saved components',
-                'restore': 'Restore from recovery media; preserve home by default',
-                'install': 'Install selected categories from a secret profile',
-            }
-            child = sub.add_parser(operation, help=descriptions[operation])
-            if name == 'secrets':
-                child.usage = USAGE['secrets']
-                child.add_argument('--profile', required=True, metavar='FILE').completion = 'files'
-                child.add_argument('--user', required=True, metavar='USER').completion = 'users'
-                child.add_argument('category', nargs='+', metavar='CATEGORY').completion = 'categories'
-                continue
-            child.usage = CHECKPOINT_USAGE[operation]
-            if operation != 'list':
-                child.add_argument('name', metavar='LABEL' if operation == 'create' else 'NAME',
-                                   help='Checkpoint label or name')
+    parser = CompletionParser(prog='agentoo checkpoint',
+        usage='agentoo checkpoint {create|list|inspect|restore} [options]')
+    sub = parser.add_subparsers(dest='operation', required=True, prog=parser.prog)
+    for operation, description in {
+        'create': 'Capture system, home, and EFI',
+        'list': 'List checkpoints and storage usage',
+        'inspect': 'Show metadata and verify saved components',
+        'restore': 'Restore from recovery media; preserve home by default',
+    }.items():
+        child = sub.add_parser(operation, help=description)
+        child.usage = CHECKPOINT_USAGE[operation]
+        if operation != 'list':
+            child.add_argument('name', metavar='LABEL' if operation == 'create' else 'NAME',
+                               help='Checkpoint label or name')
+        if operation != 'create':
             child.add_argument('--device', help='Btrfs device').completion = 'files'
-            child.add_argument('--efi-mount', metavar='PATH', help='EFI mountpoint').completion = 'directories'
-            if operation in ('create', 'restore'):
-                for component in ('system', 'home', 'efi'):
-                    group = child.add_mutually_exclusive_group()
-                    group.add_argument('--' + component, action='store_true', help='Include ' + component)
-                    group.add_argument('--no-' + component, action='store_true', help='Exclude ' + component)
+        child.add_argument('--no-input', action='store_true', help='Never prompt; use sudo -n')
+        if operation in ('create', 'restore'):
+            child.add_argument('--dry-run', action='store_true', help='Validate and plan using read-only inspection')
             if operation == 'create':
+                child.add_argument('--yes', action='store_true', help='Authorize capture without prompting')
+            else:
+                child.add_argument('--confirm', metavar='NAME', help='Authorize exact restore name')
+        child.add_argument('--efi-mount', metavar='PATH', help='EFI mountpoint').completion = 'directories'
+        if operation in ('create', 'restore'):
+            for component in ('system', 'home', 'efi'):
                 group = child.add_mutually_exclusive_group()
-                group.add_argument('--clean-distfiles', action='store_true')
-                group.add_argument('--no-clean-distfiles', action='store_true')
+                group.add_argument('--' + component, action='store_true', help='Include ' + component)
+                group.add_argument('--no-' + component, action='store_true', help='Exclude ' + component)
+        if operation == 'create':
+            group = child.add_mutually_exclusive_group()
+            group.add_argument('--clean-package-caches', action='store_true', help='Delete package caches before capture (default with system)')
+            group.add_argument('--no-clean-package-caches', action='store_true', help='Keep package caches when capturing system')
     return parser
 
 
@@ -173,21 +153,29 @@ def values_for(action, supplied):
 def complete(current, words):
     previous = words[:current - 1]
     if not previous or previous == ['help']:
-        emit_usage(ShellArgumentParser(prog='agentoo', usage=USAGE['agentoo']))
+        emit_usage(CompletionParser(prog='agentoo', usage=ROOT_USAGE))
         for name, description in COMMANDS.items():
             emit('command', name, description)
         if not previous:
             emit('option', '--help', 'Show help')
             emit('option', '-h', 'Show help')
+            emit('option', '--version', 'Show repository revision')
         return
+    if previous[0] == 'help':
+        previous = previous[1:]
     name, *tokens = previous
     if name == 'git':
-        emit_usage(ShellArgumentParser(
-            prog='agentoo git', usage=USAGE['git']))
+        emit_usage(python_parser('git'))
         if not tokens:
             emit('command', 'setup-hooks', 'Enable permission hooks')
             emit('command', 'enable-write', 'Switch origin to SSH')
-        if not tokens or tokens[0] not in ('setup-hooks', 'enable-write'):
+        if tokens and tokens[0] in ('setup-hooks', 'enable-write'):
+            parser = python_parser('git')._subparsers._group_actions[0].choices[tokens[0]]
+            emit_usage(parser)
+            for action in parser._actions:
+                for option in action.option_strings:
+                    emit('option', option, action.help)
+        else:
             emit('git')
         return
     if name not in COMMANDS or name == 'help':
@@ -260,19 +248,11 @@ def complete(current, words):
 
 
 def main():
-    mode, *args = sys.argv[1:]
-    if mode == 'complete':
-        complete(int(args[0]), args[1:])
-    elif mode == 'validate':
-        name, *args = args
-        # The front end already removes the secrets install verb.
-        if not any(arg in ('-h', '--help') for arg in args):
-            parser_for(name).parse_args(['install', *args] if name == 'secrets' else args)
-    elif mode == 'commands':
-        for name, description in COMMANDS.items():
-            print(f'  {name:<12} {description}')
-    elif mode == 'usage':
-        print('Usage: ' + USAGE[args[0]])
+    # Invoked only by agentoo __complete; import/parsing never runs operations.
+    mode, current, *words = sys.argv[1:]
+    if mode != 'complete':
+        raise SystemExit('usage: cli.py complete CURRENT [WORDS...]')
+    complete(int(current), words)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Report the power information exposed by the running kernel."""
-import argparse
+import json
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "share/agentoo"))
+from cli import ArgumentParser
 
 
 def read(path):
@@ -57,7 +62,10 @@ def brief(device):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(prog='agentoo power', description=__doc__)
+    parser = ArgumentParser(prog='agentoo power', description=__doc__,
+        epilog='JSON: numeric watts, hours and percentages; null means unavailable. '
+               'Missing kernel data is a successful partial report (exit 0).')
+    parser.add_argument('--json', action='store_true', help='emit a stable JSON report instead of human output')
     parser.add_argument('action', nargs='?', choices=['show-all'],
                         help='show detailed battery and CPU power information (default: brief battery status)')
     return parser
@@ -75,6 +83,29 @@ def main():
                 batteries.append(device)
         elif read(device / 'online') is not None:
             sources.append((device.name, read(device / 'online') == '1'))
+    if args.json:
+        report = {
+            'batteries': [],
+            'sources': [{'name': name, 'online': active} for name, active in sources],
+            'cpu_policies': [],
+            'platform_profile': read(Path('/sys/firmware/acpi/platform_profile')),
+        }
+        for device in batteries:
+            watts, hours, health = battery_values(device)
+            report['batteries'].append({
+                'name': device.name, 'status': read(device / 'status'),
+                'capacity_percent': number(device / 'capacity'),
+                'power_watts': abs(watts) if watts is not None else None,
+                'remaining_hours': hours, 'health_percent': health,
+            })
+        for policy in sorted(Path('/sys/devices/system/cpu/cpufreq').glob('policy*')):
+            report['cpu_policies'].append({
+                'name': policy.name, 'driver': read(policy / 'scaling_driver'),
+                'governor': read(policy / 'scaling_governor'),
+                'energy_preference': read(policy / 'energy_performance_preference'),
+            })
+        print(json.dumps(report, allow_nan=False))
+        return
     if args.action is None:
         if not batteries:
             print('Battery: unavailable')

@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+from importlib.machinery import SourceFileLoader
 import os
 from pathlib import Path
 import subprocess
@@ -16,28 +17,53 @@ SPEC.loader.exec_module(GUARD)
 
 
 class GitTransactionTest(unittest.TestCase):
-    def test_wrapper_routes_writes_aliases_and_global_options_through_guard(self):
+    def test_hooks_use_canonical_permission_operations(self):
+        hooks = PATH.parent.parent / 'git-hooks'
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            wrapper = directory / 'wrapper'
-            wrapper.write_text((PATH.parent / 'git').read_text().replace(
-                '(( EUID == 0 ))', '(( 0 == 0 ))').replace(
-                '(( EUID != 0 ))', '(( 0 != 0 ))'))
-            (directory / 'require-root').write_text('')
-            for name, output in [('git', 'direct'), ('python3', 'guard')]:
-                executable = directory / name
-                executable.write_text(f'#!/bin/sh\nprintf "{output}\\n"\n')
-                executable.chmod(0o755)
-            for args, expected in [(['status'], 'direct'), (['push'], 'direct'),
-                                   (['pull'], 'guard'), (['restore', '.'], 'guard'),
-                                   (['custom-alias'], 'guard'),
-                                   (['-c', 'color.ui=false', 'pull'], 'guard')]:
+            git = directory / 'git'
+            git.write_text('#!/bin/sh\ncase "$2" in\n'
+                           '  --show-toplevel) echo /;;\n'
+                           '  --absolute-git-dir) echo /var/lib/agentoo/repository.git;;\n'
+                           '  *) exit 1;;\nesac\n')
+            git.chmod(0o755)
+            log = directory / 'arguments'
+            agentoo = directory / 'agentoo'
+            agentoo.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$HOOK_TEST_LOG"\n'
+                               'exit "${HOOK_TEST_STATUS:-0}"\n')
+            agentoo.chmod(0o755)
+            env = dict(os.environ, PATH=f'{directory}:' + os.environ['PATH'], HOOK_TEST_LOG=str(log))
+            for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
+                for uid in (0, 1000):
+                    with self.subTest(hook=name, uid=uid):
+                        hook = directory / name
+                        # Exercise both root/nonroot branches without privileges.
+                        hook.write_text((hooks / name).read_text().replace(
+                            '/usr/local/bin/agentoo', str(agentoo)).replace('$EUID == 0', f'{uid} == 0'))
+                        result = subprocess.run(['bash', str(hook)], env=env, text=True, capture_output=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        operation = 'fix' if uid == 0 and name != 'pre-commit' else 'check'
+                        self.assertEqual(log.read_text().splitlines(), ['permissions', operation])
+                result = subprocess.run(['bash', str(hook)], env=dict(env, HOOK_TEST_STATUS='1'),
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('permissions need attention', result.stderr)
+
+    def test_wrapper_routes_writes_aliases_and_global_options_through_guard(self):
+        command = PATH.parents[3] / 'bin/agentoo-git'
+        spec = importlib.util.spec_from_loader('agentoo_git_wrapper',
+                    SourceFileLoader('agentoo_git_wrapper', str(command)))
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        with patch.object(wrapper.os, 'geteuid', return_value=0):
+            for args, guarded in [(['status'], False), (['push'], False),
+                                  (['pull'], True), (['restore', '.'], True),
+                                  (['custom-alias'], True),
+                                  (['-c', 'color.ui=false', 'pull'], True)]:
                 with self.subTest(args=args):
-                    result = subprocess.run(['bash', str(wrapper), *args],
-                                            env=dict(os.environ, PATH=f'{directory}:/usr/bin:/bin'),
-                                            capture_output=True, text=True)
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(result.stdout.strip(), expected)
+                    result = wrapper.git_command(args)
+                    self.assertEqual(str(PATH) in result, guarded)
+                    self.assertEqual(result[-len(args):], args)
 
     def run_transaction(self, git_status=0, repair_status=0, previous=False,
                         pause_error=False, interrupt=False, restore_error=False):

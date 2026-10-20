@@ -1,4 +1,9 @@
 #!/bin/sh
+# CHECKPOINT CLI CONTRACT — standalone POSIX sh; no Python, Bash, or shared
+# runtime helpers. Normal-command development policy: /usr/local/share/agentoo/cli.py.
+# Validate/help before privileges/effects. Stdout results; stderr plans/progress.
+# --no-input must never prompt; restore authorization names the exact checkpoint.
+# Rescue dependencies are checked below; sh alone does not supply filesystem tools.
 # Fixed Agentoo layout: @ -> / and @home -> /home, with no nested subvolumes.
 # EFI/ contains boot files; this tool lives outside EFI/ and survives restoration.
 # Restore discards selected current state. No implicit backups or transaction journal.
@@ -6,34 +11,51 @@ set -eu
 umask 077
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 usage() {
-    cat <<'EOF'
-Usage: agentoo checkpoint create LABEL [component flags] [--[no-]clean-distfiles]
-       agentoo checkpoint list [--device DEVICE]
-       agentoo checkpoint inspect NAME [--device DEVICE] [--efi-mount PATH]
-       agentoo checkpoint restore NAME --device DEVICE [--efi-mount PATH] [component flags]
+    case "${ACTION:-}" in
+        create) printf '%s\n' 'Usage: agentoo checkpoint create LABEL [options]';;
+        list) printf '%s\n' 'Usage: agentoo checkpoint list [options]';;
+        inspect) printf '%s\n' 'Usage: agentoo checkpoint inspect NAME [options]';;
+        restore) printf '%s\n' 'Usage: agentoo checkpoint restore NAME --device DEVICE [options]';;
+        *) printf '%s\n' 'Usage: agentoo checkpoint {create|list|inspect|restore} [options]';;
+    esac
+    cat <<'HELP'
 
-Positive --system --home --efi flags select exactly those components.
-Negative-only --no-system --no-home --no-efi flags subtract from defaults.
-Create: system + home + EFI; clean distfiles and binary packages with system capture.
---[no-]clean-distfiles controls both package caches.
-Restore: system + EFI; preserve home. Selected current state is discarded.
-Creation is online-only. Restore requires recovery media and unmounted targets.
-List scans Btrfs file extents for total, exclusive and shared sizes (EFI excluded).
-EOF
+Create LABEL: online capture; appends UTC timestamp and PID to label.
+List: report Btrfs extent sizes (EFI excluded; shared sizes not additive).
+Inspect NAME: verify recorded snapshots and EFI archive without target changes.
+Restore NAME: recovery media only; DISCARD selected current state, no backup.
+
+  --device DEVICE       Target Btrfs device (required for restore; not create)
+  --efi-mount PATH      EFI mountpoint (default inferred from script location)
+  --system --home --efi Select exactly these components (create/restore)
+  --no-system --no-home --no-efi  Subtract from defaults
+  --clean-package-caches / --no-clean-package-caches  Create only; default CLEAN
+                        when capturing system; otherwise keep caches
+                        Explicit cleanup deletes distfiles, binpkgs, binhost
+  --dry-run             Create/restore: validate and plan; temporary read-only
+                        inspection mount/files only, no target modifications
+  --yes                 Create: authorize capture without confirmation prompt
+  --confirm NAME        Restore: authorize exact checkpoint without prompt
+  --no-input            Never prompt; sudo -n; explicit authorization required
+  -h, --help            Show help without privileges or effects
+
+Create defaults: system + home + EFI, clear package caches with system capture.
+Restore defaults: system + EFI, preserve home; EFI overlay preserves additions.
+Options may precede/follow the name; -- ends options. No abbreviations.
+Examples: agentoo checkpoint create before-update --dry-run
+          agentoo checkpoint restore NAME --device /dev/mapper/cryptroot --confirm NAME
+HELP
 }
 parse_args() {
 ACTION=${1:-}
-case "$ACTION" in --help|-h|'') usage; exit 0;; create|list|inspect|restore) shift;; *) die "unknown command: $ACTION";; esac
-NAME=
-if [ $# -gt 0 ]; then case "$1" in --help|-h) usage; exit 0;; esac; fi
-if [ "$ACTION" != list ]; then
-    [ $# -gt 0 ] || die 'missing checkpoint label/name'
-    NAME=$1; shift
-    [ "${#NAME}" -le 127 ] || die 'checkpoint name is too long'
-    case "$NAME" in ''|.*|*[!A-Za-z0-9_.-]*) die 'invalid checkpoint label/name';; esac
-fi
-S=; H=; E=; CLEAN=; DEVICE=
-ESP=$(dirname "$(dirname "$(readlink -f "$0")")")
+# Help must win even over incomplete values, but never interpret data after --.
+for ARG do
+    [ "$ARG" != -- ] || break
+    case "$ARG" in --help|-h) usage; exit 0;; esac
+done
+case "$ACTION" in '') usage; exit 0;; create|list|inspect|restore) shift;; *) die "unknown command: $ACTION";; esac
+NAME=; S=; H=; E=; CLEAN=; DEVICE=; ESP_ARG=
+DRY_RUN=0; NO_INPUT=0; YES=0; CONFIRM=; OPTIONS=1
 POSITIVE=0
 set_flag() {
     case "$1" in
@@ -44,46 +66,73 @@ set_flag() {
     [ "$2" = 0 ] || POSITIVE=1
 }
 while [ $# -gt 0 ]; do
+    if [ "$OPTIONS" = 0 ]; then
+        [ -z "$NAME" ] || die 'too many checkpoint names'
+        NAME=$1; shift; continue
+    fi
     case "$1" in
-        --help|-h) usage; exit 0;;
+        --) OPTIONS=0;;
         --system|--home|--efi|--no-system|--no-home|--no-efi)
             case "$ACTION" in create|restore) :;; *) die 'component flags apply only to create/restore';; esac
             FLAG=${1#--}; VALUE=1
             case "$FLAG" in no-*) FLAG=${FLAG#no-}; VALUE=0;; esac
             set_flag "$FLAG" "$VALUE";;
-        --clean-distfiles|--no-clean-distfiles)
+        --clean-package-caches|--no-clean-package-caches)
             [ "$ACTION" = create ] || die 'package cache cleanup applies only to create'
-            VALUE=1; [ "$1" != --no-clean-distfiles ] || VALUE=0
-            [ -z "$CLEAN" ] || [ "$CLEAN" = "$VALUE" ] || die 'conflicting cleanup flags'
-            CLEAN=$VALUE;;
-        --device|--efi-mount)
-            [ $# -ge 2 ] || die "missing value for $1"
-            case "$2" in ''|-*) die "invalid value for $1";; esac
-            if [ "$1" = --device ]; then DEVICE=$2; else ESP=$(readlink -f "$2"); fi
-            shift;;
-        *) die "unknown option: $1";;
+            VALUE=1; case "$1" in --no-*) VALUE=0;; esac
+            [ -z "$CLEAN" ] || [ "$CLEAN" = "$VALUE" ] || die 'conflicting cleanup flags'; CLEAN=$VALUE;;
+        --device|--efi-mount|--confirm|--device=*|--efi-mount=*|--confirm=*)
+            OPTION=${1%%=*}
+            case "$1" in *=*) VALUE=${1#*=};; *) [ $# -ge 2 ] || die "missing value for $1"; shift; VALUE=$1;; esac
+            case "$VALUE" in ''|-*) die "invalid value for $OPTION";; esac
+            case "$OPTION" in --device) DEVICE=$VALUE;; --efi-mount) ESP_ARG=$VALUE;; --confirm) CONFIRM=$VALUE;; esac;;
+        --dry-run) DRY_RUN=1;; --no-input) NO_INPUT=1;; --yes) YES=1;;
+        -*) die "unknown option: $1";;
+        *) [ -z "$NAME" ] || die 'too many checkpoint names'; NAME=$1;;
     esac
     shift
 done
+if [ "$ACTION" = list ]; then [ -z "$NAME" ] || die 'list accepts no checkpoint name'
+else
+    [ -n "$NAME" ] || die 'missing checkpoint label/name'
+    [ "${#NAME}" -le 127 ] || die 'checkpoint name is too long'
+    case "$NAME" in .*|*[!A-Za-z0-9_.-]*) die 'invalid checkpoint label/name';; esac
+fi
+[ "$ACTION" != create ] || [ "${#NAME}" -le 64 ] || die 'create label is too long'
+case "$ACTION" in list|inspect)
+    [ "$DRY_RUN$YES" = 00 ] && [ -z "$CONFIRM" ] || die 'authorization/dry-run applies only to create/restore';; esac
+[ "$YES" = 0 ] || [ "$ACTION" = create ] || die '--yes applies only to create'
+[ -z "$CONFIRM" ] || { [ "$ACTION" = restore ] && [ "$CONFIRM" = "$NAME" ]; } || die '--confirm must match the exact restore name'
+[ "$ACTION" != restore ] || [ -n "$DEVICE" ] || die 'restore requires --device'
 DEFAULT=1; [ "$POSITIVE" = 0 ] || DEFAULT=0
 S=${S:-$DEFAULT}; E=${E:-$DEFAULT}
 HOME_DEFAULT=$DEFAULT; [ "$ACTION" != restore ] || HOME_DEFAULT=0
 H=${H:-$HOME_DEFAULT}
 [ "$ACTION" = list ] || [ "$ACTION" = inspect ] || [ "$S$H$E" != 000 ] || die 'empty component selection'
 [ "$ACTION" != create ] || [ -z "$DEVICE" ] || die 'offline creation is deferred'
-CLEAN=${CLEAN:-$S}
-[ "$ACTION" != create ] || [ "$CLEAN" != 1 ] || [ "$S" = 1 ] || die 'cleaning requires system capture'
+if [ "$ACTION" = create ]; then CLEAN=${CLEAN:-$S}; else CLEAN=${CLEAN:-0}; fi
+[ "$CLEAN" != 1 ] || [ "$S" = 1 ] || die 'cleaning requires system capture'
+if [ "$DRY_RUN" = 0 ]; then
+    case "$ACTION" in
+        create) [ "$YES" = 1 ] || { [ "$NO_INPUT" = 0 ] && [ -t 0 ]; } || die 'capture requires --yes or interactive stdin';;
+        restore) [ -n "$CONFIRM" ] || { [ "$NO_INPUT" = 0 ] && [ -t 0 ]; } || die 'restore requires --confirm NAME or interactive stdin';;
+    esac
+fi
 }
 parse_args "$@"
 if [ "$(id -u)" != 0 ]; then
     printf 'agentoo: checkpoint requires root; requesting sudo authorization.\n' >&2
+    if [ "$NO_INPUT" = 1 ]; then exec sudo -n -- sh "$0" "$@"; fi
     exec sudo -- sh "$0" "$@"
 fi
-for TOOL in btrfs findmnt mount umount flock mktemp sha256sum tar gzip awk sort cmp readlink stat pgrep; do
+ESP=${ESP_ARG:-$(dirname "$(dirname "$(readlink -f "$0")")")}
+for TOOL in btrfs findmnt mount umount flock mktemp sha256sum tar gzip awk sort cmp readlink stat pgrep mv cp sync mkdir rm rmdir find df du date cat dirname id; do
     command -v "$TOOL" >/dev/null || die "missing tool: $TOOL"
 done
+if [ "$CLEAN" = 1 ]; then command -v portageq >/dev/null || die 'missing tool: portageq (package cache cleanup)'; fi
 exec 9>/run/agentoo-checkpoint.lock
 flock -n 9 || die 'another checkpoint operation is running'
+PHASE=preflight; COMPLETED=; RESTORE_STARTED=0
 TOP=; TMP=$(mktemp -d /run/agentoo-checkpoint.XXXXXX); STAGE=
 cleanup_stage() {
     [ ! -L "$1" ] || return 1
@@ -99,6 +148,13 @@ cleanup_stage() {
     rmdir "$1"
 }
 cleanup() {
+    STATUS=$?
+    if [ "$STATUS" != 0 ]; then
+        printf 'Checkpoint %s failed during %s. Completed components: %s.\n' "$ACTION" "$PHASE" "${COMPLETED:-none}" >&2
+        if [ "$RESTORE_STARTED" = 1 ]; then
+            printf 'Do not boot partial state. Remain in recovery, correct the failure, then retry restore %s with the same component selection and device. Named checkpoint retained.\n' "$NAME" >&2
+        fi
+    fi
     if [ -n "$STAGE" ] && [ -d "$STAGE" ]; then cleanup_stage "$STAGE" || printf 'Temporary copies remain: %s\n' "$STAGE" >&2; fi
     if [ -n "$TOP" ]; then
         if ! umount "$TOP"; then printf 'Temporary mount remains: %s\n' "$TOP" >&2; return; fi
@@ -106,8 +162,8 @@ cleanup() {
     rm -rf "$TMP"
 }
 trap cleanup 0
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'printf "Interrupted during %s\n" "$PHASE" >&2; exit 130' INT
+trap 'printf "Terminated during %s\n" "$PHASE" >&2; exit 143' TERM HUP
 field() {
     [ "$(findmnt -rn --uniq -o TARGET --target "$1")" = "$(readlink -f "$1")" ] || die "not a mountpoint: $1"
     findmnt -rn --uniq -o "$2" --target "$1"
@@ -129,7 +185,7 @@ meta() {
 }
 esp_check() {
     [ "$(field "$ESP" FSTYPE)" = vfat ] || die "EFI must be mounted at $ESP"
-    case "$ACTION" in create|restore)
+    case "$ACTION:$DRY_RUN" in create:0|restore:0)
         case ",$(field "$ESP" OPTIONS)," in *,rw,*) :;; *) die 'EFI filesystem is read-only';; esac;;
     esac
     [ -z "${ESP_UUID:-}" ] || [ "$(field "$ESP" UUID)" = "$ESP_UUID" ] || die 'EFI UUID mismatch'
@@ -167,13 +223,16 @@ plan() {
     else
         printf '└─ No implicit backups. Named checkpoint retained; temporary copies discarded.\n'
     fi
-    printf 'Proceed? [y/N] ' >/dev/tty
-    IFS= read -r ANSWER </dev/tty || ANSWER=
+    [ "$DRY_RUN" = 0 ] || { printf 'Dry run: temporary inspection mount/files only; targets unchanged.\n'; exit 0; }
+    [ "$YES" != 1 ] && [ -z "$CONFIRM" ] || return 0
+    printf 'Proceed? [y/N] '
+    IFS= read -r ANSWER || ANSWER=
     case "$ANSWER" in y|Y|yes|YES) :;; *) printf 'Declined; target unchanged.\n'; exit 0;; esac
 }
 mount_top() {
     mkdir "$TMP/top"
-    OPTIONS=subvolid=5; [ "$1" != ro ] || OPTIONS=$OPTIONS,ro
+    OPTIONS=subvolid=5; [ "$1" != ro ] || OPTIONS=$OPTIONS,ro,rescue=nologreplay
+    printf 'Mounting Btrfs top level for %s inspection...\n' "$1" >&2
     mount -t btrfs -o "$OPTIONS" "$DEVICE" "$TMP/top"
     TOP=$TMP/top
     FS_UUID=$(field "$TOP" UUID)
@@ -214,10 +273,10 @@ verify_efi() {
     [ ! -L "$BOOT" ] || die 'EFI checkpoint is a symlink'
     [ -f "$BOOT/COMPLETE" ] && [ "$(cat "$BOOT/COMPLETE")" = "$NAME" ] && [ ! -e "$BOOT/INCOMPLETE" ] || die 'incomplete EFI checkpoint'
     [ ! -L "$BOOT/checksums" ] && [ ! -L "$BOOT/efi-files.tar.gz" ] || die 'unsafe EFI archive path'
-    cmp "$CP/manifest" "$BOOT/manifest" || die 'EFI/Btrfs manifests differ'
+    cmp "$CP/manifest" "$BOOT/manifest" >&2 || die 'EFI/Btrfs manifests differ'
     awk 'NF!=2 || $2 !~ /^(efi-files\.tar\.gz|boot-entries\.txt|restore-instructions\.txt)$/ {bad=1}
          {seen[$2]++} END {if (NR!=3) bad=1; for (key in seen) if (seen[key]!=1) bad=1; exit bad}' "$BOOT/checksums" || die 'invalid EFI checksum file'
-    (cd "$BOOT" && sha256sum -c checksums) || die 'EFI checksum mismatch'
+    (cd "$BOOT" && sha256sum -c checksums >&2) || die 'EFI checksum mismatch'
     tar -tzf "$BOOT/efi-files.tar.gz" > "$TMP/archive-paths"
     awk \
         '$0 !~ /^EFI(\/|$)/ || $0 ~ /(^|\/)\.\.(\/|$)/ {bad=1} END {exit bad}' "$TMP/archive-paths" || die 'unsafe EFI archive paths'
@@ -241,15 +300,15 @@ if [ "$ACTION" = create ]; then
         [ -r /etc/kernel/gentoo-dist-esp.uuid ] &&
         [ "$ESP_UUID" = "$(cat /etc/kernel/gentoo-dist-esp.uuid)" ] || die 'EFI differs from installer record'
     fi
-    idle; mount_top rw
+    idle; MODE=rw; [ "$DRY_RUN" = 0 ] || MODE=ro; mount_top "$MODE"
     [ "$(df -Pk "$TOP" | awk 'NR==2 {print $4}')" -gt 1048576 ] || die 'free at least 1 GiB on Btrfs first'
     for KIND in system home; do if enabled "$KIND"; then flat "$TOP/$(rootname "$KIND")"; fi; done
     if [ "$CLEAN" = 1 ]; then
         for DIR in "$TOP/@" "$TOP/@/var" "$TOP/@/var/cache"; do
             [ -d "$DIR" ] && [ ! -L "$DIR" ] || die 'unsafe package cache path'
         done
-        [ "$(portageq envvar DISTDIR)" = /var/cache/distfiles ] || die 'custom distfile layout requires --no-clean-distfiles'
-        [ "$(portageq envvar PKGDIR)" = /var/cache/binpkgs ] || die 'custom binary package layout requires --no-clean-distfiles'
+        [ "$(portageq envvar DISTDIR)" = /var/cache/distfiles ] || die 'custom distfile layout requires --no-clean-package-caches'
+        [ "$(portageq envvar PKGDIR)" = /var/cache/binpkgs ] || die 'custom binary package layout requires --no-clean-package-caches'
         for CACHE in /var/cache/distfiles /var/cache/binpkgs /var/cache/binhost; do
             DIR=$TOP/@$CACHE
             [ ! -L "$DIR" ] || die "unsafe package cache symlink: $CACHE"
@@ -268,11 +327,13 @@ if [ "$ACTION" = create ]; then
         hash_efi "$ESP" > "$TMP/efi-before"
         [ -s "$TMP/efi-before" ] || die 'no EFI files found'
     fi
+    PHASE=plan
     NAME=$NAME-$(date -u +%Y%m%dT%H%M%SZ)-$$
-    plan; idle
+    plan >&2; idle
     mkdir -p "$STORE"; CP=$STORE/$NAME; mkdir "$CP"
     printf 'Capture incomplete\n' > "$CP/INCOMPLETE"
     if [ "$CLEAN" = 1 ]; then
+        PHASE="clean package caches"; printf 'Cleaning package caches...\n' >&2
         for CACHE in /var/cache/distfiles /var/cache/binpkgs /var/cache/binhost; do
             DIR=$TOP/@$CACHE
             [ ! -d "$DIR" ] || find "$DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- '{}' +
@@ -282,17 +343,21 @@ if [ "$ACTION" = create ]; then
         [ ! -L "$ESP/checkpoints" ] || die 'EFI checkpoint storage is a symlink'
         mkdir -p "$ESP/checkpoints"; BOOT=$ESP/checkpoints/$NAME; mkdir "$BOOT"
         printf 'Capture incomplete\n' > "$BOOT/INCOMPLETE"
+        PHASE="archive EFI"; printf 'Archiving and verifying EFI...\n' >&2
         tar -czf "$BOOT/efi-files.tar.gz" -C "$ESP" EFI
         mkdir "$TMP/efi-check"; tar -xzf "$BOOT/efi-files.tar.gz" -C "$TMP/efi-check"
         hash_efi "$TMP/efi-check" > "$TMP/efi-copy"; hash_efi "$ESP" > "$TMP/efi-after"
-        cmp "$TMP/efi-before" "$TMP/efi-copy" && cmp "$TMP/efi-before" "$TMP/efi-after" || die 'EFI changed or archive verification failed'
+        cmp "$TMP/efi-before" "$TMP/efi-copy" >&2 && cmp "$TMP/efi-before" "$TMP/efi-after" >&2 || die 'EFI changed or archive verification failed'
         if command -v efibootmgr >/dev/null; then efibootmgr -v > "$BOOT/boot-entries.txt" 2>&1 || true
         else printf 'Firmware listing unavailable\n' > "$BOOT/boot-entries.txt"; fi
     fi
+    PHASE=sync; printf 'Syncing filesystems...\n' >&2
     sync
     for KIND in system home; do
         enabled "$KIND" || continue
-        btrfs subvolume snapshot -r "$TOP/$(rootname "$KIND")" "$CP/$KIND"
+        PHASE="capture $KIND"; printf 'Capturing %s...\n' "$KIND" >&2
+        btrfs subvolume snapshot -r "$TOP/$(rootname "$KIND")" "$CP/$KIND" >&2
+        COMPLETED="$COMPLETED $KIND"
     done
     {
         printf 'format=2\nname=%s\nroot_uuid=%s\nesp_uuid=%s\nsystem=%s\nhome=%s\nefi=%s\n' "$NAME" "$FS_UUID" "$ESP_UUID" "$S" "$H" "$E"
@@ -305,16 +370,18 @@ if [ "$ACTION" = create ]; then
         sync; printf '%s\n' "$NAME" > "$BOOT/COMPLETE"; rm "$BOOT/INCOMPLETE"
     fi
     sync; printf '%s\n' "$NAME" > "$CP/COMPLETE"; rm "$CP/INCOMPLETE"; sync
-    printf 'Checkpoint complete: %s\n' "$NAME"
+    printf '%s\n' "$NAME"
 else
     if [ -z "$DEVICE" ]; then
         [ "$ACTION" != restore ] || die 'restore requires --device'
         [ "$(field / FSTYPE)" = btrfs ] || die 'supply --device for the target'
         DEVICE=UUID=$(field / UUID)
     fi
-    MODE=ro; [ "$ACTION" != restore ] || MODE=rw
+    MODE=ro; [ "$ACTION:$DRY_RUN" != restore:0 ] || MODE=rw
     mount_top "$MODE"
     if [ "$ACTION" = list ]; then
+        PHASE="measure checkpoint extents"
+        printf 'Scanning checkpoint file extents...\n' >&2
         printf '%-12s %-12s %-12s %-26s %s\n' TOTAL EXCLUSIVE SHARED STATE CHECKPOINT
         for CP in "$STORE"/*; do
             [ -d "$CP" ] && [ ! -L "$CP" ] || continue
@@ -336,10 +403,13 @@ else
         printf 'Btrfs file extents only; EFI excluded. Shared blocks overlap checkpoints; sizes are not additive.\n'
         exit 0
     fi
+    PHASE="verify checkpoint"; printf 'Verifying checkpoint %s...\n' "$NAME" >&2
     CP=$STORE/$NAME; verify_checkpoint
     if [ "$ACTION" = inspect ]; then
-        cat "$CP/manifest"; [ "$(meta efi)" != 1 ] || verify_efi
-        printf 'Recorded components verified; target unchanged.\n'; exit 0
+        PHASE="verify recorded components"; printf 'Verifying recorded components...\n' >&2
+        [ "$(meta efi)" != 1 ] || verify_efi
+        cat "$CP/manifest"
+        printf 'Recorded components verified; target unchanged.\n' >&2; exit 0
     fi
     for KIND in system home efi; do if enabled "$KIND"; then [ "$(meta "$KIND")" = 1 ] || die "checkpoint lacks $KIND"; fi; done
     offline
@@ -354,19 +424,22 @@ else
         [ ! -L "$CURRENT" ] || die 'target is a symlink'
         [ ! -e "$CURRENT" ] || flat "$CURRENT"
     done
-    ESP_UUID=$(meta esp_uuid); plan; offline
+    PHASE=plan; ESP_UUID=$(meta esp_uuid); plan >&2; offline
     for OLD in "$STORE"/.restore-*; do [ ! -d "$OLD" ] || cleanup_stage "$OLD" || die 'unexpected temporary restore contents'; done
+    PHASE="stage restore snapshots"; printf 'Staging restore snapshots...\n' >&2
     STAGE=$(mktemp -d "$STORE/.restore-XXXXXX")
-    for KIND in system home; do if enabled "$KIND"; then btrfs subvolume snapshot "$CP/$KIND" "$STAGE/$KIND"; fi; done
+    for KIND in system home; do if enabled "$KIND"; then btrfs subvolume snapshot "$CP/$KIND" "$STAGE/$KIND" >&2; fi; done
+    PHASE=sync; printf 'Syncing filesystems...\n' >&2
     sync
     for KIND in system home; do
         enabled "$KIND" || continue
+        PHASE="replace $KIND"; RESTORE_STARTED=1; printf 'Replacing %s...\n' "$KIND" >&2
         CURRENT=$TOP/$(rootname "$KIND")
-        [ ! -e "$CURRENT" ] || btrfs subvolume delete "$CURRENT"
+        [ ! -e "$CURRENT" ] || btrfs subvolume delete "$CURRENT" >&2
         mv "$STAGE/$KIND" "$CURRENT"
-        sync
+        sync; COMPLETED="$COMPLETED $KIND"
     done
-    if [ "$E" = 1 ]; then cp -R "$TMP/extracted/EFI/." "$ESP/EFI/"; sync; fi
+    if [ "$E" = 1 ]; then PHASE="overlay EFI"; RESTORE_STARTED=1; printf 'Overlaying EFI...\n' >&2; cp -R "$TMP/extracted/EFI/." "$ESP/EFI/"; sync; COMPLETED="$COMPLETED efi"; fi
     cleanup_stage "$STAGE"; STAGE=
-    printf 'Restore complete. Reboot and verify. Named checkpoint retained.\n'
+    printf 'Restore complete. Reboot and verify. Named checkpoint retained.\n' >&2
 fi

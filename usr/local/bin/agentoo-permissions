@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Check or restore permissions for tracked agentoo files and managed directories."""
-import argparse
+import json
 import os
 from pathlib import Path, PurePosixPath
 import stat
 import subprocess
 import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
+from cli import ArgumentParser
 
 POLICY = "etc/agentoo/permissions.conf"
 
@@ -125,16 +129,42 @@ def managed_entries(rules, tracked):
 
 def elevate():
     print('agentoo: permissions requires root; requesting sudo authorization.', file=sys.stderr, flush=True)
-    os.execvp('sudo', ['sudo', '--', sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
+    options = ['-n'] if '--no-input' in sys.argv[1:] else []
+    os.execvp('sudo', ['sudo', *options, '--', sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo permissions', description=__doc__,
+        epilog='JSON check reports paths, numeric UID/GID and octal mode strings. '
+               'Exit 0: compliant (or repair succeeded); 1: mismatches/errors; 2: invalid arguments. '
+               'Validation errors go to stderr; a report is emitted only after policy inspection.')
+    operation = parser.add_argument('operation', choices=['check', 'fix'],
+                                    help='check reports mismatches; fix restores declared permissions')
+    operation.completion = 'commands'
+    operation.completion_descriptions = {
+        'check': 'Report ownership and permission mismatches',
+        'fix': 'Restore declared ownership and permissions',
+    }
+    parser.add_argument('--root', metavar='PATH', default='/',
+                        help='mounted target root (default: /)').completion = 'directories'
+    parser.add_argument('--json', action='store_true', help='emit one JSON check report; incompatible with fix')
+    parser.add_argument('--no-input', action='store_true', help='never prompt, including for sudo authorization')
+    return parser
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="agentoo permissions", description=__doc__)
-    modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--check", action="store_true", help="report only (default)")
-    modes.add_argument("--fix", action="store_true", help="restore declared ownership and modes")
-    parser.add_argument("--root", default="/", help="mounted target root (default: /)")
+    parser = build_parser()
+    if not sys.argv[1:]:
+        parser.print_help()
+        return 0
     args = parser.parse_args()
+    args.fix = args.operation == 'fix'
+    if args.fix and args.json:
+        parser.error('--json applies only to check')
+    return operate(parser, args)
+
+
+def operate(parser, args):
     root = Path(args.root).resolve(strict=True)
     if not root.is_dir():
         parser.error("target root must be a directory")
@@ -143,6 +173,7 @@ def main():
     rules = load_policy(root)
     entries, problems = managed_entries(rules, tracked_files(root))
     changes = []
+    findings = []
     for (relative, directory), expected in sorted(entries.items()):
         try:
             fd = open_path(root, relative, directory, metadata=True)
@@ -153,14 +184,21 @@ def main():
             actual = (current.st_uid, current.st_gid, stat.S_IMODE(current.st_mode))
             if actual != expected:
                 changes.append((relative, directory, expected, (current.st_dev, current.st_ino)))
-                print(f"MISMATCH /{relative}: {actual[0]}:{actual[1]} {actual[2]:04o}"
-                      f" -> {expected[0]}:{expected[1]} {expected[2]:04o}")
+                findings.append({'path': '/' + relative, 'directory': directory,
+                    'actual': {'uid': actual[0], 'gid': actual[1], 'mode': f'{actual[2]:04o}'},
+                    'expected': {'uid': expected[0], 'gid': expected[1], 'mode': f'{expected[2]:04o}'}})
+                if not args.json:
+                    print(f"MISMATCH /{relative}: {actual[0]}:{actual[1]} {actual[2]:04o}"
+                      f" -> {expected[0]}:{expected[1]} {expected[2]:04o}",
+                          file=sys.stderr if args.fix else sys.stdout)
         except PermissionError:
             if os.geteuid() != 0:
                 elevate()
             raise
         except (ValueError, OSError) as error:
             problems.append(f"/{relative}: {error}")
+    if args.json:
+        print(json.dumps({'paths_checked': len(entries), 'mismatches': findings, 'errors': problems}))
     if problems:
         for problem in problems:
             print(f"ERROR {problem}", file=sys.stderr)
@@ -177,9 +215,10 @@ def main():
                 os.fchmod(fd, mode)
             finally:
                 os.close(fd)
-        print(f"Permissions: {len(changes)} corrected; {len(entries)} paths checked.")
+        print(f"Permissions: {len(changes)} corrected; {len(entries)} paths checked.", file=sys.stderr)
         return 0
-    print(f"Permissions: {len(changes)} mismatches; {len(entries)} paths checked.")
+    if not args.json:
+        print(f"Permissions: {len(changes)} mismatches; {len(entries)} paths checked.")
     return int(bool(changes))
 
 

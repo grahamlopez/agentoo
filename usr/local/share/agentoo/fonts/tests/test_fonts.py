@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+from importlib.machinery import SourceFileLoader
 import io
 import json
 import os
@@ -9,7 +10,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('fonts', Path(__file__).resolve().parents[2] / 'commands/fonts.py')
+command = Path(__file__).resolve().parents[4] / 'bin/agentoo-fonts'
+spec = importlib.util.spec_from_loader('fonts', SourceFileLoader('fonts', str(command)))
 f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)
 
@@ -42,7 +44,7 @@ class FontsTests(unittest.TestCase):
             config, fragment = Path(d) / 'kitty.conf', Path(d) / 'agentoo-fonts.conf'
             config.write_text('include host.conf\n')
             fragment.write_text('font_size 10\n')
-            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'reload_kitties') as reload, patch('sys.stdout', new_callable=io.StringIO) as out:
+            with patch.object(f, 'kitty_paths', return_value=(config, fragment)), patch.object(f, 'reload_kitties') as reload, patch('sys.stderr', new_callable=io.StringIO) as out:
                 f.save_selection('font_size 11\n', expected='font_size 10\n')
                 f.save_selection('font_size 10\n')
             self.assertIn('agentoo fonts set --restore', out.getvalue())

@@ -7,6 +7,14 @@ protected managed paths. Run `agentoo permissions fix` to restore ownership and 
 The tool requires Python 3 and the agentoo Git repository. Both are available
 when the installer applies the policy after its configuration checkout.
 
+`agentoo-permissions` is the equivalent direct executable. Add `--no-input` to
+use noninteractive sudo (`sudo -n`) and fail if authorization is unavailable.
+`check --json` emits one report with `paths_checked`, `mismatches`, and `errors`;
+each mismatch has a path, directory indicator, and actual/expected numeric UID,
+GID, and octal mode string. Exit 0 means compliant, 1 means mismatches or errors,
+and 2 means invalid arguments. Failures before inspection produce stderr without
+a report. JSON is not supported for repair; repair notices go to stderr.
+
 ## Policy rules
 
 Paths are relative to the target root. Owners are numeric UID/GID so the policy

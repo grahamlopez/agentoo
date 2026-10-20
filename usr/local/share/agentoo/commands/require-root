@@ -1,8 +1,0 @@
-# Source from an operation after validating its public arguments.
-require_root() {
-    if [ "$(id -u)" != 0 ]; then
-        printf 'agentoo: %s requires root; requesting sudo authorization.\n' "$1" >&2
-        shift
-        exec sudo -- "$@"
-    fi
-}

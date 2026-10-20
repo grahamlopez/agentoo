@@ -1534,9 +1534,9 @@ EOF
     checkout_configuration "$config_git_dir" "$MOUNT_ROOT"
   fi
   config_revision=$(run_privileged git --git-dir="$config_git_dir" rev-parse "$CONFIG_BRANCH^{commit}")
-  [[ -f $MOUNT_ROOT/usr/local/share/agentoo/commands/permissions.py && ! -L $MOUNT_ROOT/usr/local/share/agentoo/commands/permissions.py ]] \
+  [[ -f $MOUNT_ROOT/usr/local/bin/agentoo-permissions && ! -L $MOUNT_ROOT/usr/local/bin/agentoo-permissions ]] \
     || die 'configuration checkout lacks the Agentoo permissions implementation'
-  run_privileged python3 "$MOUNT_ROOT/usr/local/share/agentoo/commands/permissions.py" --root "$MOUNT_ROOT" --fix
+  run_privileged python3 "$MOUNT_ROOT/usr/local/bin/agentoo-permissions" fix --root "$MOUNT_ROOT"
   esp_uuid=$(run_privileged findmnt -rn -o UUID --mountpoint "$MOUNT_ROOT/boot")
   [[ -n $esp_uuid ]] || die 'mounted ESP UUID is missing'
   printf '%s\n' "$esp_uuid" | run_privileged tee "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid" >/dev/null

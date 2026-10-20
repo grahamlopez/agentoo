@@ -84,11 +84,15 @@ def main():
     directory = Path('/run/agentoo')
     directory.mkdir(mode=0o700, exist_ok=True)
     with (directory / 'git-transaction.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
         def interrupted(number, _frame):
             raise SystemExit(128 + number)
         signal.signal(signal.SIGINT, interrupted)
         signal.signal(signal.SIGTERM, interrupted)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print('agentoo: waiting for another Git deployment to finish.', file=sys.stderr)
+            fcntl.flock(lock, fcntl.LOCK_EX)
         return transaction(sys.argv[1:])
 
 
