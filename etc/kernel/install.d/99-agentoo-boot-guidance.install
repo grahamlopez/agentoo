@@ -14,12 +14,21 @@ part=$(lsblk -dnro PARTN "$esp") || exit 0
 cmdline=$(cat /etc/kernel/cmdline) || exit 0
 options=()
 grep -Fxq 'GENTOO_TARGET_HOST="startop"' /etc/agentoo/target-host && options+=(--full-dev-path)
-{
+guidance=$(
   printf '\nNew distribution kernel: %s\nManual EFI registration (inspect existing entries first):\n' "$version"
   printf 'sudo efibootmgr --create-only'
   printf ' %q' "${options[@]}" --disk "/dev/$parent" --part "$part" \
     --label "Gentoo distribution $version" --loader "\\EFI\\Gentoo\\kernel-$version.efi" \
     --unicode "$cmdline initrd=\\EFI\\Gentoo\\initramfs-$version.img"
   printf '\nRetain a tested previous entry; this command leaves BootOrder unchanged.\n'
-} || :
+)
+printf '%s\n' "$guidance"
+# kernel-install runs outside the ebuild shell, so elog() is unavailable.
+# Use Portage's line-based elog spool when invoked by a package phase. printf
+# preserves the shell escapes in the copy-ready command (elog uses echo -e).
+if [[ ${EBUILD_PHASE:-} == @(postinst|config) && -n ${T:-} && -d $T/logging ]]; then
+  while IFS= read -r line; do
+    printf 'LOG %s\n' "$line"
+  done <<< "$guidance" >> "$T/logging/$EBUILD_PHASE" || :
+fi
 exit 0
