@@ -168,12 +168,22 @@ class Transparency(unittest.TestCase):
         repository = SHARE.parents[3]
         module = self.root / 'transparency.lua'
         module.write_text((repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(
-            '/usr/local/share/agentoo/desktop_transparency.py', str(SHARE / 'desktop_transparency.py')))
+            '/usr/local/share/agentoo/desktop_transparency.py', str(SHARE / 'desktop_transparency.py')).replace(
+            '/etc/xdg/hypr/window-classes.lua', str(repository / 'etc/xdg/hypr/window-classes.lua')))
         config = self.root / 'hyprland.lua'
         config.write_text('dofile(' + json.dumps(str(module)) + ')\n')
         result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which('kitty'), 'Kitty runtime is required')
+    def test_watcher_imports_in_native_kitty_without_cli_search_path(self):
+        code = ('import runpy; '
+                f'm = runpy.run_path({str(SHARE / "kitty/transparency.py")!r}, run_name="agentoo_watcher_check"); '
+                'assert callable(m["on_load"]); print("Watcher imports OK")')
+        result = subprocess.run(['kitty', '+runpy', code], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Watcher imports OK', result.stdout)
 
 
 if __name__ == '__main__':

@@ -7,9 +7,8 @@ local contents = stream:read("*a")
 stream:close()
 assert(contents:sub(-4) == "end\n", "Cannot load Agentoo transparency state; see session stderr")
 
-local kitty = "(?i:kitty|agentoo-dropdown)"
-local browser = "(?i:firefox(-bin|-esr|-developeredition|-nightly)?|org.mozilla.firefox|librewolf|floorp|zen(-browser)?|chromium(-browser)?|google-chrome(-stable|-beta|-unstable)?|chrome|brave(-browser)?|com.brave.Browser|microsoft-edge(-stable|-beta|-dev)?|vivaldi(-stable)?|opera)"
-local classes = { all = "negative:" .. kitty, kitty = kitty, browser = browser }
+local families = require("/etc/xdg/hypr/window-classes.lua")
+local classes = { all = "negative:" .. families.kitty, kitty = families.kitty, browser = families.browser }
 for group, state, raw in contents:gmatch("(%a+)\t(%a+)\t([^\n]+)\n") do
     local value = tonumber(raw)
     assert(classes[group] and (state == "focused" or state == "unfocused") and value and value >= 0 and value <= 90)

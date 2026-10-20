@@ -458,6 +458,8 @@ is required. The shared entry loads, in order:
    `~/.config/hypr/agentoo-local.lua`: optional real personal override.
 4. `/etc/xdg/hypr/transparency.lua`: remembered Agentoo transparency overrides,
    when present. Resetting them exposes the preceding authored settings.
+5. `/etc/xdg/hypr/blur.lua`: remembered Agentoo blur preferences; authored blur
+   defaults remain in effect until a preference is explicitly set.
 
 Monitors use preferred modes and auto placement/scaling by default. Host-specific
 exceptions belong in tracked `/etc/xdg/hypr/hosts/NAME.lua` fragments. The shared
@@ -745,7 +747,7 @@ cannot retrofit dynamic opacity reliably. No running application is restarted
 by this command. Kitty's standard `kitty` class and `agentoo-dropdown` are
 recognized by the compositor. Browser classes include Firefox, Chromium,
 Chrome, Brave, Edge, Vivaldi, Opera, LibreWolf, Floorp, and Zen. Custom application
-classes require extending the class expressions in `transparency.lua`.
+classes require extending the shared class expressions in `window-classes.lua`.
 
 Authored window opacity/opaque/force_rgbx rules in the personal Hyprland config
 tree and selected host file cause adjustments to fail with file/line locations;
@@ -768,3 +770,131 @@ Implementation references: [Hyprland 0.56.2 opacity parser](https://github.com/h
 [window rules](https://wiki.hypr.land/configuring/core/rules/window-rules/),
 and Kitty's installed 0.48.2 watcher and background-opacity documentation
 (`/usr/share/doc/kitty-0.48.2/html/launch.html` and `conf.html`).
+
+## Window blur
+
+```sh
+agentoo desktop blur
+agentoo desktop blur --focused on --unfocused on --size 3 --passes 1
+agentoo desktop blur --focused on --unfocused off
+agentoo desktop blur --window browser --focused off --unfocused off
+agentoo desktop blur --diagnose
+agentoo desktop blur --reset
+```
+
+All blur options are optional; running the command without options shows settings.
+Blur is off in the shared Agentoo configuration. Enable it with `--focused on`
+and/or `--unfocused on`. Changing size or passes alone saves strength without
+enabling blur; the command reports when blur remains off. Enabling focused blur does not
+enable unfocused blur, and vice versa. On/off preferences support the same
+`all`, `kitty`, and `browser` groups as transparency. Setting `all` clears
+category overrides only for supplied focus states. Resetting a category restores
+shared inheritance; resetting all removes every blur override, including strength,
+and re-exposes the authored host/personal/system defaults. Thus an explicit
+personal `blur.enabled = true` remains a default and can take effect after reset.
+Blur never modifies opacity or the saved transparency preferences.
+
+Size and passes are global rather than per-window: they require `--window all`.
+Accepted integers are 1–40 for size (matching the renderer's effective size
+range) and 1–10 for passes. Neither strength option turns blur on. Omitted
+strength settings retain the existing configured values; there is no implicit
+preset. Size 3 / passes 1 is an optional modest starting point, not a power
+measurement or a guarantee against artifacts. Try reducing size before adding
+passes if blur looks poor. Turning both focus states off for all groups disables
+the blur engine. Focus rules are native compositor rules: no blur polling process,
+timer, per-frame script, or automatic battery/AC switching is added.
+
+The integration preserves optimization, shader, algorithm, color modulation,
+GPU selection, and driver settings. Upstream optimizations remain at their
+configured values (normally enabled). It does not add blur to panels,
+notifications, menus, input methods, or the background of an entire special
+workspace. Independently authored settings for those surfaces are untouched;
+the global engine switch still gates their rendering. Ordinary, floating,
+fullscreen, dialog, and dropdown windows follow the focus/category rules.
+Custom class families are defined once in `window-classes.lua` for both blur and
+transparency.
+
+Choices live at `$XDG_STATE_HOME/agentoo/blur.json`, defaulting to
+`~/.local/state/agentoo/blur.json`, with a private `blur.lock` serializing updates.
+Relative XDG paths are ignored. Writes are atomic; the command reloads Hyprland
+with `config-only` and verifies that the compositor has loaded the saved revision.
+The reload request and verification calls share a two-second timeout budget.
+The revision confirms which preferences were loaded; it does not prove a fresh
+reload completed for an unchanged revision, or verify application rendering.
+Failure or interruption restores the original state bytes and attempts a rollback
+reload with the normal ten-second transport timeout. Rollback is best effort;
+restoring the file does not guarantee that the live compositor recovered.
+No generated configuration or separate restore command is needed:
+`blur.lua` reads validated data on startup and config reload. Concurrent sessions
+share choices; another existing session adopts them on its next reload. A full
+reset can recover even from corrupt state or a conflicting-rule config error.
+
+Authored `no_blur`, `noblur`, `opaque`, and `force_rgbx` rules in the selected
+host file or personal Hyprland config tree are conservatively reported with
+file/line locations. The same conflict policy is used before saving and during
+configuration loading: conflicts block changes whose resulting state contains
+managed window rules. Strength-only state and a reset that removes the last
+managed window rule remain usable. Defaults such as `blur.size` and
+`blur.enabled` are retained rather than treated as conflicts. The scan cannot
+evaluate arbitrary Lua or includes outside those locations; unused personal
+files may also be flagged. No authored file is rewritten.
+
+Queries show saved preferences, inheritance, and defaults captured before the
+managed settings were applied. They separately report whether the saved revision
+was loaded in this session and the engine's current on/off value. A runtime edit
+can change the current engine without changing the loaded revision.
+If no reachable integrated session is available,
+saved values are still shown, but configured defaults are labeled unknown.
+Help, completion, and queries create no state. Operational summaries and warnings
+go to stderr; help/results go to stdout. Exit statuses are 0 for success, 1 for
+operational failure, and 2 for invalid input. `--reset` and `--diagnose` are
+mutually exclusive and cannot accompany adjustments.
+
+`--diagnose` is read-only. It reports the running compositor version/system/GPU
+inventory, backend/OpenGL version when reported by Hyprland, effective blur
+options, open application classes, and conflicting rules. One runtime snapshot
+returns the captured defaults/revision and query-time options; with system info,
+configuration errors, and the class inventory, a normal diagnostic uses four
+compositor requests. It continues collecting independent evidence when a source
+fails, including when the saved state is corrupt. Snapshot completeness is
+checked at its read boundary: missing core options make that source unavailable.
+Other sources are still collected, and each failed source reports its error to
+stderr. Any source failure produces exit 1. Unsupported optional options are
+shown as unavailable without invalidating the core snapshot.
+GPU inventory is not
+proof of which GPU renders a particular surface. No GPU benchmark, wattage
+estimate, kernel change, session restart, or automatic workaround is performed.
+Troubleshooting advice lives here. Diagnostics report observed settings without
+embedding thresholds or GPU-cost heuristics in the command.
+
+Blur requires transparent content. Hyprland 0.56.2 also respects clients using
+`ext-background-effect`: an empty client blur region prevents blur even if the
+engine is on. A window-rule on/off setting cannot override that protocol
+decision. The public diagnostic API does not expose those regions, so diagnostics
+explain this limitation rather than claiming that appearance is verified. Kitty
+needs no external remote-control access for compositor blur. Application-specific
+blur requests may require reloading that application's own configuration.
+
+Checks:
+
+```sh
+python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_blur.py
+lua usr/local/share/agentoo/tests/test_hypr_blur.lua
+```
+
+The tests include native Hyprland parser checks for independent focus states,
+strength-only changes, engine shutdown, and preservation of authored defaults.
+They also check persistence, corrupt-state recovery, failed-reload rollback,
+diagnostic read-only behavior, and help/completion. After deployment, visually
+check existing/new Kitty and browser windows, focus transitions, fullscreen,
+dropdowns, reset to personal defaults, and startup restoration. Compare actual
+power at idle and during scrolling/resizing with blur off/on, including after
+display sleep; parser checks do not establish rendering or power correctness.
+
+References: [Hyprland 0.56.2 blur eligibility](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/render/Renderer.cpp),
+[upstream configuration guidance](https://github.com/hyprwm/hyprland-wiki/blob/main/content/configuring/core/config-options.md#blur),
+[display-sleep/GPU report for 0.53](https://github.com/hyprwm/Hyprland/discussions/12760),
+and [application blur requests after 0.56](https://github.com/hyprwm/Hyprland/discussions/15606).
+User reports guide diagnostics; they are not treated as diagnoses or verified
+workarounds for this machine. Newer upstream blur variants are not exposed by
+this interface, which targets the installed 0.56.2 API.

@@ -5,9 +5,17 @@ even when no focus event occurs. No sockets, terminal escapes, or shell code.
 """
 from pathlib import Path
 import runpy
+import sys
 
-_state = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'desktop_transparency.py'),
-                        run_name='agentoo_transparency_state')
+_share = str(Path(__file__).resolve().parents[1])
+# Kitty does not add the watcher's parent directory to its Python search path.
+# Allow the state module's shared imports, without changing Kitty's lasting path.
+sys.path.insert(0, _share)
+try:
+    _state = runpy.run_path(str(Path(_share) / 'desktop_transparency.py'),
+                           run_name='agentoo_transparency_state')
+finally:
+    sys.path.remove(_share)
 _applied = {}
 _last_error = None
 _previous_state = None

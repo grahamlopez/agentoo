@@ -37,3 +37,4 @@ include_optional(config_home .. "/hypr/agentoo-local.lua")
 -- Apply remembered appearance overrides after authored defaults. Reloading with
 -- no saved overrides exposes those defaults again, including personal rules.
 require("/etc/xdg/hypr/transparency.lua")
+require("/etc/xdg/hypr/blur.lua")

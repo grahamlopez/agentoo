@@ -2,6 +2,10 @@
 local source = "etc/xdg/hypr/transparency.lua"
 local rules = {}
 local context = setmetatable({
+    require = function(path)
+        assert(path == "/etc/xdg/hypr/window-classes.lua")
+        return dofile("etc/xdg/hypr/window-classes.lua")
+    end,
     hl = { window_rule = function(rule) rules[#rules + 1] = rule end },
     io = { popen = function(command, mode)
         assert(command:match("desktop_transparency.py rules$") and mode == "r")

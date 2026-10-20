@@ -64,6 +64,8 @@ def build_parser():
     transparency.add_argument('--unfocused', type=percentage, metavar='PERCENT',
                               help='Unfocused-window transparency, from 0 to 90')
     transparency.add_argument('--reset', action='store_true', help='Remove selected overrides; cannot combine with adjustments')
+    from desktop_blur import add_parser
+    add_parser(commands)
     return parser
 
 
@@ -183,6 +185,10 @@ def main():
         from desktop_transparency import run
         if args.reset and (args.focused is not None or args.unfocused is not None):
             parser.error('--reset cannot be combined with --focused or --unfocused')
+        return run(args, state_directory(), atomic_write)
+    if args.command == 'blur':
+        from desktop_blur import run, validate
+        validate(args, parser)
         return run(args, state_directory(), atomic_write)
     state = state_directory()
     saved = state / 'wallpaper'
