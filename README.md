@@ -29,6 +29,8 @@ Completion lists use separate Commands, Options, and Values sections, with one
 entry per row and aligned descriptions. Options display argument placeholders
 like `--font FONT`; completion inserts only the option itself. Entries follow
 the argument definitions' order, and long descriptions are shortened to fit.
+The current command's usage appears above the sections, generated from its help
+parser and joined into one logical line (which the terminal may wrap).
 `agentoo git` delegates to zsh's Git completion using the system repository.
 Checkpoint names must be entered explicitly; completion does not mount storage or
 request privileges. When changing subcommands or options, update the relevant

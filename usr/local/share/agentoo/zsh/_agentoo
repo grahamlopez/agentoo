@@ -7,7 +7,13 @@ local -a records matches descriptions labels rows expl
 local -i use_git=0 width index available
 records=("${(@f)$(command agentoo __complete $(( CURRENT - 1 )) "${(@Q)words[2,-1]}" 2>/dev/null)}")
 for record in $records; do
-    [[ ${record%%$'\t'*} == prefix ]] && compset -P '*='
+    kind=${record%%$'\t'*}
+    item=${record#*$'\t'}
+    value=${item%%$'\t'*}
+    case $kind in
+        usage) compadd -V agentoo-usage -x "$value" ;;
+        prefix) compset -P '*=' ;;
+    esac
 done
 
 # Keep each section in a separate completion group, with one aligned row per

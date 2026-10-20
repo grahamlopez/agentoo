@@ -1,14 +1,15 @@
 #!/bin/sh
 # Use display backlights only: acpilight otherwise falls back to other LEDs.
 set -eu
-case "${1-}" in -h|--help) echo 'Usage: agentoo backlight {up|down} [CONTROLLER]'; exit 0 ;; esac
+usage() { python3 "$(dirname "$0")/cli.py" usage backlight; }
+case "${1-}" in -h|--help) usage; exit 0 ;; esac
 case "${1-}" in
     up) operation=-inc ;;
     down) operation=-dec ;;
-    *) echo "Usage: agentoo backlight up|down [controller]" >&2; exit 2 ;;
+    *) usage >&2; exit 2 ;;
 esac
 if [ "$#" -gt 2 ]; then
-    echo "Usage: agentoo backlight up|down [controller]" >&2
+    usage >&2
     exit 2
 fi
 if [ "$#" -eq 2 ]; then

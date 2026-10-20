@@ -63,6 +63,48 @@ class CliTest(unittest.TestCase):
                          ['commit', '-m', 'two words; $HOME'])
         self.assertNotIn('requesting sudo', result.stderr)
 
+    def test_completion_usage_matches_actual_help(self):
+        paths = [(), ('git',), ('permissions',), ('permissions', 'check'),
+                 ('permissions', 'fix'), ('backlight',), ('screenshot',),
+                 ('secrets',), ('secrets', 'install'), ('checkpoint',),
+                 ('checkpoint', 'create'), ('checkpoint', 'list'),
+                 ('checkpoint', 'inspect'), ('checkpoint', 'restore'),
+                 ('power',), ('fonts',), ('fonts', 'status'),
+                 ('fonts', 'test'), ('fonts', 'set'), ('fonts', 'doctor')]
+        for path in paths:
+            with self.subTest(path=path):
+                help_result = self.run_cli(*path, '--help')
+                self.assertEqual(help_result.returncode, 0, help_result.stderr)
+                completion = self.run_cli('__complete', str(len(path) + 1), *path, '')
+                self.assertEqual(completion.returncode, 0, completion.stderr)
+                usage = next(line.split('\t')[1] for line in completion.stdout.splitlines()
+                             if line.startswith('usage\t'))
+                if path and path[0] == 'checkpoint':
+                    # Recovery help lists all operations; show the matching one.
+                    operation = path[1] if len(path) > 1 else 'create'
+                    line = next(line.strip().removeprefix('Usage: ')
+                                for line in help_result.stdout.splitlines()
+                                if 'agentoo checkpoint ' + operation + ' ' in line
+                                or line.strip() == 'agentoo checkpoint ' + operation)
+                    expected = 'Usage: ' + line
+                else:
+                    # Python help wraps usage over physical lines before a blank.
+                    expected = ' '.join(help_result.stdout.split('\n\n')[0].split())
+                    if path == ('git',):
+                        expected = help_result.stdout.splitlines()[0]
+                self.assertEqual(usage, expected)
+
+    def test_completion_option_metavars_match_help(self):
+        for path, display in [(('secrets', 'install'), '--profile FILE'),
+                              (('permissions',), '--root PATH'),
+                              (('checkpoint', 'restore'), '--efi-mount PATH')]:
+            with self.subTest(path=path):
+                result = self.run_cli('__complete', str(len(path) + 1), *path, '')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                labels = [line.split('\t')[3] for line in result.stdout.splitlines()
+                          if line.startswith('option\t')]
+                self.assertIn(display, labels)
+
     def test_operation_requests_sudo_with_exact_arguments(self):
         fake_id = self.root / 'id'
         fake_id.write_text('#!/bin/sh\necho 1000\n')

@@ -88,6 +88,14 @@ class CompletionTests(unittest.TestCase):
                     output = prompt(b'CAPTURE_DONE')
                     with self.subTest(listing=text):
                         self.assertIn('Options:', output)
+                        self.assertIn('Usage: agentoo', output)
+                        first_section = 'Options:' if text == 'agentoo fonts test ' else 'Commands:'
+                        self.assertLess(output.index('Usage:'), output.index(first_section))
+                        if text == 'agentoo fonts ':
+                            self.assertIn('Usage: agentoo fonts [COMMAND] [options]', output)
+                        elif text == 'agentoo fonts test ':
+                            self.assertIn('Usage: agentoo fonts test ', output)
+                            self.assertRegex(output, r'Usage: agentoo fonts test [^\r\n]*\[SUITE\]')
                         if text == 'agentoo fonts test ':
                             self.assertLess(output.index('Options:'), output.index('  --font FONT '))
                             self.assertLess(output.index('  --font FONT '), output.index('Values:'))
@@ -100,6 +108,18 @@ class CompletionTests(unittest.TestCase):
                         # Every alias remains a distinct row even with identical descriptions.
                         self.assertRegex(output, r'(?m)^  -h\s+.*help')
                         self.assertRegex(output, r'(?m)^  --help\s+.*help')
+                for text, usage in (
+                    ('agentoo checkpoint restore ', 'Usage: agentoo checkpoint restore '),
+                    ('agentoo secrets ', 'Usage: agentoo secrets install --profile FILE --user USER CATEGORY...'),
+                    ('agentoo secrets install ', 'Usage: agentoo secrets install --profile FILE --user USER CATEGORY...'),
+                    ('agentoo fonts test --target ', 'Usage: agentoo fonts test '),
+                    ('agentoo fonts doctor --text ', 'Usage: agentoo fonts doctor '),
+                ):
+                    with self.subTest(usage=text):
+                        os.write(master, (text + '\x04\x18').encode())
+                        output = prompt(b'CAPTURE_DONE')
+                        self.assertIn(usage, output)
+                        self.assertEqual((work / 'buffer').read_text().rstrip('\n'), text)
             finally:
                 process.kill()
                 process.wait()

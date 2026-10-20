@@ -1,15 +1,16 @@
 #!/bin/sh
 # Interactive Wayland captures, saved to files only.
 set -eu
-case "${1-}" in -h|--help) echo 'Usage: agentoo screenshot {full|region} (saved under ~/Downloads/Screenshots)'; exit 0 ;; esac
+usage() { python3 "$(dirname "$0")/cli.py" usage screenshot; }
+case "${1-}" in -h|--help) usage; exit 0 ;; esac
 if [ "$#" -ne 1 ]; then
-    echo "Usage: agentoo screenshot full|region" >&2
+    usage >&2
     exit 2
 fi
 case "$1" in
     full) ;;
     region) ;;
-    *) echo "Usage: agentoo screenshot full|region" >&2; exit 2 ;;
+    *) usage >&2; exit 2 ;;
 esac
 command -v grim >/dev/null || { echo "Install @gui-desktop for grim" >&2; exit 1; }
 if [ "$1" = region ]; then

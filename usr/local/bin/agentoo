@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 readonly commands=/usr/local/share/agentoo/commands
 usage() {
+    python3 "$commands/cli.py" usage agentoo
     cat <<'HELP'
-Usage: agentoo <command> [options]
 
 Manage Agentoo system configuration and desktop utilities.
 
@@ -105,7 +105,8 @@ esac
 case $command in
     git)
         if (( $# == 0 )) || [[ ${1:-} == -h || ${1:-} == --help ]]; then
-            printf 'Usage: agentoo git [<git-options>] <command> [args...]\n       agentoo git {setup-hooks|enable-write}\n\nRuns Git against /var/lib/agentoo/repository.git with work tree /.\nOther Git arguments are forwarded unchanged.\n'
+            python3 "$commands/cli.py" usage git
+            printf '       agentoo git {setup-hooks|enable-write}\n\nRuns Git against /var/lib/agentoo/repository.git with work tree /.\nOther Git arguments are forwarded unchanged.\n'
             exit 0
         fi
         ;;
@@ -123,7 +124,8 @@ case $command in
         if [[ ${2:-} == -h || ${2:-} == --help ]]; then set -- --help; fi
         case ${1:-} in
             ''|-h|--help)
-                printf 'Usage: agentoo permissions {check|fix} [--root PATH]\n\ncheck reports mismatches; fix restores ownership and modes. Both request sudo when needed.\n--root selects a mounted target root (default: /).\n'
+                python3 "$commands/cli.py" usage permissions
+                printf '\ncheck reports mismatches; fix restores ownership and modes. Both request sudo when needed.\n--root selects a mounted target root (default: /).\n'
                 exit 0 ;;
             check) python3 "$commands/cli.py" validate permissions "$@"; shift; set -- --check "$@" ;;
             fix) python3 "$commands/cli.py" validate permissions "$@"; shift; set -- --fix "$@" ;;

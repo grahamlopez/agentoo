@@ -2,8 +2,8 @@
 """Shared shell-command argument parsers and read-only completion service.
 
 Protocol: one tab-separated record per line: command/option/candidate VALUE
-DESCRIPTION DISPLAY, or
-files/directories/users/git. Values are data, never shell code. The current word
+DESCRIPTION DISPLAY, a usage line, or files/directories/users/git. Values are
+data, never shell code. The current word
 is one-based among arguments after `agentoo`; later words are ignored.
 """
 import argparse
@@ -27,6 +27,34 @@ COMMANDS = {
     'help': 'Show help for a command',
 }
 
+# Shell help and completion use these same compact usage lines. Checkpoint's
+# standalone recovery script keeps its own help; parity tests cover that copy.
+USAGE = {
+    'agentoo': 'agentoo <command> [options]',
+    'git': 'agentoo git [<git-options>] <command> [args...]',
+    'permissions': 'agentoo permissions {check|fix} [--root PATH]',
+    'secrets': 'agentoo secrets install --profile FILE --user USER CATEGORY...',
+    'backlight': 'agentoo backlight {up|down} [CONTROLLER]',
+    'screenshot': 'agentoo screenshot {full|region} (saved under ~/Downloads/Screenshots)',
+}
+CHECKPOINT_USAGE = {
+    'create': 'agentoo checkpoint create LABEL [component flags] [--[no-]clean-distfiles]',
+    'list': 'agentoo checkpoint list [--device DEVICE]',
+    'inspect': 'agentoo checkpoint inspect NAME [--device DEVICE] [--efi-mount PATH]',
+    'restore': 'agentoo checkpoint restore NAME --device DEVICE [--efi-mount PATH] [component flags]',
+}
+
+
+class ShellHelpFormatter(argparse.HelpFormatter):
+    def _format_usage(self, usage, actions, groups, prefix=None):
+        return super()._format_usage(usage, actions, groups, prefix or 'Usage: ')
+
+
+class ShellArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('formatter_class', ShellHelpFormatter)
+        super().__init__(*args, **kwargs)
+
 
 def python_parser(name):
     spec = importlib.util.spec_from_file_location('agentoo_' + name, HERE / (name + '.py'))
@@ -38,7 +66,9 @@ def python_parser(name):
 def parser_for(name):
     if name in ('fonts', 'power'):
         return python_parser(name)
-    parser = argparse.ArgumentParser(prog='agentoo ' + name)
+    parser = ShellArgumentParser(prog='agentoo ' + name, usage=USAGE.get(name))
+    if name == 'checkpoint':
+        parser.usage = CHECKPOINT_USAGE['create']
     if name == 'permissions':
         operation = parser.add_argument('operation', choices=['check', 'fix'])
         operation.completion = 'commands'
@@ -46,14 +76,14 @@ def parser_for(name):
             'check': 'Report ownership and permission mismatches',
             'fix': 'Restore declared ownership and permissions',
         }
-        parser.add_argument('--root', help='Mounted target root').completion = 'directories'
+        parser.add_argument('--root', metavar='PATH', help='Mounted target root').completion = 'directories'
     elif name == 'backlight':
         parser.add_argument('direction', choices=['up', 'down'])
         parser.add_argument('controller', nargs='?').completion = 'controllers'
     elif name == 'screenshot':
         parser.add_argument('capture', choices=['full', 'region'])
     elif name in ('checkpoint', 'secrets'):
-        sub = parser.add_subparsers(dest='operation', required=True)
+        sub = parser.add_subparsers(dest='operation', required=True, prog=parser.prog)
         operations = ('create', 'list', 'inspect', 'restore') if name == 'checkpoint' else ('install',)
         for operation in operations:
             descriptions = {
@@ -65,14 +95,17 @@ def parser_for(name):
             }
             child = sub.add_parser(operation, help=descriptions[operation])
             if name == 'secrets':
-                child.add_argument('--profile', required=True).completion = 'files'
-                child.add_argument('--user', required=True).completion = 'users'
-                child.add_argument('category', nargs='+').completion = 'categories'
+                child.usage = USAGE['secrets']
+                child.add_argument('--profile', required=True, metavar='FILE').completion = 'files'
+                child.add_argument('--user', required=True, metavar='USER').completion = 'users'
+                child.add_argument('category', nargs='+', metavar='CATEGORY').completion = 'categories'
                 continue
+            child.usage = CHECKPOINT_USAGE[operation]
             if operation != 'list':
-                child.add_argument('name', help='Checkpoint label or name')
+                child.add_argument('name', metavar='LABEL' if operation == 'create' else 'NAME',
+                                   help='Checkpoint label or name')
             child.add_argument('--device', help='Btrfs device').completion = 'files'
-            child.add_argument('--efi-mount', help='EFI mountpoint').completion = 'directories'
+            child.add_argument('--efi-mount', metavar='PATH', help='EFI mountpoint').completion = 'directories'
             if operation in ('create', 'restore'):
                 for component in ('system', 'home', 'efi'):
                     group = child.add_mutually_exclusive_group()
@@ -89,6 +122,13 @@ def emit(kind, value='', description='', display=''):
     def clean(text):
         return str(text or '').replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
     print('\t'.join(map(clean, (kind, value, description, display))))
+
+
+def emit_usage(parser):
+    # argparse may wrap usage over several physical lines. Keep its full syntax
+    # in one logical line, using the same parser as help without parsing or running.
+    usage = ' '.join(parser.format_usage().split())
+    emit('usage', usage)
 
 
 def values_for(action, supplied):
@@ -133,6 +173,7 @@ def values_for(action, supplied):
 def complete(current, words):
     previous = words[:current - 1]
     if not previous or previous == ['help']:
+        emit_usage(ShellArgumentParser(prog='agentoo', usage=USAGE['agentoo']))
         for name, description in COMMANDS.items():
             emit('command', name, description)
         if not previous:
@@ -141,6 +182,8 @@ def complete(current, words):
         return
     name, *tokens = previous
     if name == 'git':
+        emit_usage(ShellArgumentParser(
+            prog='agentoo git', usage=USAGE['git']))
         if not tokens:
             emit('command', 'setup-hooks', 'Enable permission hooks')
             emit('command', 'enable-write', 'Switch origin to SSH')
@@ -185,6 +228,7 @@ def complete(current, words):
             seen = set()
         elif action.nargs not in ('*', '+'):
             position += 1
+    emit_usage(parser)
     if pending is not None:
         values_for(pending, supplied)
         return
@@ -227,6 +271,8 @@ def main():
     elif mode == 'commands':
         for name, description in COMMANDS.items():
             print(f'  {name:<12} {description}')
+    elif mode == 'usage':
+        print('Usage: ' + USAGE[args[0]])
 
 
 if __name__ == '__main__':
