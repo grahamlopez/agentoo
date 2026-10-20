@@ -1,6 +1,6 @@
 -- Run with: lua usr/local/share/agentoo/tests/test_hypr_lid.lua [lid.lua path]
 local source = arg[1] or "etc/xdg/hypr/lid.lua"
-local function session(state, monitors)
+local function session(state, monitors, connectors)
     local env = { binds = {}, events = {}, timers = {}, changes = {}, reloads = 0 }
     env.state = state
     env.monitors = monitors
@@ -39,8 +39,11 @@ local function session(state, monitors)
         return timer
     end
     local context = setmetatable({ hl = api, io = {
-        popen = function()
-            return { read = function() return env.state end, close = function() end }
+        popen = function(command)
+            return { read = function()
+                if command:match("^ls %-d /sys/class/drm/") then return connectors or "" end
+                return env.state
+            end, close = function() end }
         end,
     } }, { __index = _G })
     local chunk = assert(loadfile(source, "t", context))
@@ -69,6 +72,22 @@ local function outputs(...)
     for _, name in ipairs({ ... }) do result[#result + 1] = { name = name } end
     return result
 end
+
+-- Reload with an already-disabled panel must reinstall its rule immediately,
+-- even though the active monitor list contains only the external display.
+local reloaded = session("state: closed", outputs("DP-4"), "/sys/class/drm/card0-eDP-1\n")
+assert(#reloaded.changes == 1 and reloaded.changes[1] == "eDP-1")
+assert(reloaded.reloads == 0)
+reloaded.events["config.reloaded"](); reloaded.flush()
+assert(#reloaded.changes == 1 and reloaded.reloads == 0)
+reloaded.open()
+assert(reloaded.reloads == 1)
+
+-- Unplugging the external display after that reload restores the panel.
+local unplugged = session("state: closed", outputs("DP-4"), "/sys/class/drm/card0-eDP-1\n")
+unplugged.monitors = outputs()
+unplugged.events["monitor.removed"](); unplugged.flush()
+assert(unplugged.reloads == 1)
 
 -- Undocked close leaves the only output alone; suspend remains logind's job.
 local undocked = session("state: open", outputs("eDP-1"))

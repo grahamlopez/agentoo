@@ -1,6 +1,5 @@
 -- Shared defaults for Hyprland 0.56.2. No host-specific workarounds.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
-require("/etc/xdg/hypr/lid.lua")
 
 -- Restore personal wallpaper once per session, never on config reload.
 hl.on("hyprland.start", function()

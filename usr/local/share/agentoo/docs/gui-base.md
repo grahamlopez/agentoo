@@ -397,6 +397,11 @@ Keep per-display compositor scaling as the default for mixed-density displays.
 `switch:off:Lid Switch` and reconciles monitor hotplug, session startup, and
 configuration reloads. Each reconciliation re-reads physical ACPI lid state;
 if it is unavailable, the latest switch event remains authoritative.
+During configuration loading, after host and personal settings, the handler
+reinstalls closed-lid disable rules before Hyprland applies monitor changes.
+It also discovers internal connector names through DRM sysfs because disabled
+panels are absent from the active monitor list. Appearance-setting reloads
+therefore keep a docked, closed panel off instead of briefly enabling it.
 Closing the lid with an active external output disables
 the internal eDP/LVDS/DSI outputs; Hyprland moves their workspaces to remaining
 outputs. Opening the lid reloads the configured rules to restore internal

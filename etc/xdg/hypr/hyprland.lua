@@ -34,6 +34,10 @@ if not config_home or config_home:sub(1, 1) ~= "/" then
 end
 include_optional(config_home .. "/hypr/agentoo-local.lua")
 
+-- Keep closed panels disabled before reload applies monitor rules, including
+-- host/personal rules. Do not briefly enable them during appearance changes.
+require("/etc/xdg/hypr/lid.lua")
+
 -- Apply remembered appearance overrides after authored defaults. Reloading with
 -- no saved overrides exposes those defaults again, including personal rules.
 require("/etc/xdg/hypr/transparency.lua")
