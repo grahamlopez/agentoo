@@ -38,59 +38,39 @@ def integer(value, name):
 
 
 def add_parser(commands):
-    parser = commands.add_parser('blur', help='Show or adjust window background blur',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Show or adjust window background blur.\n\n'
-                    'All options are optional. Without options, show current settings.\n\n'
-                    'Blur is off by default. To enable it, set --focused on and/or\n'
-                    '--unfocused on. Changing --size or --passes alone does not enable blur.\n\n'
-                    'Examples:\n'
-                    '  agentoo desktop blur\n'
-                    '  agentoo desktop blur --focused on --unfocused on\n'
-                    '  agentoo desktop blur --focused on --unfocused on --size 3 --passes 1\n\n'
-                    'Changes apply immediately and persist across desktop sessions.\n'
-                    'Blur does not change transparency.',
-        epilog='Focused and unfocused settings can be changed independently.\n'
-               'Omitted settings remain unchanged. Blur is off unless enabled.\n\n'
-               'Setting all clears category overrides for the supplied focus states.\n'
-               'Kitty/browser overrides take precedence over shared values.\n'
-               'Category reset restores inheritance; full reset removes all overrides,\n'
-               'including strength, and restores configured defaults.\n\n'
-               'Size/passes are global: use --window all. Changing strength does not\n'
-               'enable blur. Omitted strength values retain configured defaults.\n\n'
-               'Suggested economical starting point: size 3, passes 1.\n'
-               'Blur off provides the greatest power saving.\n'
-               'Panels, menus, notifications, and workspace-wide blur are not configured.\n'
-               'Applications must have transparent content and permit compositor blur.\n\n'
-               '--reset and --diagnose cannot accompany adjustment options.\n'
-               '--diagnose makes no changes and does not measure GPU power.\n'
-               'Troubleshooting: /usr/local/share/agentoo/docs/gui-base.md#window-blur\n\n'
-               'More examples:\n'
-               '  agentoo desktop blur --focused on --unfocused off\n'
-               '  agentoo desktop blur --window browser --focused off --unfocused off\n'
-               '  agentoo desktop blur --diagnose\n'
-               '  agentoo desktop blur --reset\n\n'
-               'Exit 0: success; 1: operational failure; 2: invalid arguments.')
-    parser.add_argument('--window', choices=GROUPS, default='all', help='Windows to show or adjust (default: all)')
+    feature = commands.add_parser('blur', help='Show or change window background blur',
+        description='Without an action, show current blur settings. Blur is off by default.',
+        epilog='Blur does not change transparency. Applications must have transparent content and permit compositor blur. '
+               'Troubleshooting: /usr/local/share/agentoo/docs/gui-base.md#window-blur')
+    from desktop_state import file_option, window_option
+    window_option(feature)
+    feature.add_argument('--diagnose', action='store_true',
+                         help='Show version, renderer/GPU, settings, compatibility and conflicts; makes no changes')
+    actions = feature.add_subparsers(dest='action')
+    parser = actions.add_parser('set', help='Apply and remember blur settings',
+        description='Apply and remember blur settings. Omitted settings stay unchanged.',
+        epilog='Changing strength alone does not enable blur. Size/passes require --window all. '
+               'Setting all clears category overrides for supplied focus states; category overrides take precedence. '
+               'An economical starting point is size 3, passes 1. Blur off saves the most power. '
+               'Supply at least one adjustment or --file; --file cannot accompany adjustments '
+               'or a kitty/browser window category.')
+    window_option(parser, child=True)
     parser.add_argument('--focused', choices=('on', 'off'), help='Enable or disable blur for focused windows')
     parser.add_argument('--unfocused', choices=('on', 'off'), help='Enable or disable blur for unfocused windows')
-    parser.add_argument('--size', type=size, metavar='PIXELS', help='Shared blur size, from 1 to 40; does not enable blur')
-    parser.add_argument('--passes', type=passes, metavar='COUNT', help='Shared blur passes, from 1 to 10; does not enable blur')
-    actions = parser.add_mutually_exclusive_group()
-    actions.add_argument('--reset', action='store_true', help='Remove selected overrides')
-    actions.add_argument('--diagnose', action='store_true', help='Show version, renderer/GPU, settings, compatibility, and conflicts')
-    from desktop_state import file_option
-    file_option(parser, child=True)
-    return parser
+    parser.add_argument('--size', type=size, metavar='PIXELS', help='Shared blur size, 1–40; does not enable blur')
+    parser.add_argument('--passes', type=passes, metavar='COUNT', help='Shared blur passes, 1–10; does not enable blur')
+    file_option(parser)
+    clear = actions.add_parser('clear', help='Remove saved blur overrides',
+        description='Remove saved blur overrides and apply configured defaults. '
+                    'Clearing kitty/browser restores inheritance; all clears every override, including strength.')
+    window_option(clear, child=True)
+    return feature
 
 
 def validate(args, parser):
-    adjustments = any(getattr(args, name) is not None for name in (*STATES, 'size', 'passes'))
-    from desktop_state import check_file_args
-    check_file_args(args, parser, adjustments)
-    if (args.reset or args.diagnose) and adjustments:
-        parser.error('--reset and --diagnose cannot be combined with adjustment options')
-    if args.window != 'all' and (args.size is not None or args.passes is not None):
+    if args.diagnose and args.action is not None:
+        parser.error('--diagnose cannot be combined with an action')
+    if args.action == 'set' and args.window != 'all' and (args.size is not None or args.passes is not None):
         parser.error('--size and --passes apply globally; use --window all')
 
 
@@ -126,24 +106,19 @@ def revision(data):
 
 
 def adjusted(data, args):
-    if args.reset and args.window == 'all':
-        return {}
     data = {key: dict(values) for key, values in data.items()}
-    if args.reset:
-        data.pop(args.window, None)
-    else:
-        for focus in STATES:
-            value = getattr(args, focus)
-            if value is None:
-                continue
-            data.setdefault(args.window, {})[focus] = value == 'on'
-            if args.window == 'all':
-                for group in ('kitty', 'browser'):
-                    data.get(group, {}).pop(focus, None)
-        for name in LIMITS:
-            value = getattr(args, name)
-            if value is not None:
-                data.setdefault('strength', {})[name] = value
+    for focus in STATES:
+        value = getattr(args, focus)
+        if value is None:
+            continue
+        data.setdefault(args.window, {})[focus] = value == 'on'
+        if args.window == 'all':
+            for group in ('kitty', 'browser'):
+                data.get(group, {}).pop(focus, None)
+    for name in LIMITS:
+        value = getattr(args, name)
+        if value is not None:
+            data.setdefault('strength', {})[name] = value
     return {key: values for key, values in data.items() if values}
 
 
@@ -310,25 +285,13 @@ def reload_saved(data):
         time.sleep(min(0.05, remaining()))
 
 
-def save(args, directory, atomic_write):
-    from desktop_state import update
-    args.command = 'blur'
-    return update(args, directory, atomic_write)
-
-
-def run(args, directory, atomic_write):
-    path = directory / 'appearance.json'
-    if args.diagnose:
-        return diagnose(path, args.window)
-    if args.reset or getattr(args, 'appearance_file', None) is not None or any(getattr(args, name) is not None for name in (*STATES, *LIMITS)):
-        return save(args, directory, atomic_write)
-
+def query(path, window):
     data = read_state(path)
     try:
         report = live_report()
     except RuntimeError:
         report = None
-    show(data, args.window, report)
+    show(data, window, report)
     for location in conflicts():
         print(f'agentoo desktop: warning: blur rule may conflict: {location}', file=sys.stderr)
     return 0

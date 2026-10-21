@@ -52,10 +52,16 @@ def section(name, path=None):
     return read(path).get(name, {})
 
 
-def file_option(parser, *, child=False):
+def file_option(parser, *, required=False):
     parser.add_argument('--file', dest='appearance_file', metavar='FILE',
-                        default=argparse.SUPPRESS if child else None,
+                        required=required,
                         help='Apply and remember supplied appearance settings from JSON; omitted settings stay unchanged').completion = 'files'
+
+
+def window_option(parser, *, child=False):
+    parser.add_argument('--window', choices=('all', 'kitty', 'browser'),
+                        default=argparse.SUPPRESS if child else 'all',
+                        help='Window category (default: all)')
 
 
 def imported(path, command=None):
@@ -65,13 +71,6 @@ def imported(path, command=None):
             raise RuntimeError(f'Appearance file {path} has no {command} section')
         data = {command: data[command]}
     return validate_sections(data, partial=True)
-
-
-def check_file_args(args, parser, adjustments=False):
-    if getattr(args, 'appearance_file', None) is None:
-        return
-    if adjustments or getattr(args, 'reset', False) or getattr(args, 'diagnose', False) or getattr(args, 'window', 'all') != 'all':
-        parser.error('--file cannot be combined with adjustments, --reset, --diagnose, or a window category')
 
 
 def merged(previous, patch):
@@ -97,20 +96,24 @@ def update(args, directory, write=atomic_write, parser=None):
     command = getattr(args, 'command', None)
     file = getattr(args, 'appearance_file', None)
     patch = imported(file, command) if file is not None else None
-    changed = set(patch) if patch is not None else {command}
+    if patch is not None:
+        changed = set(patch)
+    else:
+        changed = set(SECTIONS) if command is None else {command}
     if not changed:
         raise RuntimeError('Appearance file contains no settings to apply')
-    reset = getattr(args, 'reset', False)
+    clearing = args.action == 'clear'
+    values = effects.validate(args, parser) if not clearing and file is None and command in effects.COMMANDS else None
     if 'transparency' in changed:
-        transparency.require_integration(recover=reset and args.window == 'all')
-        if not reset and transparency.conflicts():
+        transparency.require_integration(recover=clearing and args.window == 'all')
+        if not clearing and transparency.conflicts():
             raise RuntimeError('Conflicting transparency rules; edit them before adjusting')
     if 'blur' in changed:
-        blur.require_integration(recover=reset and args.window == 'all')
+        blur.require_integration(recover=clearing and args.window == 'all')
     if changed & set(effects.COMMANDS):
         if not os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
             raise RuntimeError('A running Hyprland session is required to change desktop effects')
-        if not reset and effects.hyprctl('repl', 'return agentoo_effects_report and "ready" or "missing"') != 'ready':
+        if not clearing and effects.hyprctl('repl', 'return agentoo_effects_report and "ready" or "missing"') != 'ready':
             raise RuntimeError('Load the shared Agentoo effects.lua integration before changing effects')
     path = directory / 'appearance.json'
     previous_umask = os.umask(0o077)
@@ -120,18 +123,22 @@ def update(args, directory, write=atomic_write, parser=None):
             fcntl.flock(lock, fcntl.LOCK_EX)
             original = path.read_bytes() if path.exists() else None
             data = read(path)
-            if patch is not None:
+            if clearing:
+                if command is None:
+                    data = {}
+                elif command in ('blur', 'transparency') and args.window != 'all':
+                    values = validate_sections({command: data.get(command, {})})[command]
+                    data[command] = {group: fields for group, fields in values.items() if group != args.window}
+                else:
+                    data.pop(command, None)
+            elif patch is not None:
                 data = merged(data, patch)
             elif command == 'blur':
-                old = {} if reset and args.window == 'all' else blur.validate_data(data.get(command, {}))
-                data[command] = blur.adjusted(old, args)
+                data[command] = blur.adjusted(blur.validate_data(data.get(command, {})), args)
             elif command == 'transparency':
-                old = {} if reset and args.window == 'all' else transparency.validate_data(data.get(command, {}))
-                data[command] = transparency.adjusted(old, args.window, args.focused, args.unfocused, reset)
-            elif reset:
-                data.pop(command, None)
+                data[command] = transparency.adjusted(transparency.validate_data(data.get(command, {})),
+                                                      args.window, args.focused, args.unfocused)
             else:
-                values = effects.validate(args, parser)
                 if command == 'animations':
                     data[command] = effects.animation_update(data.get(command, {}), values)
                 else:
@@ -169,8 +176,9 @@ def update(args, directory, write=atomic_write, parser=None):
                 raise
     finally:
         os.umask(previous_umask)
-    message = 'Appearance updated.' if file is not None else f'{command.capitalize()} ' + ('overrides reset.' if reset else 'updated.')
-    if command == 'blur' and file is None and not reset and args.focused is None and args.unfocused is None:
+    subject = command.capitalize() if command else 'Appearance'
+    message = f'{subject} ' + ('overrides cleared.' if clearing else 'updated.')
+    if command == 'blur' and file is None and not clearing and args.focused is None and args.unfocused is None:
         message = 'Blur strength saved.'
         if report and report['option.enabled'] == 'off':
             message += ' Blur remains off; enable it with --focused on and/or --unfocused on.'

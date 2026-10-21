@@ -64,7 +64,7 @@ class DesktopStateTest(unittest.TestCase):
                           'transparency': {'kitty': {'unfocused': 10}},
                           'animations': {'windows': 'popin', 'window_size': 80}})
         with patch.object(effects, 'reload_settings') as reload, patch.object(desktop, 'atomic_write', wraps=desktop.atomic_write) as write:
-            self.apply('--file', str(self.file))
+            self.apply('set', '--file', str(self.file))
         self.assertEqual(write.call_count, 1)
         self.assertEqual(reload.call_count, 1)
         data = state.read(self.path)
@@ -77,16 +77,16 @@ class DesktopStateTest(unittest.TestCase):
     def test_blur_import_uses_one_reload_for_entire_file(self):
         self.save_import({'blur': {'all': {'focused': True}, 'strength': {'size': 3}}, 'gaps': {'outer': 10}})
         with patch.object(blur, 'reload_saved') as reload, patch.object(effects, 'reload_settings') as general:
-            self.apply('--file', str(self.file))
+            self.apply('set', '--file', str(self.file))
         reload.assert_called_once_with({'all': {'focused': True}, 'strength': {'size': 3}})
         general.assert_not_called()
 
     def test_subcommand_reads_only_its_section_and_missing_section_is_an_error(self):
         self.save_import({'borders': {'width': 3}, 'gaps': {'typo': 10}})
-        self.apply('borders', '--file', str(self.file))
+        self.apply('borders', 'set', '--file', str(self.file))
         self.assertEqual(state.read(self.path), {'borders': {'width': 3}})
         with self.assertRaisesRegex(RuntimeError, 'no corners section'):
-            self.apply('corners', '--file', str(self.file))
+            self.apply('corners', 'set', '--file', str(self.file))
 
     def test_validation_happens_before_any_write_or_reload(self):
         for data in ({'gaps': {'inner': 4}, 'borders': {'typo': 2}}, {'wallpaper': 'image.png'},
@@ -94,7 +94,7 @@ class DesktopStateTest(unittest.TestCase):
                      {'shadows': {'opacity': True}}, {'corners': {'radius': []}}):
             self.save_import(data)
             with self.subTest(data=data), patch.object(effects, 'reload_settings') as reload, self.assertRaises(RuntimeError):
-                self.apply('--file', str(self.file))
+                self.apply('set', '--file', str(self.file))
             reload.assert_not_called()
             self.assertFalse(self.path.exists())
 
@@ -105,12 +105,12 @@ class DesktopStateTest(unittest.TestCase):
 
     def test_partial_import_preserves_animation_parameters_and_drops_incompatible_ones(self):
         self.save_import({'animations': {'windows': 'popin', 'window_size': 80}})
-        self.apply('--file', str(self.file))
+        self.apply('set', '--file', str(self.file))
         self.save_import({'animations': {'enabled': 'on'}})
-        self.apply('--file', str(self.file))
+        self.apply('set', '--file', str(self.file))
         self.assertEqual(state.read(self.path)['animations'], {'enabled': 'on', 'windows': 'popin', 'window_size': 80})
         self.save_import({'animations': {'windows': 'slide'}})
-        self.apply('--file', str(self.file))
+        self.apply('set', '--file', str(self.file))
         self.assertEqual(state.read(self.path)['animations'], {'enabled': 'on', 'windows': 'slide'})
 
     def test_failed_apply_restores_all_sections_and_leaves_import_untouched(self):
@@ -120,7 +120,7 @@ class DesktopStateTest(unittest.TestCase):
         self.save_import({'gaps': {'outer': 8}, 'borders': {'width': 4}})
         imported = self.file.read_bytes()
         with patch.object(effects, 'reload_settings', side_effect=[RuntimeError('bad reload'), None]), self.assertRaisesRegex(RuntimeError, 'bad reload'):
-            self.apply('--file', str(self.file))
+            self.apply('set', '--file', str(self.file))
         self.assertEqual(self.path.read_bytes(), original)
         self.assertEqual(self.file.read_bytes(), imported)
 
@@ -129,13 +129,69 @@ class DesktopStateTest(unittest.TestCase):
         env = dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE='', XDG_STATE_HOME=str(self.root))
         for command in state.SECTIONS:
             for extra in (['--reset'], ['--focused', 'on'] if command == 'blur' else ['--focused', '5'] if command == 'transparency' else ['--enabled', 'on'] if command in ('animations', 'shadows', 'dimming') else ['--width', '2'] if command == 'borders' else ['--radius', '2'] if command == 'corners' else ['--inner', '2']):
-                result = subprocess.run([str(entry), 'desktop', command, '--file', str(self.file), *extra], env=env, text=True, capture_output=True)
+                result = subprocess.run([str(entry), 'desktop', command, 'set', '--file', str(self.file), *extra], env=env, text=True, capture_output=True)
                 self.assertEqual(result.returncode, 2, result.stderr)
-            result = subprocess.run([str(entry), '__complete', '4', 'desktop', command, '--file', ''], env=env, text=True, capture_output=True)
+            result = subprocess.run([str(entry), '__complete', '5', 'desktop', command, 'set', '--file', ''], env=env, text=True, capture_output=True)
             self.assertIn('files\t', result.stdout)
-        result = subprocess.run([str(entry), 'desktop', '--file', '--help'], env=env, text=True, capture_output=True)
+        result = subprocess.run([str(entry), 'desktop', 'set', '--file', '--help'], env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('--file FILE', result.stdout)
+        self.assertFalse(self.directory.exists())
+
+    def run_desktop(self, *tokens):
+        with patch.object(sys, 'argv', ['agentoo-desktop', *tokens]), contextlib.redirect_stderr(io.StringIO()):
+            return desktop.main()
+
+    def test_public_set_and_scoped_clear_preserve_other_preferences(self):
+        self.run_desktop('gaps', 'set', '--inner', '6', '--outer', '10')
+        self.run_desktop('transparency', 'set', '--focused', '5')
+        self.run_desktop('transparency', 'set', '--window', 'browser', '--unfocused', '20')
+        self.run_desktop('transparency', 'clear', '--window', 'browser')
+        self.assertEqual(state.read(self.path), {
+            'gaps': {'inner': 6, 'outer': 10}, 'transparency': {'all': {'focused': 5}}})
+        self.run_desktop('gaps', 'clear')
+        self.assertNotIn('gaps', state.read(self.path))
+        self.assertEqual(state.read(self.path)['transparency'], {'all': {'focused': 5}})
+
+    def test_public_top_level_set_and_clear_include_wallpaper_only_when_clearing(self):
+        self.directory.mkdir()
+        wallpaper = self.directory / 'wallpaper'
+        wallpaper.write_text('/remembered/image.png\n')
+        self.save_import({'gaps': {'inner': 6}, 'blur': {'strength': {'size': 3}}})
+        self.run_desktop('set', '--file', str(self.file))
+        self.assertEqual(wallpaper.read_text(), '/remembered/image.png\n')
+        with patch.dict(os.environ, XDG_RUNTIME_DIR=str(self.root / 'runtime')):
+            self.assertEqual(self.run_desktop('clear'), 0)
+            self.assertEqual(state.read(self.path), {})
+            self.assertFalse(wallpaper.exists())
+            self.assertEqual(self.run_desktop('clear'), 0)
+
+    def test_failed_aggregate_clear_rolls_back_appearance_and_keeps_wallpaper(self):
+        self.directory.mkdir()
+        original = '{"gaps": {"inner": 6}}\n'
+        self.path.write_text(original)
+        wallpaper = self.directory / 'wallpaper'
+        wallpaper.write_text('/remembered/image.png\n')
+        with patch.object(blur, 'reload_saved', side_effect=RuntimeError('reload failed')):
+            with self.assertRaisesRegex(RuntimeError, 'reload failed'):
+                self.run_desktop('clear')
+        self.assertEqual(self.path.read_text(), original)
+        self.assertTrue(wallpaper.exists())
+
+    def test_removed_forms_empty_set_and_invalid_combinations_have_no_effects(self):
+        invalid = [('--file', 'appearance.json'), ('wallpaper', 'restore'),
+                   ('clear', '--file', 'appearance.json'), ('set',)]
+        for feature in state.SECTIONS:
+            invalid.extend([(feature, 'set'), (feature, '--reset'),
+                            (feature, 'restore'), (feature, 'clear', '--file', 'x')])
+        invalid.extend([('transparency', '--focused', '5'),
+                        ('blur', '--diagnose', 'clear'),
+                        ('blur', '--diagnose', 'set', '--focused', 'on'),
+                        ('blur', 'set', '--window', 'kitty', '--size', '3')])
+        for tokens in invalid:
+            with self.subTest(tokens=tokens), self.assertRaises(SystemExit) as error:
+                self.run_desktop(*tokens)
+            self.assertEqual(error.exception.code, 2)
         self.assertFalse(self.directory.exists())
 
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')

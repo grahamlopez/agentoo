@@ -1,6 +1,4 @@
 """Wallpaper command contracts with an isolated fake Wayland client."""
-import importlib.machinery
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -12,9 +10,8 @@ import unittest
 from unittest.mock import patch
 
 BIN = Path(__file__).resolve().parents[3] / 'bin'
-spec = importlib.util.spec_from_loader('desktop', importlib.machinery.SourceFileLoader('desktop', str(BIN / 'agentoo-desktop')))
-desktop = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(desktop)
+sys.path.insert(0, str(BIN.parent / 'share/agentoo'))
+import desktop_wallpaper as desktop
 
 
 class Wallpaper(unittest.TestCase):
@@ -46,6 +43,10 @@ class Wallpaper(unittest.TestCase):
         return subprocess.run([str(BIN / 'agentoo'), 'desktop', *args],
             env=dict(os.environ, **environment), capture_output=True, text=True, timeout=8)
 
+    def startup(self, **environment):
+        return subprocess.run([sys.executable, str(BIN.parent / 'share/agentoo/desktop_wallpaper.py')],
+            env=dict(os.environ, **environment), capture_output=True, text=True, timeout=8)
+
     def clear(self):
         self.command('wallpaper', 'clear')
 
@@ -54,8 +55,7 @@ class Wallpaper(unittest.TestCase):
 
     def test_help_and_completion_without_effects(self):
         for args in [(), ('--help',), ('wallpaper', '--help'),
-                     ('wallpaper', 'set', '--help'), ('wallpaper', 'clear', '--help'),
-                     ('wallpaper', 'restore', '--help')]:
+                     ('wallpaper', 'set', '--help'), ('wallpaper', 'clear', '--help')]:
             result = self.command(*args)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('usage:', result.stdout)
@@ -71,7 +71,7 @@ class Wallpaper(unittest.TestCase):
         self.assertEqual(result.stdout, '')
         self.assertEqual(self.command('wallpaper').stdout, str(self.image) + '\n')
         first = json.loads(self.record().read_text())
-        self.assertEqual(self.command('wallpaper', 'restore').returncode, 0)
+        self.assertEqual(self.startup().returncode, 0)
         second = json.loads(self.record().read_text())
         self.assertNotEqual(first['pid'], second['pid'])
         try:
@@ -100,14 +100,14 @@ class Wallpaper(unittest.TestCase):
         os.kill(json.loads(before)['pid'], 0)
 
     def test_missing_image_restore_and_no_session(self):
-        self.assertEqual(self.command('wallpaper', 'restore', WAYLAND_DISPLAY='').returncode, 0)
+        self.assertEqual(self.startup(WAYLAND_DISPLAY='').returncode, 0)
         self.assertFalse((self.root / 'state').exists())
         result = self.command('wallpaper', 'set', str(self.image), WAYLAND_DISPLAY='')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(self.command('wallpaper').stdout, '')
         self.assertEqual(self.command('wallpaper', 'set', str(self.image)).returncode, 0)
         self.image.unlink()
-        result = self.command('wallpaper', 'restore')
+        result = self.startup()
         self.assertEqual(result.returncode, 1)
         self.assertIn('warning', result.stderr)
         self.assertEqual(self.command('wallpaper').stdout, str(self.image) + '\n')

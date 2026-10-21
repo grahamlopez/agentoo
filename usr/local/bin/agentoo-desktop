@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
 """Manage personal desktop preferences."""
-import fcntl
 import argparse
-import hashlib
-import json
-import os
 from pathlib import Path
-import select
-import shutil
 import signal
-import subprocess
 import sys
 
 sys.dont_write_bytecode = True
@@ -19,54 +12,59 @@ from desktop_common import atomic_write
 
 
 def build_parser():
-    parser = ArgumentParser(prog='agentoo desktop', description=__doc__)
-    from desktop_state import file_option
-    file_option(parser)
+    parser = ArgumentParser(prog='agentoo desktop', description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Changes apply immediately and persist across sessions.\n'
+               'Run a feature without an action to show its current settings.\n'
+               'set --file applies appearance settings only; clear includes wallpaper.\n\n'
+               'Examples:\n'
+               '  agentoo desktop set --file appearance.json\n'
+               '  agentoo desktop transparency set --focused 5 --unfocused 10\n'
+               '  agentoo desktop blur clear --window kitty\n'
+               '  agentoo desktop clear\n\n'
+               'Exit 0: success; 1: operational failure; 2: invalid arguments.')
+    from desktop_state import file_option, window_option
+    parser.set_defaults(action=None, appearance_file=None, window='all')
     commands = parser.add_subparsers(dest='command', prog=parser.prog)
+    setter = commands.add_parser('set', help='Apply and remember appearance settings from JSON',
+        description='Apply and remember appearance settings. Omitted settings stay unchanged. Wallpaper is separate.')
+    setter.set_defaults(command=None, action='set')
+    file_option(setter, required=True)
+    clear = commands.add_parser('clear', help='Clear all desktop preferences, including wallpaper',
+        description='Remove all appearance overrides, apply configured defaults, and forget and stop the managed wallpaper.')
+    clear.set_defaults(command=None, action='clear')
     wallpaper = commands.add_parser('wallpaper', help='Show or change the static wallpaper',
         description='Print the remembered absolute image path; print nothing if none is selected.',
-        epilog='One image fills all monitors. Images stay in place. Collection: '
-               '/usr/local/share/agentoo/wallpapers/. Exit 0: success; 1: operational failure; 2: invalid arguments.')
+        epilog='One image fills all monitors. Images stay in place. Collection: /usr/local/share/agentoo/wallpapers/.')
     actions = wallpaper.add_subparsers(dest='action', prog=wallpaper.prog)
-    setter = actions.add_parser('set', help='Apply and remember an image')
-    setter.add_argument('file', metavar='FILE', help='Readable image file').completion = 'files'
-    actions.add_parser('clear', help='Forget the image and stop the managed wallpaper')
-    actions.add_parser('restore', help='Apply the remembered image at session startup')
-    transparency = commands.add_parser('transparency', help='Show or adjust window transparency',
+    image = actions.add_parser('set', help='Apply and remember an image')
+    image.add_argument('file', metavar='FILE', help='Readable image file').completion = 'files'
+    actions.add_parser('clear', help='Forget the image and stop the managed wallpaper',
+                       description='Forget the selected image and stop the managed wallpaper.')
+    transparency = commands.add_parser('transparency', help='Show or change window transparency',
+        description='Without an action, show current transparency settings.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Show or adjust window transparency.\n\n'
-                    'Changes apply immediately and persist across desktop sessions.\n'
-                    'Without --focused, --unfocused, or --reset, show current settings.\n'
-                    'Use --window to limit which settings are shown or adjusted.',
-        epilog='0 means fully opaque; 90 is the maximum transparency.\n'
-               '--focused and --unfocused can be set independently.\n'
-               'Supplying only one leaves the other unchanged.\n\n'
-               'The all group sets shared values and clears corresponding Kitty/browser\n'
-               'overrides. Kitty/browser overrides take precedence over shared values.\n'
-               'Resetting either group restores inheritance; resetting all removes every\n'
-               'override and restores configured defaults, including personal settings.\n\n'
-               'Kitty uses background-only transparency; other windows fade text too.\n'
-               'Browser includes Firefox- and Chromium-family windows. Floating windows,\n'
-               'dialogs, fullscreen windows, and the Kitty dropdown are included.\n'
-               'Panels, menus, and notifications are excluded.\n'
-               'Kitty processes started before integration was installed need a restart.\n\n'
-               'Examples:\n'
-               '  agentoo desktop transparency\n'
-               '  agentoo desktop transparency --focused 5 --unfocused 10\n'
-               '  agentoo desktop transparency --window kitty --unfocused 20\n'
-               '  agentoo desktop transparency --window browser --focused 0 --unfocused 0\n'
-               '  agentoo desktop transparency --window browser --reset\n'
-               '  agentoo desktop transparency --reset\n\n'
-               'Exit 0: success; 1: operational failure; 2: invalid arguments.')
-    transparency.add_argument('--window', choices=('all', 'kitty', 'browser'), default='all',
-                              help='Windows to show or adjust (default: all)')
+        epilog='Kitty uses background-only transparency; other windows fade text too.\n'
+               'Floating windows, dialogs, fullscreen windows and the Kitty dropdown are included.\n'
+               'Panels, menus and notifications are excluded.\n'
+               'Kitty processes started before integration was installed need a restart.')
+    window_option(transparency)
+    actions = transparency.add_subparsers(dest='action')
+    setter = actions.add_parser('set', help='Apply and remember transparency settings',
+        description='Apply and remember transparency. Omitted settings stay unchanged.',
+        epilog='0 means fully opaque. Setting all clears category overrides for supplied focus states. '
+               'Kitty/browser overrides take precedence over shared values. '
+               'Supply at least one adjustment or --file; --file cannot accompany adjustments '
+               'or a kitty/browser window category.')
+    window_option(setter, child=True)
     from desktop_transparency import percentage
-    transparency.add_argument('--focused', type=percentage, metavar='PERCENT',
-                              help='Focused-window transparency, from 0 to 90')
-    transparency.add_argument('--unfocused', type=percentage, metavar='PERCENT',
-                              help='Unfocused-window transparency, from 0 to 90')
-    transparency.add_argument('--reset', action='store_true', help='Remove selected overrides; cannot combine with adjustments')
-    file_option(transparency, child=True)
+    setter.add_argument('--focused', type=percentage, metavar='PERCENT', help='Focused-window transparency, 0–90')
+    setter.add_argument('--unfocused', type=percentage, metavar='PERCENT', help='Unfocused-window transparency, 0–90')
+    file_option(setter)
+    clear = actions.add_parser('clear', help='Remove saved transparency overrides',
+        description='Remove saved transparency overrides and apply configured defaults. '
+                    'Clearing kitty/browser restores inheritance; all clears shared and category overrides.')
+    window_option(clear, child=True)
     from desktop_blur import add_parser
     add_parser(commands)
     from desktop_effects import add_parsers
@@ -74,162 +72,44 @@ def build_parser():
     return parser
 
 
-def state_directory():
-    value = os.environ.get('XDG_STATE_HOME', '')
-    return (Path(value) if value and Path(value).is_absolute() else Path.home() / '.local/state') / 'agentoo'
-
-
-def selection(path):
-    try:
-        value = path.read_text().removesuffix('\n')
-    except FileNotFoundError:
-        return None
-    if not value or not Path(value).is_absolute() or '\n' in value or '\0' in value:
-        raise RuntimeError(f'Invalid wallpaper selection in {path}')
-    return value
-
-
-def process_identity(pid):
-    # Linux start time distinguishes a stale PID from a reused one. Open a pidfd
-    # before checking it, so a later signal cannot target a replacement process.
-    return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
-
-
-def stop_managed(saved):
-    try:
-        pid = saved['pid']
-        if not isinstance(pid, int) or pid <= 1:
-            return
-        descriptor = os.pidfd_open(pid)
-        try:
-            if process_identity(pid) == saved['start']:
-                signal.pidfd_send_signal(descriptor, signal.SIGTERM)
-                if not select.select([descriptor], [], [], 2)[0]:
-                    signal.pidfd_send_signal(descriptor, signal.SIGKILL)
-        finally:
-            os.close(descriptor)
-    except (FileNotFoundError, ProcessLookupError, ValueError, KeyError, TypeError):
-        pass
-
-
-def runtime_directory():
-    value = os.environ.get('XDG_RUNTIME_DIR', '')
-    if not value or not Path(value).is_absolute():
-        raise RuntimeError('XDG_RUNTIME_DIR must name the current user runtime directory')
-    directory = Path(value) / 'agentoo'
-    directory.mkdir(mode=0o700, exist_ok=True)
-    return directory
-
-
-def apply_image(image, runtime):
-    if not os.environ.get('WAYLAND_DISPLAY'):
-        raise RuntimeError('A running Wayland session is required')
-    executable = shutil.which('swaybg')
-    if not executable:
-        raise RuntimeError('Install @gui-desktop for swaybg')
-    image = Path(image).expanduser().absolute()
-    if '\n' in str(image) or '\0' in str(image):
-        raise RuntimeError('Image paths cannot contain newlines or NUL bytes')
-    if not image.is_file():
-        raise RuntimeError(f'Image is not a regular file: {image}')
-    with image.open('rb'):
-        pass
-    # Separate records for simultaneous Wayland sessions; no global pkill.
-    session = hashlib.sha256(os.environ['WAYLAND_DISPLAY'].encode()).hexdigest()[:16]
-    record = runtime / ('wallpaper-' + session + '.json')
-    log = runtime / ('wallpaper-' + session + '.log')
-    with log.open('w+') as errors:
-        child = subprocess.Popen([executable, '--image', str(image), '--mode', 'fill'],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
-            start_new_session=True)
-        try:
-            identity = process_identity(child.pid)
-            # swaybg has no readiness protocol. Catch immediate compositor and
-            # decoder failures, including decoder errors that do not exit.
-            try:
-                child.wait(timeout=0.5)
-            except subprocess.TimeoutExpired:
-                pass
-            errors.seek(0)
-            diagnostic = errors.read()
-            if child.poll() is not None or 'failed' in diagnostic.lower() or 'error' in diagnostic.lower():
-                raise RuntimeError('swaybg could not display the image: ' + diagnostic.strip())
-            old = json.loads(record.read_text()) if record.exists() else None
-            atomic_write(record, json.dumps({'pid': child.pid, 'start': identity}))
-            if old is not None:
-                stop_managed(old)
-        except BaseException:
-            if child.poll() is None:
-                child.terminate()
-                try:
-                    child.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait()
-            raise
-    return str(image)
-
-
 def main():
+    from desktop_state import update, state_path
+    import desktop_wallpaper as wallpaper
+    import desktop_blur as blur
+    import desktop_transparency as transparency
+    import desktop_effects as effects
+
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == 'wallpaper' and args.appearance_file is not None:
-        parser.error('--file is not supported for wallpaper')
-    if args.command is None and args.appearance_file is not None:
-        from desktop_state import update
-        return update(args, state_directory(), atomic_write, parser)
-    if args.command is None:
+    directory = state_path().parent
+    if args.command == 'wallpaper':
+        return wallpaper.run(args)
+    if args.command is None and args.action is None:
         parser.print_help()
         return 0
-    if args.command == 'transparency':
-        from desktop_transparency import run
-        from desktop_state import check_file_args
-        check_file_args(args, parser, args.focused is not None or args.unfocused is not None)
-        if args.reset and (args.focused is not None or args.unfocused is not None):
-            parser.error('--reset cannot be combined with --focused or --unfocused')
-        return run(args, state_directory(), atomic_write)
     if args.command == 'blur':
-        from desktop_blur import run, validate
-        validate(args, parser)
-        return run(args, state_directory(), atomic_write)
-    from desktop_effects import COMMANDS, run
-    if args.command in COMMANDS:
-        return run(args, state_directory(), atomic_write, parser)
-    state = state_directory()
-    saved = state / 'wallpaper'
+        blur.validate(args, parser)
+        if args.diagnose:
+            return blur.diagnose(directory / 'appearance.json', args.window)
     if args.action is None:
-        value = selection(saved)
-        if value is not None:
-            print(value)
+        if args.command == 'blur':
+            return blur.query(directory / 'appearance.json', args.window)
+        if args.command == 'transparency':
+            transparency.show(transparency.read_state(directory / 'appearance.json'), args.window)
+        else:
+            effects.show(effects.read_state(directory / 'appearance.json', selected=args.command), args.command)
         return 0
-    if args.action == 'restore' and selection(saved) is None:
-        return 0
-    os.umask(0o077)
-    state.mkdir(parents=True, exist_ok=True)
-    # One lock serializes selection updates and process replacement. Readers see
-    # an entire old or new selection through atomic replacement.
-    with (state / 'wallpaper.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        if args.action == 'clear':
-            value = os.environ.get('XDG_RUNTIME_DIR', '')
-            if value and Path(value).is_absolute():
-                runtime = Path(value) / 'agentoo'
-                for record in runtime.glob('wallpaper-*.json'):
-                    stop_managed(json.loads(record.read_text()))
-                    record.unlink(missing_ok=True)
-            saved.unlink(missing_ok=True)
-            print('Wallpaper selection cleared.', file=sys.stderr)
-            return 0
-        image = args.file if args.action == 'set' else selection(saved)
-        if image is None:
-            return 0
-        if args.action == 'restore' and not Path(image).is_file():
-            print(f'agentoo desktop: warning: remembered image is missing: {image}', file=sys.stderr)
-            return 1
-        applied = apply_image(image, runtime_directory())
-        if args.action == 'set':
-            atomic_write(saved, applied + '\n')
-            print(f'Wallpaper set: {applied}', file=sys.stderr)
+    if args.action == 'set' and args.command is not None:
+        values = {
+            key: value for key, value in vars(args).items()
+            if key not in ('command', 'action', 'window', 'diagnose', 'appearance_file') and value is not None}
+        if args.appearance_file is not None and (values or args.window != 'all'):
+            parser.error('--file cannot accompany adjustments or a kitty/browser window category')
+        if not values and args.appearance_file is None:
+            parser.error('set requires at least one adjustment or --file')
+    update(args, directory, atomic_write, parser)
+    if args.command is None and args.action == 'clear':
+        return wallpaper.run(args)
     return 0
 
 

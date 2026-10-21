@@ -53,20 +53,15 @@ def effective(data, group, focus):
     return data.get(group, {}).get(focus, data.get('all', {}).get(focus))
 
 
-def adjusted(data, group, focused=None, unfocused=None, reset=False):
+def adjusted(data, group, focused=None, unfocused=None):
     data = {key: dict(values) for key, values in data.items()}
-    if reset:
+    for focus, value in zip(STATES, (focused, unfocused)):
+        if value is None:
+            continue
+        data.setdefault(group, {})[focus] = value
         if group == 'all':
-            return {}
-        data.pop(group, None)
-    else:
-        for focus, value in zip(STATES, (focused, unfocused)):
-            if value is None:
-                continue
-            data.setdefault(group, {})[focus] = value
-            if group == 'all':
-                for child in ('kitty', 'browser'):
-                    data.get(child, {}).pop(focus, None)
+            for child in ('kitty', 'browser'):
+                data.get(child, {}).pop(focus, None)
     return {key: values for key, values in data.items() if values}
 
 
@@ -139,15 +134,6 @@ def show(data, selected):
     print('Kitty: background only. Other windows: whole window.')
     for location in conflicts():
         print(f'agentoo desktop: warning: transparency rule may conflict: {location}', file=sys.stderr)
-
-
-def run(args, directory, atomic_write):
-    if not args.reset and args.focused is None and args.unfocused is None and getattr(args, 'appearance_file', None) is None:
-        show(read_state(directory / 'appearance.json'), args.window)
-        return 0
-    from desktop_state import update
-    args.command = 'transparency'
-    return update(args, directory, atomic_write)
 
 
 def rules():

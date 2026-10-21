@@ -18,6 +18,7 @@ SHARE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SHARE))
 import desktop_transparency as transparency
 import desktop_effects as effects
+import desktop_state as state
 
 
 class Transparency(unittest.TestCase):
@@ -40,9 +41,6 @@ class Transparency(unittest.TestCase):
         self.assertEqual(transparency.effective(changed, 'kitty', 'focused'), 12)
         self.assertEqual(transparency.effective(changed, 'kitty', 'unfocused'), 30)
         self.assertEqual(original['kitty']['focused'], 0)
-        reset = transparency.adjusted(changed, 'kitty', reset=True)
-        self.assertEqual(transparency.effective(reset, 'kitty', 'unfocused'), 10)
-        self.assertEqual(transparency.adjusted(reset, 'all', reset=True), {})
 
     def test_cli_invalid_arguments_and_help_have_no_effects(self):
         entry = SHARE.parents[1] / 'bin/agentoo'
@@ -50,7 +48,7 @@ class Transparency(unittest.TestCase):
                              (['--focused', 'nan'], 2), (['--unfocused', 'inf'], 2),
                              (['--focus', '5'], 2), (['--reset', '--focused', '4'], 2),
                              (['--focused', 'invalid', '--help'], 0)]:
-            result = subprocess.run([str(entry), 'desktop', 'transparency', *args],
+            result = subprocess.run([str(entry), 'desktop', 'transparency', 'set', *args],
                                     text=True, capture_output=True)
             self.assertEqual(result.returncode, status, result.stderr)
         self.assertFalse(self.directory.exists())
@@ -83,7 +81,7 @@ class Transparency(unittest.TestCase):
                 transparency.read_state(path)
 
     def args(self, **values):
-        return argparse.Namespace(window='browser', focused=5, unfocused=None, reset=False, **values)
+        return argparse.Namespace(command='transparency', action='set', window='browser', focused=5, unfocused=None, **values)
 
     @staticmethod
     def write(path, value):
@@ -97,23 +95,23 @@ class Transparency(unittest.TestCase):
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings', side_effect=[RuntimeError('reload failed'), None]) as call:
             with self.assertRaisesRegex(RuntimeError, 'reload failed'):
-                transparency.run(self.args(), self.directory, self.write)
+                state.update(self.args(), self.directory, self.write)
         self.assertEqual(path.read_text(), original)
         self.assertEqual(call.call_count, 2)
 
     def test_successful_save_and_full_reset_recover_corrupt_state(self):
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings'):
-            transparency.run(self.args(), self.directory, lambda path, text: path.write_text(text))
+            state.update(self.args(), self.directory, lambda path, text: path.write_text(text))
         path = self.directory / 'appearance.json'
         self.assertEqual(json.loads(path.read_text()), {'transparency': {'browser': {'focused': 5}}})
         path.write_text(json.dumps({'transparency': {'bad': True}, 'gaps': {'inner': 4}}))
-        args = argparse.Namespace(window='all', focused=None, unfocused=None, reset=True)
+        args = argparse.Namespace(command='transparency', action='clear', window='all')
         with patch.object(transparency, 'require_integration') as require, \
              patch.object(effects, 'reload_settings'):
-            transparency.run(args, self.directory, lambda path, text: path.write_text(text))
+            state.update(args, self.directory, lambda path, text: path.write_text(text))
         require.assert_called_once_with(recover=True)
-        self.assertEqual(json.loads(path.read_text()), {'transparency': {}, 'gaps': {'inner': 4}})
+        self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
 
     def test_authored_rule_conflict_prevents_any_saved_change(self):
         folder = self.root / 'config/hypr'
@@ -123,7 +121,7 @@ class Transparency(unittest.TestCase):
         self.assertEqual(transparency.conflicts(), [str(rule) + ':2'])
         with patch.object(transparency, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting transparency rules'):
-                transparency.run(self.args(), self.directory, lambda path, text: path.write_text(text))
+                state.update(self.args(), self.directory, lambda path, text: path.write_text(text))
         self.assertFalse(self.directory.exists())
 
     def test_kitty_background_only_focus_live_changes_and_reset(self):

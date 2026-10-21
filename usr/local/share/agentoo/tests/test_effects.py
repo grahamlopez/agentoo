@@ -17,6 +17,7 @@ SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
 sys.path.insert(0, str(SHARE))
 import desktop_effects as effects
+import desktop_state as state
 
 spec = importlib.util.spec_from_loader('effects_desktop', importlib.machinery.SourceFileLoader(
     'effects_desktop', str(ROOT / 'usr/local/bin/agentoo-desktop')))
@@ -36,8 +37,10 @@ class EffectsTest(unittest.TestCase):
         return self.parser.parse_args(tokens)
 
     def run_effect(self, *tokens):
-        with contextlib.redirect_stderr(io.StringIO()):
-            return effects.run(self.args(*tokens), self.directory, desktop.atomic_write, self.parser)
+        with contextlib.redirect_stderr(io.StringIO()), \
+             patch.object(sys, 'argv', ['agentoo-desktop', *tokens]), \
+             patch.object(state, 'state_path', return_value=self.directory / 'appearance.json'):
+            return desktop.main()
 
     def test_help_completion_and_input_validation_need_no_session(self):
         env = dict(os.environ, XDG_STATE_HOME=str(self.root), HYPRLAND_INSTANCE_SIGNATURE='')
@@ -47,17 +50,17 @@ class EffectsTest(unittest.TestCase):
                                     env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
         for flag, choices in (('--windows', effects.WINDOW_STYLES), ('--workspaces', effects.WORKSPACE_STYLES)):
-            result = subprocess.run([str(entry), '__complete', '4', 'desktop', 'animations', flag, ''],
+            result = subprocess.run([str(entry), '__complete', '5', 'desktop', 'animations', 'set', flag, ''],
                                     env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             for choice in choices:
                 self.assertIn('candidate\t' + choice + '\t', result.stdout)
-        for tokens in [('corners', '--radius', '21'), ('gaps', '--inner', '-1'),
-                       ('borders', '--width', '1.5'), ('shadows', '--opacity', 'nan'),
-                       ('borders', '--focused', '#bad'), ('shadows', '--color', '#000000ff'),
-                       ('animations', '--duration', '0'), ('animations', '--window-size', '80'),
-                       ('animations', '--workspaces', 'fade', '--workspace-distance', '30'),
-                       ('corners', '--radius', '3', '--reset')]:
+        for tokens in [('corners', 'set', '--radius', '21'), ('gaps', 'set', '--inner', '-1'),
+                       ('borders', 'set', '--width', '1.5'), ('shadows', 'set', '--opacity', 'nan'),
+                       ('borders', 'set', '--focused', '#bad'), ('shadows', 'set', '--color', '#000000ff'),
+                       ('animations', 'set', '--duration', '0'), ('animations', 'set', '--window-size', '80'),
+                       ('animations', 'set', '--workspaces', 'fade', '--workspace-distance', '30'),
+                       ('corners', 'set', '--radius', '3', '--reset')]:
             with self.subTest(tokens=tokens), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                 effects.validate(self.args(*tokens), self.parser)
             self.assertEqual(error.exception.code, 2)
@@ -72,18 +75,18 @@ class EffectsTest(unittest.TestCase):
                 effects.gradient(value)
         for value in ('-1', '361', 'nan'):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                self.args('borders', '--focused-angle', value)
+                self.args('borders', 'set', '--focused-angle', value)
         with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE='test'), \
              patch.object(effects, 'hyprctl', return_value='ready'), patch.object(effects, 'reload_settings'):
-            self.run_effect('borders', '--focused', '#abcdef,#12345680', '--unfocused', '#654321')
-            self.run_effect('borders', '--focused-angle', '45.5')
-            self.run_effect('borders', '--unfocused-angle', '0')
+            self.run_effect('borders', 'set', '--focused', '#abcdef,#12345680', '--unfocused', '#654321')
+            self.run_effect('borders', 'set', '--focused-angle', '45.5')
+            self.run_effect('borders', 'set', '--unfocused-angle', '0')
             self.assertEqual(effects.read_state(self.directory / 'appearance.json')['borders'], {
                 'focused': '#abcdef,#12345680', 'unfocused': '#654321',
                 'focused_angle': 45.5, 'unfocused_angle': 0})
-            self.run_effect('borders', '--focused', '#000000')
+            self.run_effect('borders', 'set', '--focused', '#000000')
             self.assertEqual(effects.read_state(self.directory / 'appearance.json')['borders']['focused_angle'], 45.5)
-            self.run_effect('borders', '--reset')
+            self.run_effect('borders', 'clear')
             self.assertEqual(json.loads((self.directory / 'appearance.json').read_text()), {})
 
     def test_query_creates_no_state_and_does_not_guess_defaults(self):
@@ -95,19 +98,19 @@ class EffectsTest(unittest.TestCase):
     def test_independent_updates_reset_and_failed_reload(self):
         with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE='test'), \
              patch.object(effects, 'hyprctl', return_value='ready'), patch.object(effects, 'reload_settings'):
-            self.run_effect('corners', '--radius', '8')
-            self.run_effect('corners', '--power', '4')
-            self.run_effect('shadows', '--size', '12')
+            self.run_effect('corners', 'set', '--radius', '8')
+            self.run_effect('corners', 'set', '--power', '4')
+            self.run_effect('shadows', 'set', '--size', '12')
             data = effects.read_state(self.directory / 'appearance.json')
             self.assertEqual(data['corners'], {'radius': 8, 'power': 4})
             self.assertEqual(data['shadows'], {'size': 12})
             original = (self.directory / 'appearance.json').read_bytes()
             with patch.object(effects, 'reload_settings', side_effect=[RuntimeError('bad config'), None]), self.assertRaises(RuntimeError):
-                self.run_effect('corners', '--radius', '10')
+                self.run_effect('corners', 'set', '--radius', '10')
             self.assertEqual((self.directory / 'appearance.json').read_bytes(), original)
-            self.run_effect('corners', '--reset')
+            self.run_effect('corners', 'clear')
             self.assertEqual(effects.read_state(self.directory / 'appearance.json'), {'shadows': {'size': 12}})
-            self.run_effect('shadows', '--reset')
+            self.run_effect('shadows', 'clear')
             self.assertEqual(json.loads((self.directory / 'appearance.json').read_text()), {})
 
     def test_bad_saved_values_fail_before_transport_and_group_reset_recovers(self):
@@ -116,7 +119,10 @@ class EffectsTest(unittest.TestCase):
         path.write_text(json.dumps({'corners': {'radius': '3\nmalicious'}, 'gaps': {'outer': 4}}))
         with self.assertRaises(RuntimeError):
             effects.read_state(path)
-        self.assertEqual(effects.read_state(path, 'corners'), {'gaps': {'outer': 4}})
+        with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE='test'), \
+             patch.object(effects, 'reload_settings'):
+            self.run_effect('corners', 'clear')
+        self.assertEqual(effects.read_state(path), {'gaps': {'outer': 4}})
 
     def test_animation_updates_store_only_public_preferences(self):
         updated = effects.animation_update({}, {'windows': 'popin', 'window_size': 80})

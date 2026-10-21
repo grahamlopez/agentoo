@@ -16,6 +16,7 @@ SHARE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SHARE))
 import desktop_blur as blur
 import desktop_effects as effects
+import desktop_state as state
 
 
 class Blur(unittest.TestCase):
@@ -32,7 +33,7 @@ class Blur(unittest.TestCase):
 
     def args(self, **values):
         return argparse.Namespace(**dict(window='all', focused=None, unfocused=None, size=None,
-                                         passes=None, reset=False, diagnose=False) | values)
+                                         passes=None, command='blur', action='set') | values)
 
     @staticmethod
     def write(path, value):
@@ -57,10 +58,6 @@ class Blur(unittest.TestCase):
         self.assertEqual(changed, {'all': {'focused': True, 'unfocused': True},
                                   'kitty': {'unfocused': False}, 'strength': {'size': 3}})
         self.assertFalse(original['kitty']['focused'])
-        category_reset = blur.adjusted(changed, self.args(window='kitty', reset=True))
-        self.assertNotIn('kitty', category_reset)
-        self.assertEqual(category_reset['strength'], {'size': 3})
-        self.assertEqual(blur.adjusted(category_reset, self.args(reset=True)), {})
 
     def test_validation_help_and_completion_have_no_effects(self):
         fake = self.root / 'bin'
@@ -74,7 +71,7 @@ class Blur(unittest.TestCase):
                      ['--passes', '11'], ['--passes', '-1'], ['--window', 'kitty', '--size', '3'],
                      ['--reset', '--focused', 'off'], ['--diagnose', '--passes', '1'],
                      ['--reset', '--diagnose'], ['--focus', 'on']):
-            result = subprocess.run([str(self.cli), 'desktop', 'blur', *args], env=env,
+            result = subprocess.run([str(self.cli), 'desktop', 'blur', 'set', *args], env=env,
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
         for args in (['desktop', 'blur', '--focused', 'bad', '--help'], ['help', 'desktop', 'blur']):
@@ -83,12 +80,12 @@ class Blur(unittest.TestCase):
             self.assertIn('--diagnose', result.stdout)
         for flag, choices in (('--window', ('all', 'kitty', 'browser')), ('--focused', ('on', 'off')),
                               ('--unfocused', ('on', 'off'))):
-            result = subprocess.run([str(self.cli), '__complete', '4', 'desktop', 'blur', flag, ''],
+            result = subprocess.run([str(self.cli), '__complete', '5', 'desktop', 'blur', 'set', flag, ''],
                                     env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             for choice in choices:
                 self.assertIn('candidate\t' + choice + '\t', result.stdout)
-        result = subprocess.run([str(self.cli), '__complete', '4', 'desktop', 'blur', '--reset', ''],
+        result = subprocess.run([str(self.cli), '__complete', '4', 'desktop', 'blur', 'clear', ''],
                                 env=env, capture_output=True, text=True)
         self.assertNotIn('option\t--diagnose\t', result.stdout)
         self.assertFalse(sentinel.exists())
@@ -114,8 +111,8 @@ class Blur(unittest.TestCase):
         path.write_text(json.dumps({'transparency': {'all': {'focused': 15, 'unfocused': 25}}}))
         with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved') as reload:
-            blur.run(self.args(size=3, passes=1), self.directory, self.write)
-            blur.run(self.args(window='kitty', focused='on'), self.directory, self.write)
+            state.update(self.args(size=3, passes=1), self.directory, self.write)
+            state.update(self.args(window='kitty', focused='on'), self.directory, self.write)
         data = blur.read_state(path)
         self.assertEqual(data, {'strength': {'size': 3, 'passes': 1}, 'kitty': {'focused': True}})
         reload.assert_called_with(data)
@@ -127,7 +124,7 @@ class Blur(unittest.TestCase):
                  patch.object(blur, 'conflicts', return_value=[]), \
                  patch.object(blur, 'reload_saved', return_value=self.report(**{'option.enabled': enabled})), \
                  redirect_stderr(io.StringIO()) as messages:
-                self.assertEqual(blur.run(self.args(size=10, passes=3), self.directory, self.write), 0)
+                self.assertEqual(state.update(self.args(size=10, passes=3), self.directory, self.write), 0)
             self.assertIn('Blur strength saved.', messages.getvalue())
             if enabled == 'off':
                 self.assertIn('Blur remains off', messages.getvalue())
@@ -146,7 +143,7 @@ class Blur(unittest.TestCase):
              patch.object(blur, 'reload_saved', side_effect=RuntimeError('bad reload')), \
              patch.object(effects, 'reload_settings') as command:
             with self.assertRaisesRegex(RuntimeError, 'bad reload'):
-                blur.run(self.args(focused='on'), self.directory, self.write)
+                state.update(self.args(focused='on'), self.directory, self.write)
         self.assertEqual(path.read_bytes(), original)
         command.assert_called_once_with()
 
@@ -155,10 +152,10 @@ class Blur(unittest.TestCase):
         path = self.directory / 'appearance.json'
         path.write_text(json.dumps({'blur': {'bad': True}, 'gaps': {'inner': 4}}))
         with patch.object(blur, 'require_integration') as require, patch.object(blur, 'reload_saved') as reload:
-            blur.run(self.args(reset=True), self.directory, self.write)
+            state.update(self.args(action='clear'), self.directory, self.write)
         require.assert_called_once_with(recover=True)
         reload.assert_called_once_with({})
-        self.assertEqual(json.loads(path.read_text()), {'blur': {}, 'gaps': {'inner': 4}})
+        self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
 
     def test_authored_conflict_blocks_change_but_not_full_reset(self):
         directory = self.root / 'config/hypr'
@@ -169,22 +166,22 @@ class Blur(unittest.TestCase):
         self.assertEqual(blur.conflicts(), [str(source) + ':3'])
         with patch.object(blur, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
-                blur.run(self.args(focused='on'), self.directory, self.write)
+                state.update(self.args(focused='on'), self.directory, self.write)
         self.assertFalse((self.directory / 'appearance.json').exists())
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'):
-            blur.run(self.args(reset=True), self.directory, self.write)
+            state.update(self.args(action='clear'), self.directory, self.write)
 
     def test_strength_only_and_category_reset_use_the_same_conflict_policy_as_config_loading(self):
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'), \
              patch.object(blur, 'conflicts', return_value=['authored.lua:2']):
-            blur.run(self.args(size=3), self.directory, self.write)
+            state.update(self.args(size=3), self.directory, self.write)
             self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
                 blur.check_conflicts({'kitty': {'focused': True}})
             blur.check_conflicts({})
             blur.check_conflicts({'strength': {'size': 3}})
             self.write(self.directory / 'appearance.json', json.dumps({'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}}}))
-            blur.run(self.args(window='kitty', reset=True), self.directory, self.write)
+            state.update(self.args(window='kitty', action='clear'), self.directory, self.write)
             self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
 
     def test_queries_show_sources_without_creating_state(self):
@@ -200,7 +197,7 @@ class Blur(unittest.TestCase):
         self.assertIn('Current blur engine: on', output.getvalue())
         with patch.object(blur, 'live_report', side_effect=RuntimeError('offline')), \
              redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(blur.run(self.args(), self.directory, self.write), 0)
+            self.assertEqual(blur.query(self.directory / 'appearance.json', 'all'), 0)
         self.assertIn('unknown (configured default)', output.getvalue())
         self.assertFalse(self.directory.exists())
 
@@ -251,7 +248,7 @@ class Blur(unittest.TestCase):
                 return '\n'.join(key + '\t' + value for key, value in self.report(**{'option.size': '10'}).items())
             self.fail('Unexpected operation: ' + repr(arguments))
         with patch.object(blur, 'hyprctl', side_effect=command), redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(blur.run(self.args(diagnose=True), self.directory, self.write), 0)
+            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 0)
         self.assertIn('Hyprland 0.56.2', output.getvalue())
         self.assertIn('no GPU load or power measurement', output.getvalue())
         self.assertIn('Client blur regions and actual rendering are not verified', output.getvalue())
@@ -271,7 +268,7 @@ class Blur(unittest.TestCase):
 
         with patch.object(blur, 'hyprctl', side_effect=command), \
              redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(blur.run(self.args(diagnose=True), self.directory, self.write), 1)
+            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 1)
         self.assertIn('invalid personal window rule', output.getvalue())
         self.assertIn('test GPU inventory', output.getvalue())
         self.assertIn('Open window classes:\nkitty', output.getvalue())
@@ -287,7 +284,7 @@ class Blur(unittest.TestCase):
             return '[]' if arguments == ('-j', 'clients') else ''
         with patch.object(blur, 'hyprctl', side_effect=command), \
              redirect_stdout(io.StringIO()) as output, redirect_stderr(io.StringIO()) as errors:
-            self.assertEqual(blur.run(self.args(diagnose=True), self.directory, self.write), 1)
+            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 1)
         self.assertIn('Saved blur preferences: unavailable', output.getvalue())
         self.assertIn('Effective compositor options:', output.getvalue())
         self.assertIn('Cannot read appearance file', errors.getvalue())
@@ -295,7 +292,7 @@ class Blur(unittest.TestCase):
         self.assertEqual(path.read_bytes(), b'broken\xff')
         path.unlink()
         with patch.object(blur, 'hyprctl', side_effect=command), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(blur.run(self.args(diagnose=True), self.directory, self.write), 1)
+            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 1)
 
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
     def test_native_parser_checks_engine_behavior_and_authored_defaults(self):

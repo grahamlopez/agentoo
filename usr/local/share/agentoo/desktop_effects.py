@@ -65,16 +65,19 @@ def add_parsers(commands):
         'shadows': 'Show or adjust window shadows', 'dimming': 'Show or adjust focus and modal-parent dimming',
     }
     for name, description in descriptions.items():
-        p = commands.add_parser(name, help=description, description=description + '.\n\n'
-            'Without adjustment options, show settings and their sources. Changes apply\n'
-            'immediately and persist. Omitted settings stay unchanged. --reset removes\n'
-            'this command\'s overrides and restores configured defaults. Settings are global;\n'
+        feature = commands.add_parser(name, help=description, description=description + '.\n\n'
+            'Without an action, show settings and their sources. Settings are global;\n'
             'window/workspace rules can still override them.',
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog='Exit 0: success; 1: operational failure; 2: invalid arguments.')
-        p.add_argument('--reset', action='store_true', help='Remove saved overrides; cannot combine with adjustments')
+        actions = feature.add_subparsers(dest='action')
+        p = actions.add_parser('set', help='Apply and remember settings',
+            description='Apply and remember settings immediately. Omitted settings stay unchanged.',
+            epilog='Supply at least one adjustment or --file. --file cannot accompany adjustments.')
+        clear = actions.add_parser('clear', help='Remove saved overrides and apply configured defaults',
+            description='Remove saved overrides and apply configured defaults.')
         from desktop_state import file_option
-        file_option(p, child=True)
+        file_option(p)
         parsers[name] = p
     p = parsers['corners']
     p.add_argument('--radius', type=number(0, 20, True), metavar='PIXELS', help='Corner radius, 0–20; 0 makes square corners')
@@ -91,7 +94,7 @@ def add_parsers(commands):
     p.epilog = ('Colors and angles change independently; omitted values remain unchanged.\n'
                 'One color is solid. Each color may include its own alpha value.\n\n'
                 'Example:\n'
-                "  agentoo desktop borders --focused '#89b4fa,#cba6f7,#f38ba8' --focused-angle 45\n\n"
+                "  agentoo desktop borders set --focused '#89b4fa,#cba6f7,#f38ba8' --focused-angle 45\n\n"
                 'Exit 0: success; 1: operational failure; 2: invalid arguments.')
     p = parsers['animations']
     p.add_argument('--enabled', choices=('on', 'off'), help='Master animation switch; other adjustments do not enable it')
@@ -106,10 +109,10 @@ def add_parsers(commands):
                 'window movement, fades and border rotation are not adjusted. Spring curves\n'
                 'control their own timing: --duration requires a timed (bezier) curve.\n\n'
                 'Examples:\n'
-                '  agentoo desktop animations --enabled on\n'
-                '  agentoo desktop animations --windows slide --window-direction left\n'
-                '  agentoo desktop animations --windows popin --window-size 80 --duration 250\n'
-                '  agentoo desktop animations --workspaces slidefadevert --workspace-distance 30\n\n'
+                '  agentoo desktop animations set --enabled on\n'
+                '  agentoo desktop animations set --windows slide --window-direction left\n'
+                '  agentoo desktop animations set --windows popin --window-size 80 --duration 250\n'
+                '  agentoo desktop animations set --workspaces slidefadevert --workspace-distance 30\n\n'
                 'Exit 0: success; 1: operational failure; 2: invalid arguments.')
     p = parsers['shadows']
     p.add_argument('--enabled', choices=('on', 'off'), help='Enable shadows; appearance adjustments do not enable them')
@@ -126,17 +129,13 @@ def add_parsers(commands):
 
 
 def validate(args, parser):
-    values = {k: v for k, v in vars(args).items() if k not in ('command', 'reset', 'appearance_file') and v is not None}
-    from desktop_state import check_file_args
-    check_file_args(args, parser, bool(values))
-    if args.reset and values:
-        parser.error('--reset cannot be combined with adjustments')
+    values = {k: v for k, v in vars(args).items() if k not in ('command', 'action', 'window', 'appearance_file') and v is not None}
     if args.command == 'animations':
-        if args.window_direction is not None and args.windows != 'slide':
+        if getattr(args, 'window_direction', None) is not None and args.windows != 'slide':
             parser.error('--window-direction requires --windows slide')
-        if args.window_size is not None and args.windows != 'popin':
+        if getattr(args, 'window_size', None) is not None and args.windows != 'popin':
             parser.error('--window-size requires --windows popin')
-        if args.workspace_distance is not None and (args.workspaces is None or not args.workspaces.startswith('slide')):
+        if getattr(args, 'workspace_distance', None) is not None and (args.workspaces is None or not args.workspaces.startswith('slide')):
             parser.error('--workspace-distance requires a sliding --workspaces style')
     return values
 
@@ -146,9 +145,9 @@ def state_path():
     return shared_path()
 
 
-def read_state(path, reset_group=None, selected=None):
+def read_state(path, *, selected=None):
     from desktop_state import read
-    data = {k: v for k, v in read(path).items() if k in COMMANDS and k != reset_group and (selected is None or k == selected)}
+    data = {k: v for k, v in read(path).items() if k in COMMANDS and (selected is None or k == selected)}
     return validate_sections(data)
 
 
@@ -162,7 +161,7 @@ def validate_sections(data, *, partial=False):
         for group, values in data.items():
             if not isinstance(values, dict):
                 raise ValueError('expected effect settings')
-            actions = {a.dest: a for a in parsers[group]._actions if a.dest not in ('help', 'reset', 'appearance_file')}
+            actions = {a.dest: a for a in parsers[group]._actions if a.dest not in ('help', 'appearance_file')}
             result[group] = {}
             for key, value in values.items():
                 if key not in actions or type(value) not in (int, float, str):
@@ -221,7 +220,7 @@ def show(data, group):
     print(group.capitalize() + ':')
     for action in parser._actions:
         key = action.dest
-        if key in ('help', 'reset', 'appearance_file'):
+        if key in ('help', 'appearance_file'):
             continue
         saved = values.get(key)
         if isinstance(saved, (int, float)):
@@ -260,15 +259,6 @@ def reload_settings():
     errors = hyprctl('configerrors')
     if errors:
         raise RuntimeError('Hyprland configuration errors: ' + errors)
-
-
-def run(args, directory, atomic_write, parser):
-    values = validate(args, parser)
-    if not args.reset and not values and getattr(args, 'appearance_file', None) is None:
-        show(read_state(directory / 'appearance.json', selected=args.command), args.command)
-        return 0
-    from desktop_state import update
-    return update(args, directory, atomic_write, parser)
 
 
 def settings():

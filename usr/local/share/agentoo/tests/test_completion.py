@@ -60,6 +60,10 @@ class CompletionTests(unittest.TestCase):
                 os.write(master, (setup + '\n').encode())
                 prompt()
                 cases = {
+                    'agentoo desktop cl': 'agentoo desktop clear ',
+                    'agentoo desktop transparency se': 'agentoo desktop transparency set ',
+                    'agentoo desktop blur clear --window kit': 'agentoo desktop blur clear --window kitty ',
+                    'agentoo desktop animations set --windows pop': 'agentoo desktop animations set --windows popin ',
                     'agentoo scre': 'agentoo screenshot ',
                     'agentoo help per': 'agentoo help permissions ',
                     'agentoo permissions ch': 'agentoo permissions check ',

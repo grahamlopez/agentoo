@@ -81,7 +81,8 @@ class CliTest(unittest.TestCase):
                  ('desktop',), ('desktop', 'transparency'), ('desktop', 'blur'),
                  *(('desktop', effect) for effect in ('corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')),
                  ('desktop', 'wallpaper'), ('desktop', 'wallpaper', 'set'),
-                 ('desktop', 'wallpaper', 'clear'), ('desktop', 'wallpaper', 'restore')]
+                 ('desktop', 'wallpaper', 'clear'), ('desktop', 'set'), ('desktop', 'clear'),
+                 *(('desktop', feature, action) for feature in ('transparency', 'blur', 'corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming') for action in ('set', 'clear'))]
         for path in paths:
             with self.subTest(path=path):
                 help_result = self.run_cli(*path, '--help')

@@ -685,7 +685,7 @@ user state outside Git. The helper atomically replaces the file and serializes
 changes with a lock beside it. It does not generate user configuration files.
 
 The shared `/etc/xdg/hypr/agentoo.lua` includes `wallpaper.lua`, which runs
-`agentoo desktop wallpaper restore` on session startup and after actual monitor
+`python3 /usr/local/share/agentoo/desktop_wallpaper.py` internally on session startup and after actual monitor
 geometry changes. Hyprland 0.56.2 was observed moving an auto-positioned external
 output from x=1920 to x=0 on lid close while leaving its wallpaper layer at
 x=1920. Recreating the managed swaybg client corrected the misplaced layer.
@@ -693,7 +693,7 @@ The handler debounces `monitor.layout_changed` for 250 ms and compares sorted
 output names, positions, sizes, scales and transforms before restoring. Ordinary
 config reloads, workspace changes and output enumeration order changes do not
 restart the client. The geometry repair also covers lid opening and hotplug.
-With no saved image, restore quietly succeeds, including when swaybg is not
+With no saved image, initialization quietly succeeds, including when swaybg is not
 installed. A missing remembered image produces a warning and exit 1, retaining
 the path for a later retry. New sessions retain the solid background in this case.
 `clear` removes the selection and stops Agentoo's wallpaper processes, exposing
@@ -728,16 +728,16 @@ use a fake client and do not establish physical rendering correctness.
 
 ```sh
 agentoo desktop transparency
-agentoo desktop transparency --focused 5 --unfocused 10
-agentoo desktop transparency --window kitty --unfocused 20
-agentoo desktop transparency --window browser --focused 0 --unfocused 0
-agentoo desktop transparency --window browser --reset
-agentoo desktop transparency --reset
+agentoo desktop transparency set --focused 5 --unfocused 10
+agentoo desktop transparency set --window kitty --unfocused 20
+agentoo desktop transparency set --window browser --focused 0 --unfocused 0
+agentoo desktop transparency clear --window browser
+agentoo desktop transparency clear
 ```
 
 Percentages measure transparency: 0 is opaque, 90 is the maximum, and fractional
 percentages are accepted. Focused and unfocused values change independently.
-Without adjustment options or `--reset`, the command prints settings without
+Without an action, the command prints settings without
 creating state or changing windows. `--window` defaults to `all`; a query of
 `all` shows all three groups with override, inherited, or configured-default
 sources. Queries without a reachable compositor show saved values and label
@@ -745,9 +745,9 @@ unavailable defaults as `configured default` rather than guessing them.
 
 Setting `all` clears Kitty/browser overrides for each supplied focus state.
 An omitted focus state retains its shared value and category overrides.
-Resetting Kitty or browser removes that category's overrides, restoring shared
-inheritance. Resetting all removes every override and restores authored defaults,
-including personal configuration. `--reset` cannot accompany either percentage.
+Clearing Kitty or browser removes that category's overrides, restoring shared
+inheritance. Clearing all removes every override and restores authored defaults,
+including personal configuration. `clear` cannot accompany either percentage.
 Shared defaults currently set no opacity, so absent host or personal settings
 the underlying defaults are fully opaque.
 
@@ -809,23 +809,23 @@ and Kitty's installed 0.48.2 watcher and background-opacity documentation
 
 ```sh
 agentoo desktop blur
-agentoo desktop blur --focused on --unfocused on --size 3 --passes 1
-agentoo desktop blur --focused on --unfocused off
-agentoo desktop blur --window browser --focused off --unfocused off
+agentoo desktop blur set --focused on --unfocused on --size 3 --passes 1
+agentoo desktop blur set --focused on --unfocused off
+agentoo desktop blur set --window browser --focused off --unfocused off
 agentoo desktop blur --diagnose
-agentoo desktop blur --reset
+agentoo desktop blur clear
 ```
 
-All blur options are optional; running the command without options shows settings.
+Running blur without an action shows settings. `set` requires an adjustment or `--file`.
 Blur is off in the shared Agentoo configuration. Enable it with `--focused on`
 and/or `--unfocused on`. Changing size or passes alone saves strength without
 enabling blur; the command reports when blur remains off. Enabling focused blur does not
 enable unfocused blur, and vice versa. On/off preferences support the same
 `all`, `kitty`, and `browser` groups as transparency. Setting `all` clears
-category overrides only for supplied focus states. Resetting a category restores
-shared inheritance; resetting all removes every blur override, including strength,
+category overrides only for supplied focus states. Clearing a category restores
+shared inheritance; clearing all removes every blur override, including strength,
 and re-exposes the authored host/personal/system defaults. Thus an explicit
-personal `blur.enabled = true` remains a default and can take effect after reset.
+personal `blur.enabled = true` remains a default and can take effect after clearing overrides.
 Blur never modifies opacity or the saved transparency preferences.
 
 Size and passes are global rather than per-window: they require `--window all`.
@@ -883,7 +883,7 @@ If no reachable integrated session is available,
 saved values are still shown, but configured defaults are labeled unknown.
 Help, completion, and queries create no state. Operational summaries and warnings
 go to stderr; help/results go to stdout. Exit statuses are 0 for success, 1 for
-operational failure, and 2 for invalid input. `--reset` and `--diagnose` are
+operational failure, and 2 for invalid input. `clear` and `--diagnose` are
 mutually exclusive and cannot accompany adjustments.
 
 `--diagnose` is read-only. It reports the running compositor version/system/GPU
@@ -944,24 +944,23 @@ Help and tab completion work without a desktop session. These are preferences
 for the current user, not edits to the tracked or personal Lua configuration.
 
 ```sh
-agentoo desktop corners --radius 10 --power 4
-agentoo desktop gaps --inner 4 --outer 8
-agentoo desktop borders --width 2 --focused '#89b4fa' --unfocused '#45475a'
-agentoo desktop borders --focused '#89b4fa,#cba6f7,#f38ba8' --focused-angle 45
-agentoo desktop animations --enabled on
-agentoo desktop animations --windows popin --window-size 80 --duration 250
-agentoo desktop animations --workspaces slidefadevert --workspace-distance 30
-agentoo desktop shadows --enabled on --size 12 --opacity 35
-agentoo desktop shadows --color '#000000' --offset-y 3
-agentoo desktop dimming --enabled on --strength 15 --modal on
+agentoo desktop corners set --radius 10 --power 4
+agentoo desktop gaps set --inner 4 --outer 8
+agentoo desktop borders set --width 2 --focused '#89b4fa' --unfocused '#45475a'
+agentoo desktop borders set --focused '#89b4fa,#cba6f7,#f38ba8' --focused-angle 45
+agentoo desktop animations set --enabled on
+agentoo desktop animations set --windows popin --window-size 80 --duration 250
+agentoo desktop animations set --workspaces slidefadevert --workspace-distance 30
+agentoo desktop shadows set --enabled on --size 12 --opacity 35
+agentoo desktop shadows set --color '#000000' --offset-y 3
+agentoo desktop dimming set --enabled on --strength 15 --modal on
 agentoo desktop corners
-agentoo desktop corners --reset
+agentoo desktop corners clear
 ```
 
 Omitted settings keep their saved values or configured defaults. Zero and `off`
-are explicit choices. Each `--reset` removes only that command's preferences,
-revealing authored defaults, including personal configuration. Reset cannot be
-combined with adjustments. Queries distinguish saved overrides from current
+are explicit choices. Each `clear` removes only that command's preferences,
+revealing authored defaults, including personal configuration. `clear` accepts no adjustment flags. Queries distinguish saved overrides from current
 compositor values and configured defaults. Without a reachable integration,
 effective values are unavailable rather than guessed. Queries create no state.
 
@@ -978,7 +977,7 @@ Border colors and angles change independently for each focus state. A single
 color gives a solid border; two to ten colors give a gradient. Each color can
 include alpha. A color-only change retains the saved or authored angle; an
 angle-only change retains all colors. Omitting both retains the authored gradient
-unchanged. `borders --reset` removes all saved border colors, angles, and width.
+unchanged. `borders clear` removes all saved border colors, angles, and width.
 
 Appearance adjustments do not enable animations or shadows. Dimming strength
 enables neither dimming mode. Modal dimming independently adds 50% of remaining
@@ -1045,7 +1044,7 @@ failure restores the previous saved state and attempts to reload it. No daemon,
 new configuration scanner, or generated configuration file is involved. Hyprland reads
 validated data through `desktop_effects.py settings` at startup and reload.
 
-Malformed values are reported clearly. Reset can recover a malformed command
+Malformed values are reported clearly. `clear` can recover a malformed command
 section without discarding other effects; malformed JSON itself requires repairing
 the file. Operational summaries/errors go to stderr, queries/help to stdout.
 Exit codes: 0 success, 1 operational failure, 2 invalid arguments.
@@ -1092,9 +1091,9 @@ excluded: it retains its separate selection and lifecycle.
 ```
 
 ```sh
-agentoo desktop --file appearance.json
-agentoo desktop borders --file appearance.json
-agentoo desktop blur --file appearance.json
+agentoo desktop set --file appearance.json
+agentoo desktop borders set --file appearance.json
+agentoo desktop blur set --file appearance.json
 ```
 
 The top-level command validates every supplied section before saving and reloads
@@ -1113,12 +1112,21 @@ instead of hyphens. Blur's focus values are JSON booleans; other on/off choices
 use the strings `"on"` and `"off"`, matching their CLI values. Empty sections make
 no changes; an empty top-level file is rejected.
 
-`--file` cannot accompany adjustment flags, `--reset`, `--diagnose`, or a selected
+`set --file` cannot accompany adjustment flags or a selected
 Kitty/browser window category. Files apply and persist: their supplied values are
 copied into normal state, with no ongoing dependency on the source file. The
 import file is left untouched (unless it is itself the normal saved state file).
-Reset remains command-specific; it removes preferences rather than writing fixed
-system defaults. An empty saved object is retained after removing all preferences.
+`clear` removes saved overrides and applies configured defaults rather than
+writing fixed default values. Top-level `agentoo desktop clear` clears every
+appearance section and forgets and stops the managed wallpaper. A feature
+`clear` affects only that feature; transparency/blur also support `--window`.
+An empty saved object is retained after removing all preferences.
+
+The interface uses `set` and `clear` consistently. Adjustment flags and `--file`
+belong to `set`; bare feature commands are read-only queries. The previous
+direct adjustment syntax, `--reset`, and public wallpaper `restore` command
+are deliberately removed. Wallpaper startup and layout repair use the internal
+helper; appearance initialization continues reading saved state as before.
 
 Only `appearance.json` is read for appearance preferences. Older per-command
 state files and compositor snapshots are not supported or imported. Wallpaper
