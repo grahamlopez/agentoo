@@ -1,8 +1,4 @@
-"""Transparency state and CLI operations; imported without effects for completion.
-
-The private `rules` entry point supplies validated numeric data to Hyprland.
-It is not a public Agentoo command. JSON is the only authoritative saved state.
-"""
+"""Transparency CLI validation, inherited values, and live queries."""
 import argparse
 import json
 import math
@@ -10,10 +6,7 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 sys.dont_write_bytecode = True
-if __name__ == '__main__':
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop.common import authored_hypr_paths, hyprctl
 
 GROUPS = ('all', 'kitty', 'browser')
@@ -37,19 +30,7 @@ def state_path():
 
 def read_state(path):
     from desktop.state import section
-    return validate_data(section('transparency', path))
-
-
-def validate_data(data):
-    if not isinstance(data, dict) or set(data) - set(GROUPS):
-        raise RuntimeError(f'Invalid transparency groups in transparency section')
-    for group, values in data.items():
-        if not isinstance(values, dict) or set(values) - set(STATES):
-            raise RuntimeError(f'Invalid transparency settings for {group} in transparency section')
-        for value in values.values():
-            if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 90:
-                raise RuntimeError(f'Invalid transparency percentage in transparency section')
-    return data
+    return section('transparency', path)
 
 
 def effective(data, group, focus):
@@ -137,25 +118,3 @@ def show(data, selected):
     print('Kitty: background only. Other windows: whole window.')
     for location in conflicts():
         print(f'agentoo desktop: warning: transparency rule may conflict: {location}', file=sys.stderr)
-
-
-def rules():
-    data = read_state(state_path())
-    if data and conflicts():
-        raise RuntimeError('Conflicting authored transparency rules; saved overrides were not applied')
-    for group in GROUPS:
-        for focus in STATES:
-            value = effective(data, group, focus)
-            if value is not None:
-                print(group, focus, f'{value:g}', sep='\t')
-    print('end')
-
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1:] != ['rules']:
-            raise RuntimeError('Private helper: expected rules')
-        rules()
-    except (OSError, RuntimeError) as error:
-        print(f'agentoo desktop: {error}', file=sys.stderr)
-        raise SystemExit(1)

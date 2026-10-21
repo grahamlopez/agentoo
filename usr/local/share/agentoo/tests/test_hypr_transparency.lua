@@ -1,4 +1,4 @@
--- Run: lua usr/local/share/agentoo/tests/test_hypr_transparency.lua
+-- Run: lua5.4 usr/local/share/agentoo/tests/test_hypr_transparency.lua
 local source = "etc/xdg/hypr/transparency.lua"
 local rules = {}
 local context = setmetatable({
@@ -7,13 +7,8 @@ local context = setmetatable({
         return dofile("etc/xdg/hypr/window-classes.lua")
     end,
     hl = { window_rule = function(rule) rules[#rules + 1] = rule end },
-    io = { popen = function(command, mode)
-        assert(command:match("lib/desktop/transparency.py rules$") and mode == "r")
-        return {
-            read = function() return "all\tfocused\t5\nkitty\tfocused\t5\nbrowser\tfocused\t0\nend\n" end,
-            close = function() return true end,
-        }
-    end },
+    agentoo_desktop_preferences = {transparency={all={focused=5},kitty={focused=5},browser={focused=0}}},
+    io = {popen = function() error("Native preferences must not spawn helpers") end},
 }, { __index = _G })
 local chunk = assert(loadfile(source, "t", context))
 if setfenv then setfenv(chunk, context) end

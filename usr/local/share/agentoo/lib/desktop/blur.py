@@ -1,20 +1,15 @@
 """Blur preferences and read-only diagnostics for Hyprland 0.56.2.
 
-The private `rules` entry point emits validated data, never executable Lua.
 Saved choices are distinct from the compositor's authored defaults.
 """
 import argparse
-import hashlib
 import json
 import os
 import re
 import sys
-from pathlib import Path
 import time
 
 sys.dont_write_bytecode = True
-if __name__ == '__main__':
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop.common import authored_hypr_paths, hyprctl
 
 GROUPS = ('all', 'kitty', 'browser')
@@ -84,28 +79,12 @@ def state_path():
 
 def read_state(path):
     from desktop.state import section
-    return validate_data(section('blur', path))
-
-
-def validate_data(data):
-    if not isinstance(data, dict) or set(data) - {*GROUPS, 'strength'}:
-        raise RuntimeError(f'Invalid blur groups in blur section')
-    for group, values in data.items():
-        allowed = LIMITS if group == 'strength' else STATES
-        if not isinstance(values, dict) or set(values) - set(allowed):
-            raise RuntimeError(f'Invalid blur settings for {group} in blur section')
-        for key, value in values.items():
-            if group == 'strength':
-                valid = type(value) is int and 1 <= value <= LIMITS[key]
-            else:
-                valid = type(value) is bool
-            if not valid:
-                raise RuntimeError(f'Invalid blur value for {group}.{key} in blur section')
-    return data
+    return section('blur', path)
 
 
 def revision(data):
-    return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    from desktop.state import native
+    return native('revision', data=data).strip()
 
 
 def adjusted(data, args):
@@ -258,6 +237,7 @@ def require_integration(recover=False):
 
 def reload_saved(data):
     # One budget covers the reload request and every verification request.
+    expected_revision = revision(data)
     deadline = time.monotonic() + 2
 
     def remaining():
@@ -277,7 +257,7 @@ def reload_saved(data):
         except RuntimeError as error:
             report = {}
             problem = str(error)
-        if report.get('revision') == revision(data):
+        if report.get('revision') == expected_revision:
             if errors:
                 raise RuntimeError('Hyprland configuration errors: ' + errors)
             return report
@@ -298,25 +278,3 @@ def query(path, window):
     for location in conflicts():
         print(f'agentoo desktop: warning: blur rule may conflict: {location}', file=sys.stderr)
     return 0
-
-
-def rules():
-    data = read_state(state_path())
-    check_conflicts(data)
-    for group in GROUPS:
-        for focus, value in data.get(group, {}).items():
-            print(group, focus, 'on' if value else 'off', sep='\t')
-    for name, value in data.get('strength', {}).items():
-        print('strength', name, value, sep='\t')
-    print('revision', revision(data), sep='\t')
-    print('end')
-
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1:] != ['rules']:
-            raise RuntimeError('Private helper: expected rules')
-        rules()
-    except (OSError, RuntimeError) as error:
-        print(f'agentoo desktop: {error}', file=sys.stderr)
-        raise SystemExit(1)

@@ -1,17 +1,12 @@
--- Loaded after host/personal settings. JSON remains the only saved authority.
--- The helper emits group/state/percentage records, never executable Lua.
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/transparency.py rules", "r"))
-local contents = stream:read("*a")
--- Hyprland's SIGCHLD handler can reap popen's child before pclose, which then
--- reports ECHILD even for a successful helper. Require its completion record.
-stream:close()
-assert(contents:sub(-4) == "end\n", "Cannot load Agentoo transparency state; see session stderr")
-
+-- Native preferences loaded after host and handwritten defaults.
+local saved = assert(agentoo_desktop_preferences).transparency or {}
 local families = require("/etc/xdg/hypr/window-classes.lua")
 local classes = { all = "negative:" .. families.kitty, kitty = families.kitty, browser = families.browser }
-for group, state, raw in contents:gmatch("(%a+)\t(%a+)\t([^\n]+)\n") do
-    local value = tonumber(raw)
-    assert(classes[group] and (state == "focused" or state == "unfocused") and value and value >= 0 and value <= 90)
+for _, group in ipairs({"all", "kitty", "browser"}) do
+  for _, state in ipairs({"focused", "unfocused"}) do
+    local value = (saved[group] or {})[state]
+    if value == nil then value = (saved.all or {})[state] end
+    if value ~= nil then
     -- A focus-specific absolute rule also handles fullscreen windows, without
     -- changing the omitted focus state's authored rules or decoration default.
     -- Kitty itself controls background opacity; keep its text fully opaque.
@@ -21,5 +16,7 @@ for group, state, raw in contents:gmatch("(%a+)\t(%a+)\t([^\n]+)\n") do
         match = { class = classes[group], focus = state == "focused" },
         opacity = string.format("%.8f override", opacity),
     })
+    end
+  end
 end
 agentoo_transparency_loaded = true

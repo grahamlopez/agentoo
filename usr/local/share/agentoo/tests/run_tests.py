@@ -11,9 +11,9 @@ def main():
     result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', str(tests)], cwd=root)
     if result.returncode:
         return result.returncode
-    lua = shutil.which('lua')
+    lua = shutil.which('lua5.4')
     if lua is None:
-        print('Skipped Lua regression tests: lua is not installed.', file=sys.stderr)
+        print('Skipped Lua regression tests: lua5.4 is not installed.', file=sys.stderr)
         return 0
     for script in sorted(tests.glob('test_*.lua')):
         result = subprocess.run([lua, str(script)], cwd=root)

@@ -5,3 +5,6 @@ media-video/pipewire
 media-video/wireplumber
 # Privileged ALSA/UCM initialization, mixer-state handling, and diagnostic tools.
 media-sound/alsa-utils
+
+# Agentoo desktop preference editing uses the versioned standalone interpreter.
+dev-lang/lua:5.4

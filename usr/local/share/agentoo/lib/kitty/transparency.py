@@ -22,12 +22,26 @@ _last_error = None
 _previous_state = None
 
 
+_cached_signature = None
+_cached_preferences = {}
+
+
 def read_preferences():
-    sys.path.insert(0, _share)
+    global _cached_signature, _cached_preferences
+    path = _state['state_path']()
     try:
-        return _state['read_state'](_state['state_path']())
-    finally:
-        sys.path.remove(_share)
+        stat = path.stat()
+        signature = (stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+    except FileNotFoundError:
+        signature = ('absent',)
+    if signature != _cached_signature:
+        sys.path.insert(0, _share)
+        try:
+            _cached_preferences = _state['read_state'](path)
+        finally:
+            sys.path.remove(_share)
+        _cached_signature = signature
+    return _cached_preferences
 
 
 def refresh(boss):

@@ -92,25 +92,29 @@ including personal configuration. `clear` cannot accompany either percentage.
 Shared defaults currently set no opacity, so absent host or personal settings
 the underlying defaults are fully opaque.
 
-Transparency occupies the `transparency` section of the shared
-`$XDG_STATE_HOME/agentoo/appearance.json` (normally
-`~/.local/state/agentoo/appearance.json`); relative XDG paths are ignored.
-This is personal, untracked state. Updates use a private directory, atomic
-replacement, and the shared `appearance.lock`.
-Hyprland reads the JSON through a validating Python helper at startup and every
-configuration reload; there is no separate restore command or generated config
-to keep in sync. Updates require the shared integration in a running Hyprland
-session, reload configuration without reconfiguring monitors, and restore the
-previous saved record if reload fails. Operational messages go to stderr,
-queries/help to stdout, and exit status is 0/1/2 for success/failure/invalid input.
-Help and completion use the command's shared parser and require no session.
+Transparency occupies the `transparency` table in
+`$XDG_CONFIG_HOME/hypr/agentoo-desktop.lua`, normally
+`~/.config/hypr/agentoo-desktop.lua`; relative XDG paths are ignored. This is
+personal, untracked configuration with a generated-file warning, separate from
+handwritten `agentoo-local.lua` settings. Hyprland reads it with native Lua after
+shared, host, and personal defaults. No Python helper runs to load appearance
+preferences. CLI operations use `lua5.4` for loading, merging, and serialization.
+
+Updates require the shared integration in a running session, serialize under
+`$XDG_RUNTIME_DIR/agentoo/appearance.lock` (falling back to `~/.cache/agentoo/`),
+atomically replace the file, and reload without reconfiguring monitors. A failed
+reload restores the previous file and attempts a rollback reload. Messages go to
+stderr, queries/help to stdout, and exit status is 0/1/2 for success/failure/invalid
+input. Help and completion require neither Lua execution nor a running session.
 
 Hyprland uses absolute, focus-specific opacity rules for normal, floating,
 dialog, fullscreen, and dropdown windows. Layer surfaces such as panels and
 notifications and compositor/application popup menus are not targeted. Kitty
 uses native **background-only** transparency, preserving text opacity. A shared
 Kitty watcher tracks focus and notices saved changes within approximately 250ms,
-without external remote-control permissions, sockets, or an extra daemon.
+without external remote-control permissions, sockets, or an extra daemon. The
+watcher evaluates preferences with `lua5.4` only when the file changes, caching
+them between focus events and timer ticks.
 Reset re-reads Kitty's configuration, including its original command-line
 overrides, before restoring background opacity. Kitty backgrounds supplied by an
 application or background images follow Kitty's own transparency limitations.
@@ -135,7 +139,7 @@ damaged state file. Separate sessions share the saved choice; a different
 already-running Hyprland session picks it up on its next configuration reload.
 
 Verification: run `python3 -m unittest discover -s usr/local/share/agentoo/tests
--p test_transparency.py`, `lua usr/local/share/agentoo/tests/test_hypr_transparency.lua`,
+-p test_transparency.py`, `lua5.4 usr/local/share/agentoo/tests/test_hypr_transparency.lua`,
 and the CLI/wallpaper tests. Before deployment is considered visually validated,
 check focus changes, existing/new Kitty windows, browser dialogs, fullscreen,
 the dropdown, personal defaults after reset, and logout/login in a real session.
@@ -189,28 +193,24 @@ fullscreen, dialog, and dropdown windows follow the focus/category rules.
 Custom class families are defined once in `window-classes.lua` for both blur and
 transparency.
 
-Choices occupy the `blur` section of `$XDG_STATE_HOME/agentoo/appearance.json`,
-defaulting to `~/.local/state/agentoo/appearance.json`, with the shared
-`appearance.lock` serializing updates.
-Relative XDG paths are ignored. Writes are atomic; the command reloads Hyprland
-with `config-only` and verifies that the compositor has loaded the saved revision.
+Choices occupy the `blur` table in the same generated
+`$XDG_CONFIG_HOME/hypr/agentoo-desktop.lua` file. Writes are atomic; the command
+reloads Hyprland with `config-only` and verifies the loaded preference fingerprint.
 The reload request and verification calls share a two-second timeout budget.
-The revision confirms which preferences were loaded; it does not prove a fresh
-reload completed for an unchanged revision, or verify application rendering.
-Failure or interruption restores the original state bytes and attempts a rollback
-reload with the normal ten-second transport timeout. Rollback is best effort;
-restoring the file does not guarantee that the live compositor recovered.
-No generated configuration or separate restore command is needed:
-`blur.lua` reads validated data on startup and config reload. Concurrent sessions
-share choices; another existing session adopts them on its next reload. A full
-reset can recover a malformed blur section or a conflicting-rule config error;
-malformed JSON itself requires repairing the shared file.
+The fingerprint identifies the saved blur preferences; it does not prove a fresh
+reload for unchanged values or verify rendering. Failure or interruption restores
+the original file bytes and attempts a rollback reload. Rollback is best effort.
+
+`desktop.lua` loads and validates the preferences once, in-process, before the
+native transparency, blur, and effects integrations apply them. Another session
+adopts shared choices on its next reload. Feature `clear` can discard malformed
+values in that feature; top-level `clear` removes the generated file entirely.
 
 Authored `no_blur`, `noblur`, `opaque`, and `force_rgbx` rules in the selected
 host file or personal Hyprland config tree are conservatively reported with
-file/line locations. The same conflict policy is used before saving and during
-configuration loading: conflicts block changes whose resulting state contains
-managed window rules. Strength-only state and a reset that removes the last
+file/line locations. The CLI scans before saving; during configuration loading, native Lua records
+conflicting fields in the actual authored window rules. Managed window rules
+are rejected when they conflict. Strength-only state and a reset that removes the last
 managed window rule remain usable. Defaults such as `blur.size` and
 `blur.enabled` are retained rather than treated as conflicts. The scan cannot
 evaluate arbitrary Lua or includes outside those locations; unused personal
@@ -256,7 +256,7 @@ Checks:
 
 ```sh
 python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_blur.py
-lua usr/local/share/agentoo/tests/test_hypr_blur.lua
+lua5.4 usr/local/share/agentoo/tests/test_hypr_blur.lua
 ```
 
 The tests include native Hyprland parser checks for independent focus states,
@@ -376,19 +376,25 @@ and [Lua setter](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/config/lua/
 
 ### Persistence and verification
 
-All eight appearance commands share `$XDG_STATE_HOME/agentoo/appearance.json`,
-defaulting to `~/.local/state/agentoo/appearance.json`. The `appearance.lock`
-serializes changes and writes
-are atomic. Changes require the running shared integration. Reload uses
-`hyprctl reload config-only`, retaining monitor configuration. A reported reload
-failure restores the previous saved state and attempts to reload it. No daemon,
-new configuration scanner, or generated configuration file is involved. Hyprland reads
-validated data through `lib/desktop/effects.py settings` at startup and reload.
+All eight appearance commands share `$XDG_CONFIG_HOME/hypr/agentoo-desktop.lua`,
+defaulting to `~/.config/hypr/agentoo-desktop.lua`. The generated table contains
+only explicit overrides: handwritten settings are never imported or rewritten.
+The file can be copied as-is and reused with `set --file`. There is no export
+command or secondary state representation.
 
-Malformed values are reported clearly. `clear` can recover a malformed command
-section without discarding other effects; malformed JSON itself requires repairing
-the file. Operational summaries/errors go to stderr, queries/help to stdout.
-Exit codes: 0 success, 1 operational failure, 2 invalid arguments.
+The shared Lua preferences module validates data on both command operations and
+native Hyprland loads. `lua5.4` is explicitly selected for CLI operations rather
+than the eselect-controlled `lua` alias. `@gui-base` selects that interpreter.
+The Lua format is a returned table of supported settings, nested tables, strings,
+finite numbers, and booleans, with quoted strings and ordinary line comments.
+Functions, calls, executable statements, unknown settings, and invalid values
+are rejected. Python does not parse Lua source. JSON preference files are not
+read, migrated, or supported; rebuild previous settings through the new CLI.
+
+Changes retain locking, atomic replacement, and rollback. `hyprctl reload
+config-only` retains monitor configuration. Clearing the last preference removes
+the file. No appearance Python subprocess runs on startup or configuration reload.
+Wallpaper remains separate and retains its existing startup/layout helper.
 
 Verification:
 
@@ -405,73 +411,50 @@ appearance; those checks remain part of installed-session validation.
 
 ### Importing a desktop appearance
 
-The saved state and import files use the same JSON structure. Wallpaper is
-excluded: it retains its separate selection and lifecycle.
+The managed file and presets use the same Lua table format. Wallpaper is
+excluded and retains its existing selection and lifecycle. For example:
 
-```json
-{
-  "borders": {
-    "width": 2,
-    "focused": "#79618f,#41434f,#527b69",
-    "focused_angle": 45
-  },
-  "corners": {"radius": 10, "power": 4},
-  "gaps": {"inner": 4, "outer": 8},
-  "animations": {
-    "enabled": "on",
-    "windows": "popin",
-    "window_size": 80,
-    "workspaces": "slidefade",
-    "duration": 250
-  },
-  "shadows": {"enabled": "on", "size": 12, "opacity": 35},
-  "dimming": {"enabled": "on", "strength": 15},
-  "transparency": {"all": {"focused": 5, "unfocused": 10}},
-  "blur": {"all": {"focused": true, "unfocused": true}, "strength": {"size": 3, "passes": 1}}
+```lua
+return {
+  borders = { width = 2, focused = "#79618f,#41434f,#527b69", focused_angle = 45 },
+  corners = { radius = 10, power = 4 },
+  gaps = { inner = 4, outer = 8 },
+  animations = { enabled = "on", windows = "popin", window_size = 80,
+                 workspaces = "slidefade", duration = 250 },
+  shadows = { enabled = "on", size = 12, opacity = 35 },
+  dimming = { enabled = "on", strength = 15 },
+  transparency = { all = { focused = 5, unfocused = 10 } },
+  blur = { all = { focused = true, unfocused = true }, strength = { size = 3, passes = 1 } },
 }
 ```
 
 ```sh
-agentoo desktop set --file appearance.json
-agentoo desktop borders set --file appearance.json
-agentoo desktop blur set --file appearance.json
+cp ~/.config/hypr/agentoo-desktop.lua ~/preferred-desktop.lua
+agentoo desktop set --file ~/preferred-desktop.lua
+agentoo desktop borders set --file ~/preferred-desktop.lua
+agentoo desktop blur set --file ~/preferred-desktop.lua
 ```
 
-The top-level command validates every supplied section before saving and reloads
-once. A subcommand selects and validates only its own section, ignoring other
-sections; a missing selected section is an error. Unknown sections at the top
-level and unknown fields in selected sections are errors. Invalid JSON or values
-never partially apply. Imports require a running shared desktop integration.
+The top-level import validates every supplied section before writing and reloads
+once. A feature import selects and validates only its own section; a missing
+section is an error. Invalid Lua or values never partially apply. The source is
+left untouched unless it is the managed file itself. No ongoing dependency on the
+source is retained.
 
-Every section is optional, and each section is a partial update: omitted fields,
-window groups, and focus states remain unchanged. Importing a shared `all` value
-retains category overrides that the file does not explicitly supply (unlike an
-explicit CLI `--window all` adjustment, which clears corresponding overrides).
-Compatible saved animation parameters persist; changing styles discards parameters
-that cannot apply to the new style. JSON keys follow option names with underscores
-instead of hyphens. Blur's focus values are JSON booleans; other on/off choices
-use the strings `"on"` and `"off"`, matching their CLI values. Empty sections make
-no changes; an empty top-level file is rejected.
+Every section is optional, and imports merge partial updates: omitted fields,
+window groups, and focus states stay unchanged. Imported shared `all` values
+retain category overrides not supplied by the preset. Explicit CLI `--window all`
+adjustments instead clear corresponding category overrides. Compatible animation
+parameters persist; a changed style discards incompatible parameters. Fields use
+option names with underscores instead of hyphens. Blur focus values are Lua
+booleans; other on/off choices use strings, matching CLI values. Empty sections
+make no changes, and an empty top-level preset is rejected.
 
-`set --file` cannot accompany adjustment flags or a selected
-Kitty/browser window category. Files apply and persist: their supplied values are
-copied into normal state, with no ongoing dependency on the source file. The
-import file is left untouched (unless it is itself the normal saved state file).
-`clear` removes saved overrides and applies configured defaults rather than
-writing fixed default values. Top-level `agentoo desktop clear` clears every
-appearance section and forgets and stops the managed wallpaper. A feature
-`clear` affects only that feature; transparency/blur also support `--window`.
-An empty saved object is retained after removing all preferences.
-
-The interface uses `set` and `clear` consistently. Adjustment flags and `--file`
-belong to `set`; bare feature commands are read-only queries. The previous
-direct adjustment syntax, `--reset`, and public wallpaper `restore` command
-are deliberately removed. Wallpaper startup and layout repair use the internal
-helper; appearance initialization continues reading saved state as before.
-
-Only `appearance.json` is read for appearance preferences. Older per-command
-state files and compositor snapshots are not supported or imported. Wallpaper
-retains its separate selection file. Queries do not create or change state.
+`set --file` cannot accompany adjustment flags or a selected Kitty/browser
+category. To remove experimental preferences before loading a preset, clear the
+relevant features. Top-level `agentoo desktop clear` retains its existing broader
+scope: it clears appearance overrides and forgets and stops the managed wallpaper.
+Presets and generated Lua never contain wallpaper or handwritten changes.
 
 Additional verification:
 

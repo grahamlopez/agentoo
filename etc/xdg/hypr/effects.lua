@@ -1,11 +1,6 @@
 -- Saved global preferences follow authored defaults. Python validates values;
 -- this file only translates data into native Hyprland configuration calls.
 agentoo_effects_report = nil
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/effects.py settings", "r"))
-local contents = stream:read("*a")
-stream:close() -- Hyprland may reap popen's child before pclose.
-assert(contents:sub(-4) == "end\n", "Cannot load Agentoo effects state; see session stderr")
-
 local options = {
     corners = { radius = "decoration.rounding", power = "decoration.rounding_power" },
     gaps = { inner = "general.gaps_in", outer = "general.gaps_out" },
@@ -14,16 +9,9 @@ local options = {
     shadows = { enabled = "decoration.shadow.enabled", size = "decoration.shadow.range" },
     dimming = { enabled = "decoration.dim_inactive", strength = "decoration.dim_strength", modal = "decoration.dim_modal" },
 }
-local saved = {}
+local saved = assert(agentoo_desktop_preferences)
 local function color(value)
     return (#value == 7 and "rgb(" or "rgba(") .. value:sub(2) .. ")"
-end
-for line in contents:gmatch("([^\n]+)\n") do
-    if line ~= "end" then
-        local group, key, value = line:match("^(%a+)\t([%w_]+)\t(.*)$")
-        saved[group] = saved[group] or {}
-        saved[group][key] = value
-    end
 end
 local animation = saved.animations or {}
 local parents = {
@@ -59,9 +47,9 @@ for _, name in ipairs({ "windowsIn", "windowsOut", "workspacesIn", "workspacesOu
             if windows and style == "slide" and animation.window_direction and animation.window_direction ~= "auto" then
                 settings.style = style .. " " .. animation.window_direction
             elseif windows and style == "popin" and animation.window_size then
-                settings.style = style .. " " .. animation.window_size .. "%"
+                settings.style = style .. " " .. tostring(animation.window_size) .. "%"
             elseif not windows and style:sub(1, 5) == "slide" and animation.workspace_distance then
-                settings.style = style .. " " .. animation.workspace_distance .. "%"
+                settings.style = style .. " " .. tostring(animation.workspace_distance) .. "%"
             end
         end
         hl.animation(settings)

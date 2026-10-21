@@ -1,8 +1,10 @@
 """One appearance file and transaction for desktop commands; wallpaper is separate."""
 import argparse
+import ast
+import math
 import fcntl
-import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -12,50 +14,65 @@ SECTIONS = ('transparency', 'blur', 'corners', 'gaps', 'borders', 'animations', 
 
 
 def state_path():
-    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo/appearance.json'
+    return xdg_directory('XDG_CONFIG_HOME', '.config') / 'hypr/agentoo-desktop.lua'
 
 
-def read_json(path):
+def _lua(value):
+    """Quote transient CLI data for Lua; Lua owns the saved-file serializer."""
+    if isinstance(value, (dict, list)):
+        items = value.items() if isinstance(value, dict) else enumerate(value)
+        return '{' + ','.join(f'[{_lua(key)}]={_lua(item)}' for key, item in items) + '}'
+    if isinstance(value, str):
+        escaped = ''.join('\\' + ch if ch in ('"', '\\') else f'\\{ord(ch):03d}' if ord(ch) < 32 else ch for ch in value)
+        return '"' + escaped + '"'
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return repr(value)
+    raise RuntimeError('Preferences support only tables, strings, finite numbers and booleans')
+
+
+def native(operation, *args, data=None, decode=False):
+    helper = Path(__file__).with_name('preferences.lua')
     try:
-        data = json.loads(path.read_text())
-    except (ValueError, OSError) as error:
-        raise RuntimeError(f'Cannot read appearance file {path}: {error}') from error
-    if not isinstance(data, dict):
-        raise RuntimeError(f'Appearance file {path} must contain a JSON object')
-    return data
+        result = subprocess.run(['lua5.4', str(helper), operation, *map(str, args)],
+            input='return ' + _lua(data) if data is not None else None,
+            text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f'Cannot run Lua preferences helper: {error}') from error
+    if result.returncode:
+        message = result.stderr.strip()
+        if operation == 'read':
+            message = f'Cannot read appearance file {args[0]}: {message}'
+        raise RuntimeError(message)
+    # Lua emits a Python literal of validated values for command-side queries.
+    # literal_eval reads data only; it does not parse Lua or execute Python code.
+    return ast.literal_eval(result.stdout) if decode else result.stdout
+
+
+def dumps(data):
+    return native('encode', data=data)
 
 
 def validate_sections(data, *, partial=False):
-    from desktop import blur as blur
-    from desktop import effects as effects
-    from desktop import transparency as transparency
-    unknown = set(data) - set(SECTIONS)
-    if unknown:
-        raise RuntimeError('Unknown appearance sections: ' + ', '.join(sorted(unknown)))
-    result = {}
-    for name, values in data.items():
-        if name == 'blur':
-            result[name] = blur.validate_data(values)
-        elif name == 'transparency':
-            result[name] = transparency.validate_data(values)
-        else:
-            result[name] = effects.validate_sections({name: values}, partial=partial)[name]
-    return result
+    return native('validate', 'partial' if partial else '', data=data, decode=True)
 
 
-def read(path=None):
+def read(path=None, *, selected=None, omit=None):
     path = state_path() if path is None else Path(path)
-    return read_json(path) if path.exists() else {}
+    if not path.exists():
+        return {}
+    return native('read', path, selected or '', '', omit or '', decode=True)
 
 
 def section(name, path=None):
-    return read(path).get(name, {})
+    return read(path, selected=name).get(name, {})
 
 
 def file_option(parser, *, required=False):
     parser.add_argument('--file', dest='appearance_file', metavar='FILE',
                         required=required,
-                        help='Apply and remember supplied appearance settings from JSON; omitted settings stay unchanged').completion = 'files'
+                        help='Apply and remember supplied appearance settings from a Lua preset; omitted settings stay unchanged').completion = 'files'
 
 
 def window_option(parser, *, child=False):
@@ -65,33 +82,21 @@ def window_option(parser, *, child=False):
 
 
 def imported(path, command=None):
-    data = read_json(Path(path))
-    if command:
-        if command not in data:
-            raise RuntimeError(f'Appearance file {path} has no {command} section')
-        data = {command: data[command]}
-    return validate_sections(data, partial=True)
+    path = Path(path)
+    data = native('read', path, command or '', 'partial', decode=True)
+    if command and command not in data:
+        raise RuntimeError(f'Appearance file {path} has no {command} section')
+    return data
 
 
 def merged(previous, patch):
-    """Partial sections and window groups retain omitted fields."""
-    from desktop.effects import animation_update
-    result = dict(previous)
-    for name, values in patch.items():
-        if name == 'animations':
-            result[name] = animation_update(previous.get(name, {}), values)
-            continue
-        result[name] = {**previous.get(name, {}), **values}
-        if name in ('transparency', 'blur'):
-            for group, fields in values.items():
-                result[name][group] = {**previous.get(name, {}).get(group, {}), **fields}
-    return result
+    return native('merge', data={'previous': previous, 'patch': patch}, decode=True)
 
 
 def update(args, directory, write=atomic_write, parser=None):
-    from desktop import blur as blur
-    from desktop import effects as effects
-    from desktop import transparency as transparency
+    from desktop import blur
+    from desktop import effects
+    from desktop import transparency
 
     command = getattr(args, 'command', None)
     file = getattr(args, 'appearance_file', None)
@@ -115,34 +120,34 @@ def update(args, directory, write=atomic_write, parser=None):
             raise RuntimeError('A running Hyprland session is required to change desktop effects')
         if not clearing and effects.hyprctl('repl', 'return agentoo_effects_report and "ready" or "missing"') != 'ready':
             raise RuntimeError('Load the shared Agentoo effects.lua integration before changing effects')
-    path = directory / 'appearance.json'
+    path = directory / 'agentoo-desktop.lua'
     previous_umask = os.umask(0o077)
     try:
         directory.mkdir(parents=True, exist_ok=True)
-        with (directory / 'appearance.lock').open('a') as lock:
+        lock_path = xdg_directory('XDG_RUNTIME_DIR', '.cache') / 'agentoo/appearance.lock'
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             original = path.read_bytes() if path.exists() else None
-            data = read(path)
+            discard = clearing and command is not None and (command not in ('blur', 'transparency') or args.window == 'all')
+            data = {} if clearing and command is None else read(path, omit=command if discard else None)
             if clearing:
                 if command is None:
                     data = {}
                 elif command in ('blur', 'transparency') and args.window != 'all':
-                    values = validate_sections({command: data.get(command, {})})[command]
+                    values = data.get(command, {})
                     data[command] = {group: fields for group, fields in values.items() if group != args.window}
                 else:
                     data.pop(command, None)
             elif patch is not None:
                 data = merged(data, patch)
             elif command == 'blur':
-                data[command] = blur.adjusted(blur.validate_data(data.get(command, {})), args)
+                data[command] = blur.adjusted(data.get(command, {}), args)
             elif command == 'transparency':
-                data[command] = transparency.adjusted(transparency.validate_data(data.get(command, {})),
+                data[command] = transparency.adjusted(data.get(command, {}),
                                                       args.window, args.focused, args.unfocused)
             else:
-                if command == 'animations':
-                    data[command] = effects.animation_update(data.get(command, {}), values)
-                else:
-                    data[command] = {**data.get(command, {}), **values}
+                data = merged(data, {command: values})
             data = validate_sections(data)
             if 'blur' in changed:
                 blur.check_conflicts(data.get('blur', {}))
@@ -157,7 +162,10 @@ def update(args, directory, write=atomic_write, parser=None):
             if 'animations' in changed and 'duration' in data.get('animations', {}):
                 if any(branch['bezier'].startswith('spring:') for branch in effects.live_animations().values()):
                     raise RuntimeError('Spring curves control their own timing; configure a bezier curve before using --duration')
-            write(path, json.dumps(data, indent=2, sort_keys=True) + '\n')
+            if data:
+                write(path, dumps(data))
+            else:
+                path.unlink(missing_ok=True)
             report = None
             try:
                 if 'blur' in changed:

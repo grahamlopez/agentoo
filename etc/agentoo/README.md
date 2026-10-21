@@ -171,7 +171,7 @@ No home configuration file, launch wrapper, or generated host include is needed.
 
 The shared configuration also enables dynamic background opacity and loads the
 Agentoo transparency watcher. `agentoo desktop transparency` stores personal
-focused/unfocused choices in XDG state; Kitty text stays opaque. Processes
+focused/unfocused overrides in `$XDG_CONFIG_HOME/hypr/agentoo-desktop.lua`; Kitty text stays opaque. Processes
 started before this integration was installed need a one-time restart. See
 [window transparency](../../usr/local/share/agentoo/docs/desktop.md#window-transparency)
 for inheritance, reset, conflict handling, and validation.

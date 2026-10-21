@@ -25,13 +25,22 @@ desktop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(desktop)
 
 
+def native_preferences():
+    path = str(SHARE / 'lib/desktop/preferences.lua')
+    return ('agentoo_preferences = dofile(' + json.dumps(path) + ')\n'
+            'agentoo_desktop_preferences = agentoo_preferences.load(agentoo_preferences.path(), nil, false, true)\n')
+
+
 class EffectsTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='agentoo-effects-test-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.directory = self.root / 'agentoo'
+        self.directory = self.root / 'config/hypr'
         self.parser = desktop.build_parser()
+        environment = patch.dict(os.environ, XDG_RUNTIME_DIR=str(self.root / 'runtime'))
+        environment.start()
+        self.addCleanup(environment.stop)
 
     def args(self, *tokens):
         return self.parser.parse_args(tokens)
@@ -39,7 +48,7 @@ class EffectsTest(unittest.TestCase):
     def run_effect(self, *tokens):
         with contextlib.redirect_stderr(io.StringIO()), \
              patch.object(sys, 'argv', ['agentoo-desktop', *tokens]), \
-             patch.object(state, 'state_path', return_value=self.directory / 'appearance.json'):
+             patch.object(state, 'state_path', return_value=self.directory / 'agentoo-desktop.lua'):
             return desktop.main()
 
     def test_help_completion_and_input_validation_need_no_session(self):
@@ -81,13 +90,13 @@ class EffectsTest(unittest.TestCase):
             self.run_effect('borders', 'set', '--focused', '#abcdef,#12345680', '--unfocused', '#654321')
             self.run_effect('borders', 'set', '--focused-angle', '45.5')
             self.run_effect('borders', 'set', '--unfocused-angle', '0')
-            self.assertEqual(effects.read_state(self.directory / 'appearance.json')['borders'], {
+            self.assertEqual(effects.read_state(self.directory / 'agentoo-desktop.lua')['borders'], {
                 'focused': '#abcdef,#12345680', 'unfocused': '#654321',
                 'focused_angle': 45.5, 'unfocused_angle': 0})
             self.run_effect('borders', 'set', '--focused', '#000000')
-            self.assertEqual(effects.read_state(self.directory / 'appearance.json')['borders']['focused_angle'], 45.5)
+            self.assertEqual(effects.read_state(self.directory / 'agentoo-desktop.lua')['borders']['focused_angle'], 45.5)
             self.run_effect('borders', 'clear')
-            self.assertEqual(json.loads((self.directory / 'appearance.json').read_text()), {})
+            self.assertEqual(state.read(self.directory / 'agentoo-desktop.lua'), {})
 
     def test_query_creates_no_state_and_does_not_guess_defaults(self):
         with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE=''), contextlib.redirect_stdout(io.StringIO()) as output:
@@ -101,22 +110,22 @@ class EffectsTest(unittest.TestCase):
             self.run_effect('corners', 'set', '--radius', '8')
             self.run_effect('corners', 'set', '--power', '4')
             self.run_effect('shadows', 'set', '--size', '12')
-            data = effects.read_state(self.directory / 'appearance.json')
+            data = effects.read_state(self.directory / 'agentoo-desktop.lua')
             self.assertEqual(data['corners'], {'radius': 8, 'power': 4})
             self.assertEqual(data['shadows'], {'size': 12})
-            original = (self.directory / 'appearance.json').read_bytes()
+            original = (self.directory / 'agentoo-desktop.lua').read_bytes()
             with patch.object(effects, 'reload_settings', side_effect=[RuntimeError('bad config'), None]), self.assertRaises(RuntimeError):
                 self.run_effect('corners', 'set', '--radius', '10')
-            self.assertEqual((self.directory / 'appearance.json').read_bytes(), original)
+            self.assertEqual((self.directory / 'agentoo-desktop.lua').read_bytes(), original)
             self.run_effect('corners', 'clear')
-            self.assertEqual(effects.read_state(self.directory / 'appearance.json'), {'shadows': {'size': 12}})
+            self.assertEqual(effects.read_state(self.directory / 'agentoo-desktop.lua'), {'shadows': {'size': 12}})
             self.run_effect('shadows', 'clear')
-            self.assertEqual(json.loads((self.directory / 'appearance.json').read_text()), {})
+            self.assertEqual(state.read(self.directory / 'agentoo-desktop.lua'), {})
 
     def test_bad_saved_values_fail_before_transport_and_group_reset_recovers(self):
-        self.directory.mkdir()
-        path = self.directory / 'appearance.json'
-        path.write_text(json.dumps({'corners': {'radius': '3\nmalicious'}, 'gaps': {'outer': 4}}))
+        self.directory.mkdir(parents=True)
+        path = self.directory / 'agentoo-desktop.lua'
+        path.write_text(state.dumps({'corners': {'radius': '3\nmalicious'}, 'gaps': {'outer': 4}}))
         with self.assertRaises(RuntimeError):
             effects.read_state(path)
         with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE='test'), \
@@ -125,11 +134,13 @@ class EffectsTest(unittest.TestCase):
         self.assertEqual(effects.read_state(path), {'gaps': {'outer': 4}})
 
     def test_animation_updates_store_only_public_preferences(self):
-        updated = effects.animation_update({}, {'windows': 'popin', 'window_size': 80})
+        def update(previous, values):
+            return state.merged({'animations': previous}, {'animations': values})['animations']
+        updated = update({}, {'windows': 'popin', 'window_size': 80})
         self.assertEqual(updated, {'windows': 'popin', 'window_size': 80})
-        self.assertEqual(effects.animation_update(updated, {'duration': 250}),
+        self.assertEqual(update(updated, {'duration': 250}),
                          {'windows': 'popin', 'window_size': 80, 'duration': 250})
-        self.assertEqual(effects.animation_update(updated, {'windows': 'slide'}), {'windows': 'slide'})
+        self.assertEqual(update(updated, {'windows': 'slide'}), {'windows': 'slide'})
 
     def test_inherited_native_animation_nodes_are_resolved(self):
         nodes = [{'name': name, 'overridden': False, 'enabled': False, 'speed': 0, 'bezier': '', 'style': ''}
@@ -140,11 +151,10 @@ class EffectsTest(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
     def test_native_config_translation_styles_and_reset(self):
-        self.directory.mkdir()
+        self.directory.mkdir(parents=True)
         module = self.root / 'effects.lua'
-        module.write_text((ROOT / 'etc/xdg/hypr/effects.lua').read_text().replace(
-            '/usr/local/share/agentoo/lib/desktop/effects.py', str(SHARE / 'lib/desktop/effects.py')))
-        env = dict(os.environ, XDG_STATE_HOME=str(self.root))
+        module.write_text(native_preferences() + (ROOT / 'etc/xdg/hypr/effects.lua').read_text())
+        env = dict(os.environ, XDG_CONFIG_HOME=str(self.root / 'config'))
         cases = [({}, ''), ({
             'corners': {'radius': 10, 'power': 4}, 'gaps': {'inner': 3, 'outer': 9},
             'borders': {'width': 2, 'focused': '#12345680', 'unfocused': '#abcdef'},
@@ -186,7 +196,7 @@ assert(hl.get_config("decoration.blur.enabled") == false)
             cases.append(({'animations': {'workspaces': style, **({'workspace_distance': 30} if style.startswith('slide') else {})}}, ''))
         for data, assertions in cases:
             with self.subTest(data=data):
-                (self.directory / 'appearance.json').write_text(json.dumps(data))
+                (self.directory / 'agentoo-desktop.lua').write_text(state.dumps(data))
                 config = self.root / 'hyprland.lua'
                 config.write_text('hl.config({general={["col.active_border"]={colors={"rgb(123456)","rgba(65432180)"},angle=30}},decoration={blur={enabled=false},shadow={color="rgba(12345640)",offset={7,8}}}})\n'
                                   'dofile(' + json.dumps(str(module)) + ')\n' + assertions + '\n'
@@ -194,7 +204,7 @@ assert(hl.get_config("decoration.blur.enabled") == false)
                 result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],
                                         capture_output=True, text=True, timeout=15, env=env)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        (self.directory / 'appearance.json').unlink()
+        (self.directory / 'agentoo-desktop.lua').unlink()
         config.write_text('hl.config({decoration={rounding=6}})\ndofile(' + json.dumps(str(module)) + ')\n'
                           'assert(hl.get_config("decoration.rounding") == 6)\n')
         result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],

@@ -21,16 +21,22 @@ from desktop import effects
 from desktop import state
 
 
+def native_preferences():
+    path = str(SHARE / 'lib/desktop/preferences.lua')
+    return ('agentoo_preferences = dofile(' + json.dumps(path) + ')\n'
+            'agentoo_desktop_preferences = agentoo_preferences.load(agentoo_preferences.path(), nil, false, true)\n')
+
+
 class Transparency(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.env = patch.dict(os.environ, HOME=str(self.root), XDG_CONFIG_HOME=str(self.root / 'config'),
-                              XDG_STATE_HOME=str(self.root / 'state'), HYPRLAND_INSTANCE_SIGNATURE='test')
+                              XDG_STATE_HOME=str(self.root / 'state'), XDG_RUNTIME_DIR=str(self.root / 'runtime'), HYPRLAND_INSTANCE_SIGNATURE='test')
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.directory = self.root / 'state/agentoo'
+        self.directory = self.root / 'config/hypr'
 
     def test_independent_states_and_shared_override_precedence(self):
         original = {'all': {'focused': 5, 'unfocused': 10},
@@ -71,12 +77,13 @@ class Transparency(unittest.TestCase):
         self.assertFalse(self.directory.exists())
 
     def test_state_validation_and_relative_xdg_fallback(self):
-        with patch.dict(os.environ, XDG_STATE_HOME='relative'):
-            self.assertEqual(transparency.state_path(), self.root / '.local/state/agentoo/appearance.json')
-        path = self.root / 'invalid.json'
-        for contents in ('[]', '{"all":{"focused":true}}', '{"all":{"focused":NaN}}',
-                         '{"other":{}}', '{"kitty":{"focused":91}}', 'invalid'):
-            path.write_text(json.dumps({'transparency': json.loads(contents)}) if contents not in ('invalid', '[]') else contents)
+        with patch.dict(os.environ, XDG_CONFIG_HOME='relative'):
+            self.assertEqual(transparency.state_path(), self.root / '.config/hypr/agentoo-desktop.lua')
+        path = self.root / 'invalid.lua'
+        for contents in ('return 5', 'return {transparency={all={focused=true}}}',
+                         'return {transparency={all={focused=0/0}}}',
+                         'return {transparency={other={}}}', 'return {transparency={kitty={focused=91}}}', 'invalid'):
+            path.write_text(contents)
             with self.assertRaises(RuntimeError):
                 transparency.read_state(path)
 
@@ -89,8 +96,8 @@ class Transparency(unittest.TestCase):
 
     def test_reload_failure_restores_exact_saved_record(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'appearance.json'
-        original = '{"transparency": {"browser": {"focused": 12}}}\n'
+        path = self.directory / 'agentoo-desktop.lua'
+        original = state.dumps({'transparency': {'browser': {'focused': 12}}})
         path.write_text(original)
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings', side_effect=[RuntimeError('reload failed'), None]) as call:
@@ -103,15 +110,15 @@ class Transparency(unittest.TestCase):
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings'):
             state.update(self.args(), self.directory, lambda path, text: path.write_text(text))
-        path = self.directory / 'appearance.json'
-        self.assertEqual(json.loads(path.read_text()), {'transparency': {'browser': {'focused': 5}}})
-        path.write_text(json.dumps({'transparency': {'bad': True}, 'gaps': {'inner': 4}}))
+        path = self.directory / 'agentoo-desktop.lua'
+        self.assertEqual(state.read(path), {'transparency': {'browser': {'focused': 5}}})
+        path.write_text(state.dumps({'transparency': {'bad': True}, 'gaps': {'inner': 4}}))
         args = argparse.Namespace(command='transparency', action='clear', window='all')
         with patch.object(transparency, 'require_integration') as require, \
              patch.object(effects, 'reload_settings'):
             state.update(args, self.directory, lambda path, text: path.write_text(text))
         require.assert_called_once_with(recover=True)
-        self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
+        self.assertEqual(state.read(path), {'gaps': {'inner': 4}})
 
     def test_authored_rule_conflict_prevents_any_saved_change(self):
         folder = self.root / 'config/hypr'
@@ -122,7 +129,7 @@ class Transparency(unittest.TestCase):
         with patch.object(transparency, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting transparency rules'):
                 state.update(self.args(), self.directory, lambda path, text: path.write_text(text))
-        self.assertFalse(self.directory.exists())
+        self.assertFalse((self.directory / 'agentoo-desktop.lua').exists())
 
     def test_kitty_background_only_focus_live_changes_and_reset(self):
         spec = importlib.util.spec_from_file_location('agentoo_kitty_transparency', SHARE / 'lib/kitty/transparency.py')
@@ -142,7 +149,7 @@ class Transparency(unittest.TestCase):
                                            SimpleNamespace(id=3, os_window_id=12)],
                                call_remote_control=lambda window, args: calls.append((window.os_window_id, args)),
                                load_config_file=lambda: reloads.append(True))
-        watcher._state['read_state'] = lambda path: json.loads(json.dumps(data))
+        watcher.read_preferences = lambda: {key: dict(value) for key, value in data.items()}
         with patch.dict(sys.modules, {'kitty.fast_data_types': fast, 'kitty.utils': utils}):
             watcher.refresh(boss)
             self.assertEqual(len(calls), 2)  # One call per OS window, not per split/tab.
@@ -158,16 +165,32 @@ class Transparency(unittest.TestCase):
             watcher.refresh(boss)
             self.assertEqual(calls, [])
 
+    def test_kitty_reloads_lua_only_when_preference_file_changes(self):
+        spec = importlib.util.spec_from_file_location('cached_watcher', SHARE / 'lib/kitty/transparency.py')
+        watcher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(watcher)
+        self.directory.mkdir(parents=True)
+        path = self.directory / 'agentoo-desktop.lua'
+        path.write_text(state.dumps({'transparency': {'all': {'focused': 10}}}))
+        with patch.dict(watcher._state, read_state=unittest.mock.Mock(wraps=watcher._state['read_state'])):
+            self.assertEqual(watcher.read_preferences(), {'all': {'focused': 10}})
+            watcher.read_preferences()
+            self.assertEqual(watcher._state['read_state'].call_count, 1)
+            state.atomic_write(path, state.dumps({'transparency': {'all': {'focused': 20}}}))
+            self.assertEqual(watcher.read_preferences(), {'all': {'focused': 20}})
+            self.assertEqual(watcher._state['read_state'].call_count, 2)
+            path.unlink()
+            self.assertEqual(watcher.read_preferences(), {})
+
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser is required')
     def test_native_hyprland_parser_accepts_saved_focus_rules(self):
         self.directory.mkdir(parents=True)
-        (self.directory / 'appearance.json').write_text(json.dumps({'transparency': {
+        (self.directory / 'agentoo-desktop.lua').write_text(state.dumps({'transparency': {
             'all': {'focused': 5, 'unfocused': 10}, 'kitty': {'unfocused': 90},
             'browser': {'focused': 0.000001}}}))
         repository = SHARE.parents[3]
         module = self.root / 'transparency.lua'
-        module.write_text((repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(
-            '/usr/local/share/agentoo/lib/desktop/transparency.py', str(SHARE / 'lib/desktop/transparency.py')).replace(
+        module.write_text(native_preferences() + (repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(
             '/etc/xdg/hypr/window-classes.lua', str(repository / 'etc/xdg/hypr/window-classes.lua')))
         config = self.root / 'hyprland.lua'
         config.write_text('dofile(' + json.dumps(str(module)) + ')\n')
@@ -178,7 +201,7 @@ class Transparency(unittest.TestCase):
     @unittest.skipUnless(shutil.which('kitty'), 'Kitty runtime is required')
     def test_watcher_reads_combined_state_in_native_kitty_without_cli_search_path(self):
         self.directory.mkdir(parents=True)
-        (self.directory / 'appearance.json').write_text(json.dumps({'transparency': {'all': {'focused': 30, 'unfocused': 50}}}))
+        (self.directory / 'agentoo-desktop.lua').write_text(state.dumps({'transparency': {'all': {'focused': 30, 'unfocused': 50}}}))
         code = ('import runpy, sys; '
                 'original_path = list(sys.path); '
                 f'm = runpy.run_path({str(SHARE / "lib/kitty/transparency.py")!r}, run_name="agentoo_watcher_check"); '

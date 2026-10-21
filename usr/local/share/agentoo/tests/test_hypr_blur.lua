@@ -1,5 +1,5 @@
--- Run: lua usr/local/share/agentoo/tests/test_hypr_blur.lua
-local function run(records, baseline)
+-- Run: lua5.4 usr/local/share/agentoo/tests/test_hypr_blur.lua
+local function run(data, baseline)
     local config = {
         ["decoration.blur.enabled"] = baseline,
         ["decoration.blur.size"] = 8,
@@ -21,12 +21,9 @@ local function run(records, baseline)
             end,
             window_rule = function(rule) rules[#rules + 1] = rule end,
         },
-        io = { popen = function()
-            return {
-                read = function() return records .. "revision\t" .. string.rep("a", 64) .. "\nend\n" end,
-                close = function() return nil, "No child processes", 10 end,
-            }
-        end },
+        agentoo_preferences = dofile("usr/local/share/agentoo/lib/desktop/preferences.lua"),
+        agentoo_desktop_preferences = {blur=data},
+        io = {popen = function() error("Native preference loading must not spawn helpers") end},
     }, { __index = _G })
     local chunk = assert(loadfile("etc/xdg/hypr/blur.lua", "t", context))
     if setfenv then setfenv(chunk, context) end
@@ -34,7 +31,7 @@ local function run(records, baseline)
     return config, rules, context.agentoo_blur_report(), context.agentoo_blur_report
 end
 
-local config, rules, report, snapshot = run("kitty\tfocused\ton\n", false)
+local config, rules, report, snapshot = run({kitty={focused=true}}, false)
 assert(config["decoration.blur.enabled"] == true)
 assert(#rules == 6)
 assert(rules[1].match.class == ".*" and rules[1].no_blur == true)
@@ -48,14 +45,14 @@ config["decoration.blur.enabled"] = false
 assert(snapshot():find("option.enabled\toff")) -- Query-time options, not a cached engine value.
 assert(snapshot():find("baseline\toff"))
 
-config, rules = run("all\tfocused\toff\nall\tunfocused\toff\n", true)
+config, rules = run({all={focused=false,unfocused=false}}, true)
 assert(config["decoration.blur.enabled"] == false)
 for _, rule in ipairs(rules) do assert(rule.no_blur == true) end
 
-config, rules = run("strength\tsize\t3\nstrength\tpasses\t1\n", false)
+config, rules = run({strength={size=3,passes=1}}, false)
 assert(#rules == 0 and config["decoration.blur.enabled"] == false)
 assert(config["decoration.blur.size"] == 3 and config["decoration.blur.passes"] == 1)
 
-config, rules = run("", true) -- Full reset leaves authored defaults in control.
+config, rules = run({}, true) -- Full reset leaves authored defaults in control.
 assert(#rules == 0 and config["decoration.blur.enabled"] == true)
 print("Hyprland blur contracts passed")

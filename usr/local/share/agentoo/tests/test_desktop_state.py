@@ -27,17 +27,23 @@ desktop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(desktop)
 
 
+def native_preferences():
+    path = str(SHARE / 'lib/desktop/preferences.lua')
+    return ('agentoo_preferences = dofile(' + json.dumps(path) + ')\n'
+            'agentoo_desktop_preferences = agentoo_preferences.load(agentoo_preferences.path(), nil, false, true)\n')
+
+
 class DesktopStateTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='agentoo-state-test-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.directory = self.root / 'agentoo'
-        self.path = self.directory / 'appearance.json'
-        self.file = self.root / 'theme.json'
+        self.directory = self.root / 'config/hypr'
+        self.path = self.directory / 'agentoo-desktop.lua'
+        self.file = self.root / 'theme.lua'
         self.parser = desktop.build_parser()
         for manager in (
-            patch.dict(os.environ, XDG_STATE_HOME=str(self.root), HYPRLAND_INSTANCE_SIGNATURE='test'),
+            patch.dict(os.environ, XDG_STATE_HOME=str(self.root / 'state'), XDG_CONFIG_HOME=str(self.root / 'config'), XDG_RUNTIME_DIR=str(self.root / 'runtime'), HYPRLAND_INSTANCE_SIGNATURE='test'),
             patch.object(effects, 'hyprctl', return_value='ready'),
             patch.object(effects, 'reload_settings'),
             patch.object(blur, 'require_integration'), patch.object(blur, 'check_conflicts'),
@@ -54,11 +60,11 @@ class DesktopStateTest(unittest.TestCase):
             return state.update(args, self.directory, desktop.atomic_write, self.parser)
 
     def save_import(self, data):
-        self.file.write_text(json.dumps(data))
+        self.file.write_text(state.dumps(data))
 
     def test_top_level_import_merges_all_sections_with_one_write_and_reload(self):
-        self.directory.mkdir()
-        self.path.write_text(json.dumps({'gaps': {'inner': 4, 'outer': 8}, 'borders': {'width': 2},
+        self.directory.mkdir(parents=True)
+        self.path.write_text(state.dumps({'gaps': {'inner': 4, 'outer': 8}, 'borders': {'width': 2},
                                         'transparency': {'kitty': {'focused': 5}}}))
         self.save_import({'gaps': {'inner': 6}, 'borders': {'focused': '#abcdef'},
                           'transparency': {'kitty': {'unfocused': 10}},
@@ -99,8 +105,8 @@ class DesktopStateTest(unittest.TestCase):
             self.assertFalse(self.path.exists())
 
     def test_query_selects_only_relevant_section(self):
-        self.directory.mkdir()
-        self.path.write_text(json.dumps({'borders': {'width': 2}, 'gaps': {'typo': 10}}))
+        self.directory.mkdir(parents=True)
+        self.path.write_text(state.dumps({'borders': {'width': 2}, 'gaps': {'typo': 10}}))
         self.assertEqual(effects.read_state(self.path, selected='borders'), {'borders': {'width': 2}})
 
     def test_partial_import_preserves_animation_parameters_and_drops_incompatible_ones(self):
@@ -114,8 +120,8 @@ class DesktopStateTest(unittest.TestCase):
         self.assertEqual(state.read(self.path)['animations'], {'enabled': 'on', 'windows': 'slide'})
 
     def test_failed_apply_restores_all_sections_and_leaves_import_untouched(self):
-        self.directory.mkdir()
-        original = b'{"gaps": {"inner": 5}, "borders": {"width": 2}}\n'
+        self.directory.mkdir(parents=True)
+        original = state.dumps({'gaps': {'inner': 5}, 'borders': {'width': 2}}).encode()
         self.path.write_bytes(original)
         self.save_import({'gaps': {'outer': 8}, 'borders': {'width': 4}})
         imported = self.file.read_bytes()
@@ -154,8 +160,9 @@ class DesktopStateTest(unittest.TestCase):
         self.assertEqual(state.read(self.path)['transparency'], {'all': {'focused': 5}})
 
     def test_public_top_level_set_and_clear_include_wallpaper_only_when_clearing(self):
-        self.directory.mkdir()
-        wallpaper = self.directory / 'wallpaper'
+        self.directory.mkdir(parents=True)
+        wallpaper = self.root / 'state/agentoo/wallpaper'
+        wallpaper.parent.mkdir(parents=True)
         wallpaper.write_text('/remembered/image.png\n')
         self.save_import({'gaps': {'inner': 6}, 'blur': {'strength': {'size': 3}}})
         self.run_desktop('set', '--file', str(self.file))
@@ -167,10 +174,11 @@ class DesktopStateTest(unittest.TestCase):
             self.assertEqual(self.run_desktop('clear'), 0)
 
     def test_failed_aggregate_clear_rolls_back_appearance_and_keeps_wallpaper(self):
-        self.directory.mkdir()
-        original = '{"gaps": {"inner": 6}}\n'
+        self.directory.mkdir(parents=True)
+        original = state.dumps({'gaps': {'inner': 6}})
         self.path.write_text(original)
-        wallpaper = self.directory / 'wallpaper'
+        wallpaper = self.root / 'state/agentoo/wallpaper'
+        wallpaper.parent.mkdir(parents=True)
         wallpaper.write_text('/remembered/image.png\n')
         with patch.object(blur, 'reload_saved', side_effect=RuntimeError('reload failed')):
             with self.assertRaisesRegex(RuntimeError, 'reload failed'):
@@ -179,8 +187,8 @@ class DesktopStateTest(unittest.TestCase):
         self.assertTrue(wallpaper.exists())
 
     def test_removed_forms_empty_set_and_invalid_combinations_have_no_effects(self):
-        invalid = [('--file', 'appearance.json'), ('wallpaper', 'restore'),
-                   ('clear', '--file', 'appearance.json'), ('set',)]
+        invalid = [('--file', 'agentoo-desktop.lua'), ('wallpaper', 'restore'),
+                   ('clear', '--file', 'agentoo-desktop.lua'), ('set',)]
         for feature in state.SECTIONS:
             invalid.extend([(feature, 'set'), (feature, '--reset'),
                             (feature, 'restore'), (feature, 'clear', '--file', 'x')])
@@ -194,13 +202,79 @@ class DesktopStateTest(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
         self.assertFalse(self.directory.exists())
 
+    def test_generated_file_is_a_reusable_preset_and_old_json_is_ignored(self):
+        old = self.root / 'state/agentoo/appearance.json'
+        old.parent.mkdir(parents=True)
+        old.write_text('obsolete preferences are deliberately ignored')
+        self.assertEqual(state.read(), {})
+        self.run_desktop('gaps', 'set', '--inner', '7', '--outer', '11')
+        original = state.read(self.path)
+        self.file.write_bytes(self.path.read_bytes())
+        self.run_desktop('gaps', 'clear')
+        self.assertFalse(self.path.exists())
+        self.run_desktop('set', '--file', str(self.file))
+        self.assertEqual(state.read(self.path), original)
+        self.assertEqual(old.read_text(), 'obsolete preferences are deliberately ignored')
+
+    def test_invalid_native_preset_does_not_write_or_reload(self):
+        for source in ('return {gaps={inner=true}}', 'return {gaps={inner=os.execute("false")}}',
+                       'return (function() return {} end)()', 'return {gaps={inner=4}} trailing'):
+            self.file.write_text(source)
+            with self.subTest(source=source), patch.object(effects, 'reload_settings') as reload:
+                with self.assertRaises(RuntimeError):
+                    self.run_desktop('set', '--file', str(self.file))
+                reload.assert_not_called()
+            self.assertFalse(self.path.exists())
+
+    @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
+    def test_native_desktop_stack_loads_without_helpers_and_clear_recovers_conflicts(self):
+        self.directory.mkdir(parents=True)
+        modules = self.root / 'modules'
+        modules.mkdir()
+        for name in ('desktop', 'transparency', 'blur', 'effects', 'window-classes'):
+            source = (ROOT / f'etc/xdg/hypr/{name}.lua').read_text()
+            source = source.replace('/etc/xdg/hypr/', str(modules) + '/')
+            source = source.replace('/usr/local/share/agentoo/lib/desktop/preferences.lua',
+                                    str(SHARE / 'lib/desktop/preferences.lua'))
+            (modules / f'{name}.lua').write_text(source)
+        capture = (ROOT / 'etc/xdg/hypr/hyprland.lua').read_text().split('-- Hyprland discovers', 1)[0]
+        config = self.root / 'native.lua'
+        source = (capture + '\nhl.config({general={gaps_in=4},decoration={rounding=6,blur={enabled=false}}})\n'
+                  'hl.window_rule = native_window_rule\nhl.animation = native_animation\n'
+                  'io.popen = function() error("Appearance reload must not spawn helpers") end\n'
+                  'require(' + json.dumps(str(modules / 'desktop.lua')) + ')\n')
+        def verify(tail='', expected=0):
+            config.write_text(source + tail)
+            result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],
+                                    text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        data = {'gaps': {'inner': 9}, 'corners': {'radius': 10},
+                'borders': {'width': 3}, 'animations': {'enabled': 'off'},
+                'shadows': {'enabled': 'off'}, 'dimming': {'enabled': 'off'},
+                'transparency': {'browser': {'focused': 5}}, 'blur': {'kitty': {'focused': True}}}
+        self.path.write_text(state.dumps(data))
+        verify('assert(hl.get_config("general.gaps_in").top == 9)\n'
+               'assert(hl.get_config("decoration.rounding") == 10)\n'
+               'assert(hl.get_config("decoration.blur.enabled") == true)\n'
+               'assert(agentoo_transparency_loaded)\n'
+               'assert(agentoo_effects_report)\n'
+               'assert(agentoo_blur_report():find(' + json.dumps(blur.revision(data['blur'])) + '))\n')
+        self.path.unlink()
+        verify('assert(hl.get_config("decoration.rounding") == 6)\n')
+        # Capture real authored rules, rather than scanning files during reload.
+        source = source.replace('hl.window_rule = native_window_rule',
+                                'hl.window_rule({match={class="kitty"},opacity="0.8"})\nhl.window_rule = native_window_rule')
+        self.path.write_text(state.dumps({'transparency': {'all': {'focused': 5}}}))
+        verify(expected=1)
+        self.path.unlink()
+        verify()
+
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
     def test_portable_animation_preferences_use_each_desktops_authored_settings(self):
-        self.directory.mkdir()
-        self.path.write_text(json.dumps({'animations': {'windows': 'popin', 'window_size': 80}}))
+        self.directory.mkdir(parents=True)
+        self.path.write_text(state.dumps({'animations': {'windows': 'popin', 'window_size': 80}}))
         module = self.root / 'effects.lua'
-        module.write_text((ROOT / 'etc/xdg/hypr/effects.lua').read_text().replace(
-            '/usr/local/share/agentoo/lib/desktop/effects.py', str(SHARE / 'lib/desktop/effects.py')))
+        module.write_text(native_preferences() + (ROOT / 'etc/xdg/hypr/effects.lua').read_text())
         capture = (ROOT / 'etc/xdg/hypr/hyprland.lua').read_text().split('-- Hyprland discovers', 1)[0]
         for speed in (3, 7):
             config = self.root / 'hyprland.lua'

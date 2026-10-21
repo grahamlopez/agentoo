@@ -22,7 +22,7 @@ def authored_hypr_paths():
     root = xdg_directory('XDG_CONFIG_HOME', '.config') / 'hypr'
     if root.exists():
         paths.extend(path for path in sorted(root.rglob('*'))
-                     if path.suffix in ('.lua', '.conf') and path.is_file())
+                     if path.suffix in ('.lua', '.conf') and path.is_file() and path != root / 'agentoo-desktop.lua')
     return paths
 
 

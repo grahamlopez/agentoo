@@ -1,5 +1,5 @@
 -- Remember authored animation calls while loading defaults and personal files.
--- The native setter requires complete definitions; appearance.json stores only
+-- The native setter requires complete definitions; the generated Lua table stores only
 -- public preferences, so omitted animation fields are filled here on each load.
 local native_animation = hl.animation
 agentoo_animation_defaults = {}
@@ -8,6 +8,17 @@ hl.animation = function(settings)
     for key, value in pairs(settings) do copy[key] = value end
     agentoo_animation_defaults[settings.leaf] = copy
     return native_animation(settings)
+end
+
+-- Record actual authored window rules while defaults and personal files load.
+-- Native loading can detect conflicts without launching a filesystem scanner.
+local native_window_rule = hl.window_rule
+agentoo_authored_rule_conflicts = {}
+hl.window_rule = function(rule)
+    for _, field in ipairs({"opacity", "opaque", "force_rgbx", "no_blur", "noblur"}) do
+        if rule[field] ~= nil then agentoo_authored_rule_conflicts[field] = true end
+    end
+    return native_window_rule(rule)
 end
 
 -- Hyprland discovers this system fallback without a user entry file.
@@ -47,6 +58,7 @@ end
 include_optional(config_home .. "/hypr/agentoo-local.lua")
 
 hl.animation = native_animation
+hl.window_rule = native_window_rule
 
 -- Keep closed panels disabled before reload applies monitor rules, including
 -- host/personal rules. Do not briefly enable them during appearance changes.
@@ -54,6 +66,4 @@ require("/etc/xdg/hypr/lid.lua")
 
 -- Apply remembered appearance overrides after authored defaults. Reloading with
 -- no saved overrides exposes those defaults again, including personal rules.
-require("/etc/xdg/hypr/transparency.lua")
-require("/etc/xdg/hypr/blur.lua")
-require("/etc/xdg/hypr/effects.lua")
+require("/etc/xdg/hypr/desktop.lua")

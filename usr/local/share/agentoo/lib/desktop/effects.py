@@ -1,19 +1,12 @@
-"""Personal desktop effects for Hyprland 0.56.2; no operations on import.
-
-One parser supplies help, completion and saved-value validation. The private
-settings entry point emits tab-separated data for effects.lua, never user code.
-"""
+"""Desktop effect arguments and read-only compositor queries."""
 import argparse
 import json
 import math
 import os
 import re
 import sys
-from pathlib import Path
 
 sys.dont_write_bytecode = True
-if __name__ == '__main__':
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cli import ArgumentParser
 from desktop.common import hyprctl
 
@@ -150,39 +143,7 @@ def state_path():
 
 def read_state(path, *, selected=None):
     from desktop.state import read
-    data = {k: v for k, v in read(path).items() if k in COMMANDS and (selected is None or k == selected)}
-    return validate_sections(data)
-
-
-def validate_sections(data, *, partial=False):
-    try:
-        root = ArgumentParser()
-        parsers = add_parsers(root.add_subparsers())
-        if not isinstance(data, dict) or set(data) - set(COMMANDS):
-            raise ValueError('unknown effect')
-        result = {}
-        for group, values in data.items():
-            if not isinstance(values, dict):
-                raise ValueError('expected effect settings')
-            actions = {a.dest: a for a in parsers[group]._actions if a.dest not in ('help', 'appearance_file')}
-            result[group] = {}
-            for key, value in values.items():
-                if key not in actions or type(value) not in (int, float, str):
-                    raise ValueError(f'invalid {group}.{key}')
-                action = actions[key]
-                if action.choices and value not in action.choices:
-                    raise ValueError(f'invalid {group}.{key}')
-                result[group][key] = action.type(str(value)) if action.type else value
-        animation = result.get('animations', {})
-        if 'window_direction' in animation and (not partial or 'windows' in animation) and animation.get('windows') != 'slide':
-            raise ValueError('window_direction requires windows: slide')
-        if 'window_size' in animation and (not partial or 'windows' in animation) and animation.get('windows') != 'popin':
-            raise ValueError('window_size requires windows: popin')
-        if 'workspace_distance' in animation and (not partial or 'workspaces' in animation) and not animation.get('workspaces', '').startswith('slide'):
-            raise ValueError('workspace_distance requires a sliding workspaces style')
-        return result
-    except (ValueError, TypeError, argparse.ArgumentTypeError) as error:
-        raise RuntimeError(f'Invalid appearance settings: {error}') from error
+    return {key: values for key, values in read(path, selected=selected).items() if key in COMMANDS}
 
 
 def live_animations():
@@ -194,19 +155,6 @@ def live_animations():
             node = PARENTS[node]
         result[name] = {k: nodes[node][k] for k in ('enabled', 'speed', 'bezier', 'style')}
     return result
-
-
-def animation_update(previous, values):
-    updated = dict(previous)
-    if 'windows' in values:
-        if values['windows'] != 'slide':
-            updated.pop('window_direction', None)
-        if values['windows'] != 'popin':
-            updated.pop('window_size', None)
-    if 'workspaces' in values and not values['workspaces'].startswith('slide'):
-        updated.pop('workspace_distance', None)
-    updated.update(values)
-    return updated
 
 
 def show(data, group):
@@ -262,22 +210,3 @@ def reload_settings():
     errors = hyprctl('configerrors')
     if errors:
         raise RuntimeError('Hyprland configuration errors: ' + errors)
-
-
-def settings():
-    data = read_state(state_path())
-    lines = []
-    for group, values in data.items():
-        for key, value in values.items():
-            lines.append(f'{group}\t{key}\t{value}')
-    print('\n'.join([*lines, 'end']))
-
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1:] != ['settings']:
-            raise RuntimeError('Private helper: expected settings')
-        settings()
-    except (OSError, RuntimeError) as error:
-        print(f'agentoo desktop: {error}', file=sys.stderr)
-        raise SystemExit(1)

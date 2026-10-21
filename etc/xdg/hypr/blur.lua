@@ -6,37 +6,12 @@ local baseline = on(hl.get_config("decoration.blur.enabled"))
 local baseline_size = hl.get_config("decoration.blur.size")
 local baseline_passes = hl.get_config("decoration.blur.passes")
 
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/blur.py rules", "r"))
-local contents = stream:read("*a")
--- Hyprland can reap popen's child before pclose. Check the completion record,
--- not pclose's potentially spurious ECHILD result (also used by transparency).
-stream:close()
-assert(contents:sub(-4) == "end\n", "Cannot load Agentoo blur state; see session stderr")
-
-local groups = { all = {}, kitty = {}, browser = {} }
+local saved = assert(agentoo_desktop_preferences).blur or {}
+local groups = { all = saved.all or {}, kitty = saved.kitty or {}, browser = saved.browser or {} }
 local strength = {}
-local revision
-local managed = false
-for line in contents:gmatch("([^\n]+)\n") do
-    if line ~= "end" then
-        local group, key, value = line:match("^(%a+)\t(%a+)\t([^\t]+)$")
-        if group == "strength" then
-            -- Python owns semantic validation and limits. Lua only checks the
-            -- transport before passing validated values to the compositor.
-            local number = tonumber(value)
-            assert((key == "size" or key == "passes") and number)
-            strength["decoration.blur." .. key] = number
-        elseif groups[group] then
-            assert((key == "focused" or key == "unfocused") and (value == "on" or value == "off"))
-            groups[group][key] = value == "on"
-            managed = true
-        else
-            revision = line:match("^revision\t([a-f0-9]+)$")
-            assert(revision and #revision == 64, "Invalid Agentoo blur data")
-        end
-    end
-end
-assert(revision, "Missing Agentoo blur revision")
+for name, value in pairs(saved.strength or {}) do strength["decoration.blur." .. name] = value end
+local revision = agentoo_preferences.revision(saved)
+local managed = next(groups.all) or next(groups.kitty) or next(groups.browser)
 
 local families = require("/etc/xdg/hypr/window-classes.lua")
 local classes = { all = ".*", kitty = families.kitty, browser = families.browser }

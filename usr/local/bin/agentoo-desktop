@@ -18,7 +18,7 @@ def build_parser():
                'Run a feature without an action to show its current settings.\n'
                'set --file applies appearance settings only; clear includes wallpaper.\n\n'
                'Examples:\n'
-               '  agentoo desktop set --file appearance.json\n'
+               '  agentoo desktop set --file preset.lua\n'
                '  agentoo desktop transparency set --focused 5 --unfocused 10\n'
                '  agentoo desktop blur clear --window kitty\n'
                '  agentoo desktop clear\n\n'
@@ -26,7 +26,7 @@ def build_parser():
     from desktop.state import file_option, window_option
     parser.set_defaults(action=None, appearance_file=None, window='all')
     commands = parser.add_subparsers(dest='command', prog=parser.prog)
-    setter = commands.add_parser('set', help='Apply and remember appearance settings from JSON',
+    setter = commands.add_parser('set', help='Apply and remember appearance settings from a Lua preset',
         description='Apply and remember appearance settings. Omitted settings stay unchanged. Wallpaper is separate.')
     setter.set_defaults(command=None, action='set')
     file_option(setter, required=True)
@@ -90,14 +90,14 @@ def main():
     if args.command == 'blur':
         blur.validate(args, parser)
         if args.diagnose:
-            return blur.diagnose(directory / 'appearance.json', args.window)
+            return blur.diagnose(directory / 'agentoo-desktop.lua', args.window)
     if args.action is None:
         if args.command == 'blur':
-            return blur.query(directory / 'appearance.json', args.window)
+            return blur.query(directory / 'agentoo-desktop.lua', args.window)
         if args.command == 'transparency':
-            transparency.show(transparency.read_state(directory / 'appearance.json'), args.window)
+            transparency.show(transparency.read_state(directory / 'agentoo-desktop.lua'), args.window)
         else:
-            effects.show(effects.read_state(directory / 'appearance.json', selected=args.command), args.command)
+            effects.show(effects.read_state(directory / 'agentoo-desktop.lua', selected=args.command), args.command)
         return 0
     if args.action == 'set' and args.command is not None:
         values = {

@@ -113,4 +113,4 @@ python3 usr/local/share/agentoo/tests/run_tests.py
 ```
 
 The unified Python suite includes font selection tests. Lua regression tests
-are reported as skipped when the Lua interpreter is unavailable.
+are reported as skipped when `lua5.4` is unavailable.

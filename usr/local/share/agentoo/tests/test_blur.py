@@ -19,14 +19,20 @@ from desktop import effects
 from desktop import state
 
 
+def native_preferences():
+    path = str(SHARE / 'lib/desktop/preferences.lua')
+    return ('agentoo_preferences = dofile(' + json.dumps(path) + ')\n'
+            'agentoo_desktop_preferences = agentoo_preferences.load(agentoo_preferences.path(), nil, false, true)\n')
+
+
 class Blur(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='agentoo-blur-test-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.directory = self.root / 'state/agentoo'
+        self.directory = self.root / 'config/hypr'
         self.env = patch.dict(os.environ, HOME=str(self.root), XDG_CONFIG_HOME=str(self.root / 'config'),
-                              XDG_STATE_HOME=str(self.root / 'state'), HYPRLAND_INSTANCE_SIGNATURE='test')
+                              XDG_STATE_HOME=str(self.root / 'state'), XDG_RUNTIME_DIR=str(self.root / 'runtime'), HYPRLAND_INSTANCE_SIGNATURE='test')
         self.env.start()
         self.addCleanup(self.env.stop)
         self.cli = SHARE.parents[1] / 'bin/agentoo'
@@ -92,13 +98,13 @@ class Blur(unittest.TestCase):
         self.assertFalse(self.directory.exists())
 
     def test_bad_saved_state_and_relative_xdg(self):
-        with patch.dict(os.environ, XDG_STATE_HOME='relative'):
-            self.assertEqual(blur.state_path(), self.root / '.local/state/agentoo/appearance.json')
+        with patch.dict(os.environ, XDG_CONFIG_HOME='relative'):
+            self.assertEqual(blur.state_path(), self.root / '.config/hypr/agentoo-desktop.lua')
         path = self.root / 'invalid.json'
         for contents in ('[]', '{"other":{}}', '{"all":{"focused":"on"}}', '{"kitty":{"focused":1}}',
                          '{"strength":{"passes":true}}', '{"strength":{"size":1.5}}',
                          '{"strength":{"size":0}}', '{"all":{"focus":true}}', 'bad'):
-            path.write_text(json.dumps({'blur': json.loads(contents)}) if contents not in ('bad', '[]') else contents)
+            path.write_text(state.dumps({'blur': json.loads(contents)}) if contents not in ('bad', '[]') else contents)
             with self.assertRaises(RuntimeError):
                 blur.read_state(path)
         path.write_bytes(b'\xff')
@@ -107,8 +113,8 @@ class Blur(unittest.TestCase):
 
     def test_save_preserves_other_sections(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'appearance.json'
-        path.write_text(json.dumps({'transparency': {'all': {'focused': 15, 'unfocused': 25}}}))
+        path = self.directory / 'agentoo-desktop.lua'
+        path.write_text(state.dumps({'transparency': {'all': {'focused': 15, 'unfocused': 25}}}))
         with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved') as reload:
             state.update(self.args(size=3, passes=1), self.directory, self.write)
@@ -116,7 +122,7 @@ class Blur(unittest.TestCase):
         data = blur.read_state(path)
         self.assertEqual(data, {'strength': {'size': 3, 'passes': 1}, 'kitty': {'focused': True}})
         reload.assert_called_with(data)
-        self.assertEqual(json.loads(path.read_text())['transparency'], {'all': {'focused': 15, 'unfocused': 25}})
+        self.assertEqual(state.read(path)['transparency'], {'all': {'focused': 15, 'unfocused': 25}})
 
     def test_strength_update_explains_when_blur_remains_off(self):
         for enabled in ('off', 'on'):
@@ -131,13 +137,13 @@ class Blur(unittest.TestCase):
                 self.assertIn('--focused on and/or --unfocused on', messages.getvalue())
             else:
                 self.assertNotIn('Blur remains off', messages.getvalue())
-            self.assertEqual(blur.read_state(self.directory / 'appearance.json'),
+            self.assertEqual(blur.read_state(self.directory / 'agentoo-desktop.lua'),
                              {'strength': {'size': 10, 'passes': 3}})
 
     def test_failure_rolls_back_exact_bytes_and_reloads_old_configuration(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'appearance.json'
-        original = b'{"blur": {"all": {"focused": false}}}\n'
+        path = self.directory / 'agentoo-desktop.lua'
+        original = state.dumps({'blur': {'all': {'focused': False}}}).encode()
         path.write_bytes(original)
         with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved', side_effect=RuntimeError('bad reload')), \
@@ -149,13 +155,13 @@ class Blur(unittest.TestCase):
 
     def test_full_reset_recovers_corrupt_state(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'appearance.json'
-        path.write_text(json.dumps({'blur': {'bad': True}, 'gaps': {'inner': 4}}))
+        path = self.directory / 'agentoo-desktop.lua'
+        path.write_text(state.dumps({'blur': {'bad': True}, 'gaps': {'inner': 4}}))
         with patch.object(blur, 'require_integration') as require, patch.object(blur, 'reload_saved') as reload:
             state.update(self.args(action='clear'), self.directory, self.write)
         require.assert_called_once_with(recover=True)
         reload.assert_called_once_with({})
-        self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
+        self.assertEqual(state.read(path), {'gaps': {'inner': 4}})
 
     def test_authored_conflict_blocks_change_but_not_full_reset(self):
         directory = self.root / 'config/hypr'
@@ -167,7 +173,7 @@ class Blur(unittest.TestCase):
         with patch.object(blur, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
                 state.update(self.args(focused='on'), self.directory, self.write)
-        self.assertFalse((self.directory / 'appearance.json').exists())
+        self.assertFalse((self.directory / 'agentoo-desktop.lua').exists())
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'):
             state.update(self.args(action='clear'), self.directory, self.write)
 
@@ -175,14 +181,14 @@ class Blur(unittest.TestCase):
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'), \
              patch.object(blur, 'conflicts', return_value=['authored.lua:2']):
             state.update(self.args(size=3), self.directory, self.write)
-            self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
+            self.assertEqual(blur.read_state(self.directory / 'agentoo-desktop.lua'), {'strength': {'size': 3}})
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
                 blur.check_conflicts({'kitty': {'focused': True}})
             blur.check_conflicts({})
             blur.check_conflicts({'strength': {'size': 3}})
-            self.write(self.directory / 'appearance.json', json.dumps({'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}}}))
+            self.write(self.directory / 'agentoo-desktop.lua', state.dumps({'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}}}))
             state.update(self.args(window='kitty', action='clear'), self.directory, self.write)
-            self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
+            self.assertEqual(blur.read_state(self.directory / 'agentoo-desktop.lua'), {'strength': {'size': 3}})
 
     def test_queries_show_sources_without_creating_state(self):
         data = {'all': {'focused': True}, 'kitty': {'focused': False}, 'strength': {'passes': 2}}
@@ -197,7 +203,7 @@ class Blur(unittest.TestCase):
         self.assertIn('Current blur engine: on', output.getvalue())
         with patch.object(blur, 'live_report', side_effect=RuntimeError('offline')), \
              redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(blur.query(self.directory / 'appearance.json', 'all'), 0)
+            self.assertEqual(blur.query(self.directory / 'agentoo-desktop.lua', 'all'), 0)
         self.assertIn('unknown (configured default)', output.getvalue())
         self.assertFalse(self.directory.exists())
 
@@ -248,7 +254,7 @@ class Blur(unittest.TestCase):
                 return '\n'.join(key + '\t' + value for key, value in self.report(**{'option.size': '10'}).items())
             self.fail('Unexpected operation: ' + repr(arguments))
         with patch.object(blur, 'hyprctl', side_effect=command), redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 0)
+            self.assertEqual(blur.diagnose(self.directory / 'agentoo-desktop.lua', 'all'), 0)
         self.assertIn('Hyprland 0.56.2', output.getvalue())
         self.assertIn('no GPU load or power measurement', output.getvalue())
         self.assertIn('Client blur regions and actual rendering are not verified', output.getvalue())
@@ -268,7 +274,7 @@ class Blur(unittest.TestCase):
 
         with patch.object(blur, 'hyprctl', side_effect=command), \
              redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 1)
+            self.assertEqual(blur.diagnose(self.directory / 'agentoo-desktop.lua', 'all'), 1)
         self.assertIn('invalid personal window rule', output.getvalue())
         self.assertIn('test GPU inventory', output.getvalue())
         self.assertIn('Open window classes:\nkitty', output.getvalue())
@@ -276,7 +282,7 @@ class Blur(unittest.TestCase):
 
     def test_diagnostics_continue_after_corrupt_state_and_fail_on_unavailable_core_options(self):
         self.directory.mkdir(parents=True)
-        path = self.directory / 'appearance.json'
+        path = self.directory / 'agentoo-desktop.lua'
         path.write_bytes(b'broken\xff')
         def command(*arguments, **keywords):
             if arguments[0] == 'repl':
@@ -284,7 +290,7 @@ class Blur(unittest.TestCase):
             return '[]' if arguments == ('-j', 'clients') else ''
         with patch.object(blur, 'hyprctl', side_effect=command), \
              redirect_stdout(io.StringIO()) as output, redirect_stderr(io.StringIO()) as errors:
-            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 1)
+            self.assertEqual(blur.diagnose(self.directory / 'agentoo-desktop.lua', 'all'), 1)
         self.assertIn('Saved blur preferences: unavailable', output.getvalue())
         self.assertIn('Effective compositor options:', output.getvalue())
         self.assertIn('Cannot read appearance file', errors.getvalue())
@@ -292,15 +298,14 @@ class Blur(unittest.TestCase):
         self.assertEqual(path.read_bytes(), b'broken\xff')
         path.unlink()
         with patch.object(blur, 'hyprctl', side_effect=command), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(blur.diagnose(self.directory / 'appearance.json', 'all'), 1)
+            self.assertEqual(blur.diagnose(self.directory / 'agentoo-desktop.lua', 'all'), 1)
 
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
     def test_native_parser_checks_engine_behavior_and_authored_defaults(self):
         self.directory.mkdir(parents=True)
         source = SHARE.parents[3] / 'etc/xdg/hypr/blur.lua'
         module = self.root / 'blur.lua'
-        module.write_text(source.read_text().replace('/usr/local/share/agentoo/lib/desktop/blur.py',
-                                                   str(SHARE / 'lib/desktop/blur.py')).replace(
+        module.write_text(native_preferences() + source.read_text().replace(
             '/etc/xdg/hypr/window-classes.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/window-classes.lua')))
         for data, baseline, expected_engine in (
             ({}, False, False),
@@ -311,7 +316,7 @@ class Blur(unittest.TestCase):
             ({}, True, True),
         ):
             with self.subTest(data=data, baseline=baseline):
-                (self.directory / 'appearance.json').write_text(json.dumps({'blur': data}))
+                (self.directory / 'agentoo-desktop.lua').write_text(state.dumps({'blur': data}))
                 config = self.root / 'hyprland.lua'
                 config.write_text('hl.config({decoration={active_opacity=0.85,blur={enabled=' + str(baseline).lower()
                                   + ',size=8,passes=1}}})\ndofile(' + json.dumps(str(module)) + ')\n'

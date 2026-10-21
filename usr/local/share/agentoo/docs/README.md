@@ -84,7 +84,7 @@ python3 usr/local/share/agentoo/tests/run_tests.py
 ```
 
 This runs the unified Python discovery suite followed by every Lua regression
-script. Lua checks are explicitly reported as skipped when `lua` is unavailable.
+script. Lua checks are explicitly reported as skipped when `lua5.4` is unavailable.
 Python tests that require optional native tools report their own skips. Tests use
 disposable files and mocks; they do not establish live hardware correctness.
 
