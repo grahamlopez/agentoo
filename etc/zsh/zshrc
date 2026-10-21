@@ -149,6 +149,13 @@ bindkey '^R' history-incremental-search-backward
 bindkey '^Y' yank
 bindkey '^U' kill-whole-line
 
+# Fuzzy history (Ctrl+R), file selection (Ctrl+T), and directory navigation (Ctrl+G/Alt+C).
+# Keep the bindings above when fzf or its shell integration is unavailable.
+if (( $+commands[fzf] )) && [[ -r /usr/share/fzf/key-bindings.zsh ]]; then
+  source /usr/share/fzf/key-bindings.zsh
+  bindkey '^G' fzf-cd-widget
+fi
+
 # general commands defaults
 alias ls="ls --color=auto -F"
 alias grep="grep --color=auto"
