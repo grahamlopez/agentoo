@@ -684,8 +684,15 @@ The selection is a text file at `$XDG_STATE_HOME/agentoo/wallpaper`, defaulting 
 user state outside Git. The helper atomically replaces the file and serializes
 changes with a lock beside it. It does not generate user configuration files.
 
-The shared `/etc/xdg/hypr/agentoo.lua` registers `agentoo desktop wallpaper restore`
-on `hyprland.start`, which runs once per session rather than on config reload.
+The shared `/etc/xdg/hypr/agentoo.lua` includes `wallpaper.lua`, which runs
+`agentoo desktop wallpaper restore` on session startup and after actual monitor
+geometry changes. Hyprland 0.56.2 was observed moving an auto-positioned external
+output from x=1920 to x=0 on lid close while leaving its wallpaper layer at
+x=1920. Recreating the managed swaybg client corrected the misplaced layer.
+The handler debounces `monitor.layout_changed` for 250 ms and compares sorted
+output names, positions, sizes, scales and transforms before restoring. Ordinary
+config reloads, workspace changes and output enumeration order changes do not
+restart the client. The geometry repair also covers lid opening and hotplug.
 With no saved image, restore quietly succeeds, including when swaybg is not
 installed. A missing remembered image produces a warning and exit 1, retaining
 the path for a later retry. New sessions retain the solid background in this case.

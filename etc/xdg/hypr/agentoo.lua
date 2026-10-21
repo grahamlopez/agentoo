@@ -1,10 +1,12 @@
 -- Shared defaults for Hyprland 0.56.2. No host-specific workarounds.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 
--- Restore personal wallpaper once per session, never on config reload.
-hl.on("hyprland.start", function()
-    hl.exec_cmd("agentoo desktop wallpaper restore")
-end)
+-- Restore on startup and after monitor geometry changes; ordinary reloads
+-- retain the existing client. See wallpaper.lua for the layer-position repair.
+-- That file contains captured 0.56.2 evidence, upstream source references and
+-- the procedure for disabling/retesting/removing the workaround after upgrades.
+-- Do not simply remove this include permanently: it also owns startup restore.
+require("/etc/xdg/hypr/wallpaper.lua")
 
 hl.config({
     input = { kb_layout = "us", kb_options = "ctrl:nocaps" },
