@@ -9,7 +9,11 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" 
 require("/etc/xdg/hypr/wallpaper.lua")
 
 hl.config({
-    input = { kb_layout = "us", kb_options = "ctrl:nocaps" },
+    input = {
+        kb_layout = "us",
+        kb_options = "ctrl:nocaps",
+        special_fallthrough = true,
+    },
     general = { layout = "dwindle", gaps_in = 4, gaps_out = 8, border_size = 2 },
     dwindle = { preserve_split = true },
     decoration = { rounding = 0, blur = { enabled = false }, shadow = { enabled = false } },
