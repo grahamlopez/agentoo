@@ -13,7 +13,7 @@ local contents = stream:read("*a")
 stream:close()
 assert(contents:sub(-4) == "end\n", "Cannot load Agentoo blur state; see session stderr")
 
-local groups = { all = {}, kitty = {}, browser = {} }
+local groups = { all = {}, kitty = {}, browser = {}, other = {} }
 local strength = {}
 local revision
 local managed = false
@@ -39,7 +39,7 @@ end
 assert(revision, "Missing Agentoo blur revision")
 
 local families = require("/etc/xdg/hypr/window-classes.lua")
-local classes = { all = ".*", kitty = families.kitty, browser = families.browser }
+local classes = { all = ".*", kitty = families.kitty, browser = families.browser, other = families.other }
 local function resolve(group, focus)
     if groups[group][focus] ~= nil then return groups[group][focus] end
     if groups.all[focus] ~= nil then return groups.all[focus] end
@@ -50,10 +50,10 @@ if managed then
     -- Install all, then category rules: the last match takes precedence.
     -- Resolve omitted states against the original engine setting, rather than
     -- accidentally enabling them when another state turns the engine on.
-    for _, group in ipairs({ "all", "kitty", "browser" }) do
+    for _, group in ipairs({ "all", "kitty", "browser", "other" }) do
         for _, focus in ipairs({ "focused", "unfocused" }) do
             local enabled = resolve(group, focus)
-            engine = engine or enabled
+            if group ~= "all" then engine = engine or enabled end
             hl.window_rule({
                 name = "agentoo-blur-" .. group .. "-" .. focus,
                 match = { class = classes[group], focus = focus == "focused" },

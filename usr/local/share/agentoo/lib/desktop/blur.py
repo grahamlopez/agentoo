@@ -17,7 +17,7 @@ if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop.common import authored_hypr_paths, hyprctl
 
-GROUPS = ('all', 'kitty', 'browser')
+GROUPS = ('all', 'kitty', 'browser', 'other')
 STATES = ('focused', 'unfocused')
 LIMITS = {'size': 40, 'passes': 10}
 
@@ -56,7 +56,7 @@ def add_parser(commands):
                'Setting all clears category overrides for supplied focus states; category overrides take precedence. '
                'An economical starting point is size 3, passes 1. Blur off saves the most power. '
                'Supply at least one adjustment or --file; --file cannot accompany adjustments '
-               'or a kitty/browser window category.')
+               'or a kitty/browser/other window category.')
     window_option(parser, child=True)
     parser.add_argument('--focused', choices=('on', 'off'), help='Enable or disable blur for focused windows')
     parser.add_argument('--unfocused', choices=('on', 'off'), help='Enable or disable blur for unfocused windows')
@@ -65,7 +65,7 @@ def add_parser(commands):
     file_option(parser)
     clear = actions.add_parser('clear', help='Remove saved blur overrides',
         description='Remove saved blur overrides and apply configured defaults. '
-                    'Clearing kitty/browser restores inheritance; all clears every override, including strength.')
+                    'Clearing kitty/browser/other restores inheritance; all clears every override, including strength.')
     window_option(clear, child=True)
     return feature
 
@@ -116,7 +116,7 @@ def adjusted(data, args):
             continue
         data.setdefault(args.window, {})[focus] = value == 'on'
         if args.window == 'all':
-            for group in ('kitty', 'browser'):
+            for group in GROUPS[1:]:
                 data.get(group, {}).pop(focus, None)
     for name in LIMITS:
         value = getattr(args, name)

@@ -53,9 +53,9 @@ def build_parser():
     setter = actions.add_parser('set', help='Apply and remember transparency settings',
         description='Apply and remember transparency. Omitted settings stay unchanged.',
         epilog='0 means fully opaque. Setting all clears category overrides for supplied focus states. '
-               'Kitty/browser overrides take precedence over shared values. '
+               'Kitty/browser/other overrides take precedence over shared values. '
                'Supply at least one adjustment or --file; --file cannot accompany adjustments '
-               'or a kitty/browser window category.')
+               'or a kitty/browser/other window category.')
     window_option(setter, child=True)
     from desktop.transparency import percentage
     setter.add_argument('--focused', type=percentage, metavar='PERCENT', help='Focused-window transparency, 0–90')
@@ -63,7 +63,7 @@ def build_parser():
     file_option(setter)
     clear = actions.add_parser('clear', help='Remove saved transparency overrides',
         description='Remove saved transparency overrides and apply configured defaults. '
-                    'Clearing kitty/browser restores inheritance; all clears shared and category overrides.')
+                    'Clearing kitty/browser/other restores inheritance; all clears shared and category overrides.')
     window_option(clear, child=True)
     from desktop.blur import add_parser
     add_parser(commands)
@@ -104,7 +104,7 @@ def main():
             key: value for key, value in vars(args).items()
             if key not in ('command', 'action', 'window', 'diagnose', 'appearance_file') and value is not None}
         if args.appearance_file is not None and (values or args.window != 'all'):
-            parser.error('--file cannot accompany adjustments or a kitty/browser window category')
+            parser.error('--file cannot accompany adjustments or a kitty/browser/other window category')
         if not values and args.appearance_file is None:
             parser.error('set requires at least one adjustment or --file')
     update(args, directory, atomic_write, parser)

@@ -59,6 +59,14 @@ class Blur(unittest.TestCase):
                                   'kitty': {'unfocused': False}, 'strength': {'size': 3}})
         self.assertFalse(original['kitty']['focused'])
 
+    def test_other_updates_leave_kitty_browser_and_strength_unchanged(self):
+        original = {'all': {'focused': False}, 'kitty': {'focused': True},
+                    'browser': {'focused': True}, 'strength': {'size': 3}}
+        changed = blur.adjusted(original, self.args(window='other', focused='on'))
+        blur.validate_data(changed)
+        self.assertEqual(changed, original | {'other': {'focused': True}})
+        self.assertNotIn('other', blur.adjusted(changed, self.args(focused='off')))
+
     def test_validation_help_and_completion_have_no_effects(self):
         fake = self.root / 'bin'
         fake.mkdir()
@@ -78,7 +86,7 @@ class Blur(unittest.TestCase):
             result = subprocess.run([str(self.cli), *args], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('--diagnose', result.stdout)
-        for flag, choices in (('--window', ('all', 'kitty', 'browser')), ('--focused', ('on', 'off')),
+        for flag, choices in (('--window', ('all', 'kitty', 'browser', 'other')), ('--focused', ('on', 'off')),
                               ('--unfocused', ('on', 'off'))):
             result = subprocess.run([str(self.cli), '__complete', '5', 'desktop', 'blur', 'set', flag, ''],
                                     env=env, capture_output=True, text=True)
@@ -95,7 +103,7 @@ class Blur(unittest.TestCase):
         with patch.dict(os.environ, XDG_STATE_HOME='relative'):
             self.assertEqual(blur.state_path(), self.root / '.local/state/agentoo/appearance.json')
         path = self.root / 'invalid.json'
-        for contents in ('[]', '{"other":{}}', '{"all":{"focused":"on"}}', '{"kitty":{"focused":1}}',
+        for contents in ('[]', '{"unknown":{}}', '{"all":{"focused":"on"}}', '{"kitty":{"focused":1}}',
                          '{"strength":{"passes":true}}', '{"strength":{"size":1.5}}',
                          '{"strength":{"size":0}}', '{"all":{"focus":true}}', 'bad'):
             path.write_text(json.dumps({'blur': json.loads(contents)}) if contents not in ('bad', '[]') else contents)

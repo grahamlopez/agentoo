@@ -36,7 +36,7 @@ end
 
 local config, rules, report, snapshot = run("kitty\tfocused\ton\n", false)
 assert(config["decoration.blur.enabled"] == true)
-assert(#rules == 6)
+assert(#rules == 8)
 assert(rules[1].match.class == ".*" and rules[1].no_blur == true)
 assert(rules[3].match.focus == true and rules[3].no_blur == false)
 assert(rules[4].match.focus == false and rules[4].no_blur == true)
@@ -59,3 +59,11 @@ assert(config["decoration.blur.size"] == 3 and config["decoration.blur.passes"] 
 config, rules = run("", true) -- Full reset leaves authored defaults in control.
 assert(#rules == 0 and config["decoration.blur.enabled"] == true)
 print("Hyprland blur contracts passed")
+
+config, rules = run("other\tfocused\ton\n", false)
+assert(config["decoration.blur.enabled"] == true)
+assert(rules[3].no_blur and rules[5].no_blur)
+assert(rules[7].no_blur == false and rules[8].no_blur == true)
+assert(rules[7].match.class == dofile("etc/xdg/hypr/window-classes.lua").other)
+config, rules = run("all\tfocused\ton\nall\tunfocused\toff\nkitty\tfocused\toff\nbrowser\tfocused\toff\nother\tfocused\toff\n", true)
+assert(config["decoration.blur.enabled"] == false)

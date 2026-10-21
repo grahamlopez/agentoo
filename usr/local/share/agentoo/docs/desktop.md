@@ -72,6 +72,7 @@ agentoo desktop transparency
 agentoo desktop transparency set --focused 5 --unfocused 10
 agentoo desktop transparency set --window kitty --unfocused 20
 agentoo desktop transparency set --window browser --focused 0 --unfocused 0
+agentoo desktop transparency set --window other --focused 5 --unfocused 15
 agentoo desktop transparency clear --window browser
 agentoo desktop transparency clear
 ```
@@ -80,13 +81,17 @@ Percentages measure transparency: 0 is opaque, 90 is the maximum, and fractional
 percentages are accepted. Focused and unfocused values change independently.
 Without an action, the command prints settings without
 creating state or changing windows. `--window` defaults to `all`; a query of
-`all` shows all three groups with override, inherited, or configured-default
+`all` shows all four groups with override, inherited, or configured-default
 sources. Queries without a reachable compositor show saved values and label
 unavailable defaults as `configured default` rather than guessing them.
 
-Setting `all` clears Kitty/browser overrides for each supplied focus state.
+`other` matches windows outside the Kitty and browser class families, including
+custom classes not recognized as either family. Setting or clearing `other` leaves
+Kitty and browser preferences unchanged. It inherits from `all` when unset.
+
+Setting `all` clears Kitty/browser/other overrides for each supplied focus state.
 An omitted focus state retains its shared value and category overrides.
-Clearing Kitty or browser removes that category's overrides, restoring shared
+Clearing Kitty, browser, or other removes that category's overrides, restoring shared
 inheritance. Clearing all removes every override and restores authored defaults,
 including personal configuration. `clear` cannot accompany either percentage.
 Shared defaults currently set no opacity, so absent host or personal settings
@@ -153,6 +158,7 @@ agentoo desktop blur
 agentoo desktop blur set --focused on --unfocused on --size 3 --passes 1
 agentoo desktop blur set --focused on --unfocused off
 agentoo desktop blur set --window browser --focused off --unfocused off
+agentoo desktop blur set --window other --focused on --unfocused off
 agentoo desktop blur --diagnose
 agentoo desktop blur clear
 ```
@@ -162,7 +168,7 @@ Blur is off in the shared Agentoo configuration. Enable it with `--focused on`
 and/or `--unfocused on`. Changing size or passes alone saves strength without
 enabling blur; the command reports when blur remains off. Enabling focused blur does not
 enable unfocused blur, and vice versa. On/off preferences support the same
-`all`, `kitty`, and `browser` groups as transparency. Setting `all` clears
+`all`, `kitty`, `browser`, and `other` groups as transparency. Setting `all` clears
 category overrides only for supplied focus states. Clearing a category restores
 shared inheritance; clearing all removes every blur override, including strength,
 and re-exposes the authored host/personal/system defaults. Thus an explicit
@@ -454,7 +460,7 @@ use the strings `"on"` and `"off"`, matching their CLI values. Empty sections ma
 no changes; an empty top-level file is rejected.
 
 `set --file` cannot accompany adjustment flags or a selected
-Kitty/browser window category. Files apply and persist: their supplied values are
+Kitty/browser/other window category. Files apply and persist: their supplied values are
 copied into normal state, with no ongoing dependency on the source file. The
 import file is left untouched (unless it is itself the normal saved state file).
 `clear` removes saved overrides and applies configured defaults rather than

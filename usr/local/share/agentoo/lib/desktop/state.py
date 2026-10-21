@@ -59,9 +59,9 @@ def file_option(parser, *, required=False):
 
 
 def window_option(parser, *, child=False):
-    parser.add_argument('--window', choices=('all', 'kitty', 'browser'),
+    parser.add_argument('--window', choices=('all', 'kitty', 'browser', 'other'),
                         default=argparse.SUPPRESS if child else 'all',
-                        help='Window category (default: all)')
+                        help='Window category; other excludes kitty and browsers (default: all)')
 
 
 def imported(path, command=None):

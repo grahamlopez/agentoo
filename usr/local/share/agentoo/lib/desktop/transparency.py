@@ -16,7 +16,7 @@ if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop.common import authored_hypr_paths, hyprctl
 
-GROUPS = ('all', 'kitty', 'browser')
+GROUPS = ('all', 'kitty', 'browser', 'other')
 STATES = ('focused', 'unfocused')
 
 
@@ -63,7 +63,7 @@ def adjusted(data, group, focused=None, unfocused=None):
             continue
         data.setdefault(group, {})[focus] = value
         if group == 'all':
-            for child in ('kitty', 'browser'):
+            for child in GROUPS[1:]:
                 data.get(child, {}).pop(focus, None)
     return {key: values for key, values in data.items() if values}
 

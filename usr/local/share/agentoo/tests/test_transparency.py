@@ -42,6 +42,16 @@ class Transparency(unittest.TestCase):
         self.assertEqual(transparency.effective(changed, 'kitty', 'unfocused'), 30)
         self.assertEqual(original['kitty']['focused'], 0)
 
+    def test_other_is_independent_and_all_clears_its_override(self):
+        original = {'all': {'focused': 5}, 'kitty': {'focused': 0},
+                    'browser': {'focused': 1}}
+        changed = transparency.adjusted(original, 'other', focused=25)
+        transparency.validate_data(changed)
+        self.assertEqual(transparency.effective(changed, 'other', 'focused'), 25)
+        for group in ('kitty', 'browser'):
+            self.assertEqual(changed[group], original[group])
+        self.assertNotIn('other', transparency.adjusted(changed, 'all', focused=10))
+
     def test_cli_invalid_arguments_and_help_have_no_effects(self):
         entry = SHARE.parents[1] / 'bin/agentoo'
         for args, status in [(['--focused', '91'], 2), (['--focused', '-1'], 2),
@@ -55,7 +65,7 @@ class Transparency(unittest.TestCase):
         result = subprocess.run([str(entry), '__complete', '4', 'desktop', 'transparency', '--window', ''],
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        for group in ('all', 'kitty', 'browser'):
+        for group in ('all', 'kitty', 'browser', 'other'):
             self.assertIn('candidate\t' + group + '\t', result.stdout)
         self.assertFalse(self.directory.exists())
 
@@ -75,7 +85,7 @@ class Transparency(unittest.TestCase):
             self.assertEqual(transparency.state_path(), self.root / '.local/state/agentoo/appearance.json')
         path = self.root / 'invalid.json'
         for contents in ('[]', '{"all":{"focused":true}}', '{"all":{"focused":NaN}}',
-                         '{"other":{}}', '{"kitty":{"focused":91}}', 'invalid'):
+                         '{"unknown":{}}', '{"kitty":{"focused":91}}', 'invalid'):
             path.write_text(json.dumps({'transparency': json.loads(contents)}) if contents not in ('invalid', '[]') else contents)
             with self.assertRaises(RuntimeError):
                 transparency.read_state(path)
