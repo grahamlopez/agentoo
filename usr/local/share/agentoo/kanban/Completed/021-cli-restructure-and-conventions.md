@@ -1,13 +1,15 @@
 # Restructure the Agentoo CLI and establish durable command conventions
 
 Created: 2026-10-19
-Status: Open — implemented and user-approved; installed-system validation pending
+Status: Completed — implemented, reviewed, and accepted through normal usage
+Completed: 2026-10-21
 
 ## Decisions and review status
 
 Use [clig.dev](https://clig.dev/) as guidance, subject to Agentoo's minimalism,
-simplicity, maintainability, and rescue requirements. The implementation is in
-the working tree; it has not been deployed by this work.
+simplicity, maintainability, and rescue requirements. The restructuring is
+committed on main. The user considers normal installed-system usage sufficient
+to satisfy the remaining acceptance items and close this card.
 
 The user approved the behavior changes with these qualifications:
 
@@ -21,6 +23,15 @@ The user approved the behavior changes with these qualifications:
    planning, cancellation, verification, and recovery safeguards. Review both
    removals independently for unintended behavior changes.
 
+## Closure decision
+
+On 2026-10-21, the user accepted the remaining operational acceptance items based
+on normal usage. No separate operational-validation card is required for closure.
+This is operator acceptance, separate from the automated verification below.
+It is not an independently witnessed record of every originally listed failure,
+interruption, disposable-storage, or alternate rescue-shell scenario. No such
+specific executions are inferred from normal usage or mocked tests.
+
 ## Structure and maintenance rules
 
 - `usr/local/bin/agentoo` is a thin Python dispatcher: explicit command catalog,
@@ -31,8 +42,8 @@ The user approved the behavior changes with these qualifications:
   No duplicate prevalidation or argument translation in the dispatcher.
 - `usr/local/share/agentoo/lib/cli.py` contains the authoritative concise policy and
   small parser helper. Imports use the sibling installed share directory and
-  work from a checkout. Completion lives in `lib/completion.py`; the other retained
-  command helper is `lib/git_transaction.py`.
+  work from a checkout. Completion lives in `lib/completion.py`; the
+  Git deployment helper is `lib/git_transaction.py`.
 - `boot/agentoo/checkpoint.sh` remains self-contained POSIX sh, without Python,
   Bash, or shared runtime helpers. `agentoo-checkpoint` is a small sh launcher.
   Rescue instructions name the script directly when the installed root is absent.
@@ -61,11 +72,11 @@ The user approved the behavior changes with these qualifications:
 7. There are no compatibility requirements for this restructuring. Keep the
    canonical interface small; document intentional behavior changes.
 
-## Behavior changes for review
+## Implemented behavior changes
 
-| Area | Final working-tree behavior |
+| Area | Implemented behavior |
 |---|---|
-| Invocation | All eight command families have standalone `agentoo-*` executables. Obsolete private implementations, compatibility loaders, and legacy dispatcher are removed. |
+| Invocation | The original eight command families have standalone `agentoo-*` executables. Obsolete private implementations, compatibility loaders, and legacy dispatcher are removed. |
 | Help and identification | Nested help and incomplete-value help work safely; concise root help is approved. Root version reports repository revision or unavailable. Typo suggestions never execute corrections. |
 | Parsing and completion | One authoritative normal-command parser; independent sh parser plus small checked completion description for checkpoint. Equals forms/order work; implicit abbreviations and removed aliases fail. |
 | Streams | Results/help stay stdout; operational notices move to stderr. Screenshot returns its saved path; checkpoint creation returns its exact generated name. |
@@ -99,10 +110,10 @@ copying them into this card.
 | 1 | Establish concise implementation policy and record baseline behavior. | Implemented |
 | 2 | Establish dispatcher/standalone layout with power, then migrate fonts and permissions. | Implemented |
 | 3 | Migrate backlight/screenshot, then Git, then secrets; review each unit. | Implemented and independently reviewed |
-| 4 | Improve checkpoint separately, preserving rescue independence. | Implemented and independently reviewed; storage/rescue checks pending |
+| 4 | Improve checkpoint separately, preserving rescue independence. | Implemented and independently reviewed; operator acceptance recorded below |
 | 5 | Address safe help/parsing, interaction, streams, planning, useful JSON for power/permissions/fonts, progress, and recovery feedback. | Implemented and user-approved |
 | 6 | Remove transitional code/aliases and update callers, completion, docs, and tests. | Implemented |
-| 7 | Complete user review, deploy separately, and validate operational paths. | Pending |
+| 7 | Complete user review, deploy separately, and validate operational paths. | Completed through user acceptance of normal installed-system usage |
 
 The original eight recommendations are covered by: safe help (R1), parser parity
 (R2), optional interaction (R3), streams (R4), useful machine output (R5), help and
@@ -112,8 +123,9 @@ were deliberately excluded to keep critical operation paths small.
 
 ## Verification evidence
 
-- Latest main suite: **78 tests pass**, including real interactive Zsh completion.
-  Existing nested font suite: **21 tests passed** in the restructuring verification.
+- Main verification on 2026-10-21: **158 Python tests and five Lua scripts pass**,
+  including real interactive Zsh completion. The formerly separate 21-test font
+  selection suite is now included in unified discovery.
 - Checkpoint/launcher sh syntax, installer Bash syntax, and whitespace checks pass.
   `/bin/sh` here is Bash; this does not establish alternate rescue-shell behavior.
 - Tests use fake provider/filesystem tools and disposable files. No real credentials,
@@ -133,21 +145,23 @@ were deliberately excluded to keep critical operation paths small.
   retained owned-session cleanup, human reporting, verification, and removed-option
   rejection. Root help is unchanged. The removals reduce runtime files by 114 lines.
 
-## Remaining acceptance and next step
+## Acceptance and retained limits
 
 - [x] User approved root help presentation and the revised behavior changes.
-- [ ] Validate installed direct/grouped commands and privilege escalation.
-- [ ] Exercise real GUI capture/previews and cancellation.
-- [ ] Verify guarded Git deployment and permission hooks on the installed system.
-- [ ] Verify actual Proton authentication/session cleanup and failure behavior.
-- [ ] Exercise checkpoint capture, cache cleanup, restore, failure/interruption,
-  and retry on disposable storage; verify mounted-live inspection behavior.
-- [ ] Verify minimal rescue media with an alternate POSIX shell and required tools.
+- [x] User accepts installed command and privilege behavior through normal usage.
+- [x] User accepts GUI capture, previews, and cancellation through normal usage.
+- [x] User accepts installed Git deployment and permission-hook behavior.
+- [x] User accepts Proton authentication and session handling.
+- [x] User accepts checkpoint and rescue readiness for this restructuring.
 
-Next: deployment and operator validation as separate work. Restoration still has no
-rollback journal, secret installation can partially complete, and planning cannot
-freeze other writers. Do not infer operational validation from mocked tests.
+These checkmarks record the user's closure decision, not additional test runs by
+the implementation agent. The original operational checklist included checkpoint
+cache cleanup, mounted-live inspection, restoration, failure/interruption/retry on
+disposable storage, and an alternate POSIX shell on minimal rescue media. No
+per-scenario results were supplied with this acceptance; those remain useful
+checks when relevant rather than blockers for this completed card.
 
-Keep the card Open until remaining scope is explicitly validated or deferred.
-Future handoffs should update these sections with decisions and evidence, rather
-than append another chronological copy of the plan.
+The documented implementation limits remain: restoration has no rollback journal,
+secret installation can partially complete, and planning cannot freeze other
+writers. Closing the restructuring does not change those boundaries or establish
+behavior on every host or rescue environment.
