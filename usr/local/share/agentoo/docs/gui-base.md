@@ -498,6 +498,11 @@ defaults; malformed selectors produce a configuration error. The former
 Personal scalar settings override earlier values; bindings and
 monitor rules have their own semantics, so check duplicates when extending them.
 
+Run `agentoo display off` to turn off all display outputs through DPMS without
+locking or suspending. It waits one second for key release, allowing monitors
+to enter standby. Shared defaults enable keyboard wake and disable mouse wake
+for both built-in panels and external monitors.
+
 An existing personal `hyprland.lua` takes precedence over the system Lua entry.
 In this release Lua discovery is attempted before legacy `.conf` discovery,
 so the system Lua entry can also supersede an old personal `hyprland.conf`.
@@ -558,15 +563,15 @@ or reload rules and trigger the backlight add event before testing.
 
 Despite its command name `xbacklight`, acpilight uses sysfs and needs neither X
 nor sudo in the key bindings. Shared bindings use standard brightness key symbols,
-not laptop F-key positions. `agentoo backlight` selects a single display backlight
+not laptop F-key positions. `agentoo display backlight` selects a single display backlight
 under `/sys/class/backlight`, quietly does nothing if none exists, and refuses an
 ambiguous selection when multiple devices exist. A host override can replace the
-bindings with `agentoo backlight up CONTROLLER` and `down CONTROLLER`.
+bindings with `agentoo display backlight up CONTROLLER` and `down CONTROLLER`.
 Keyboard LEDs are never selected as a display fallback.
 
 Adjustments use acpilight's perceived scale in steps of 5, bounded by the utility
 to 0–100 on that scale (minimum raw level 1, not panel-off). Inspect controllers
-with `xbacklight -list`; run `agentoo backlight down` and `up` as the normal user
+with `xbacklight -list`; run `agentoo display backlight down` and `up` as the normal user
 before testing the physical keys. Confirm visible changes, held-key repetition,
 usable minimum and maximum levels, and recovery after suspend/resume. A low
 resolution or unsuitable panel curve may need a host-specific adjustment.

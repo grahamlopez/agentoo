@@ -17,7 +17,7 @@ class CliTest(unittest.TestCase):
         self.entry = self.root / 'agentoo'
         self.entry.write_text(ENTRY.read_text().replace(
             "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(COMMANDS.parent)!r})"))
-        for name in ('power', 'fonts', 'permissions', 'backlight', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop'):
+        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop'):
             (self.root / ('agentoo-' + name)).symlink_to(ENTRY.with_name('agentoo-' + name))
         checkpoint = self.root / 'agentoo-checkpoint'
         if checkpoint.is_symlink():
@@ -39,7 +39,7 @@ class CliTest(unittest.TestCase):
                      ['checkpoint', 'restore', '--help'], ['permissions', 'fix', '--help'],
                      ['permissions', 'check', '--help'], ['help', 'permissions'],
                      ['secrets', 'install', '--help'], ['help', 'power'],
-                     ['help', 'backlight'], ['help', 'screenshot']]:
+                     ['help', 'display', 'backlight'], ['help', 'display'], ['help', 'screenshot']]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -70,9 +70,28 @@ class CliTest(unittest.TestCase):
                          ['commit', '-m', 'two words; $HOME'])
         self.assertNotIn('requesting sudo', result.stderr)
 
+    def test_display_off_and_lua_error(self):
+        fake = self.root / 'hyprctl'
+        fake.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$DISPLAY_CALL"\nprintf "%s\\n" "$DISPLAY_REPLY"\n')
+        fake.chmod(0o755)
+        call = self.root / 'display-call'
+        self.env.update(DISPLAY_CALL=str(call), DISPLAY_REPLY='ok')
+        result = self.run_cli('display', 'off')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(call.read_text().splitlines(),
+                         ['eval', 'hl.dispatch(hl.dsp.dpms({ action = "off" }))'])
+        self.env['DISPLAY_REPLY'] = 'error: invalid dispatcher'
+        result = self.run_cli('display', 'off')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('invalid dispatcher', result.stderr)
+        call.unlink()
+        result = self.run_cli('display', 'invalid')
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(call.exists())
+
     def test_completion_usage_matches_actual_help(self):
         paths = [(), ('git',), ('permissions',), ('permissions', 'check'),
-                 ('permissions', 'fix'), ('backlight',), ('screenshot',),
+                 ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
                  ('secrets',), ('secrets', 'install'), ('checkpoint',),
                  ('checkpoint', 'create'), ('checkpoint', 'list'),
                  ('checkpoint', 'inspect'), ('checkpoint', 'restore'),

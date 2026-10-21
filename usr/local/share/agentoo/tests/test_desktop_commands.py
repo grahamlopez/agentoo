@@ -21,8 +21,25 @@ def load(name):
 
 
 class DesktopCommands(unittest.TestCase):
+    def test_nested_backlight_preserves_adjustment(self):
+        display = load('display')
+        backlight = display.display_backlight
+        for direction, option in [('up', '-inc'), ('down', '-dec')]:
+            with self.subTest(direction=direction), \
+                    patch.object(display.sys, 'argv', ['agentoo-display', 'backlight', direction]), \
+                    patch.object(backlight.Path, 'glob', return_value=[Path('/sys/class/backlight/panel')]), \
+                    patch.object(backlight.Path, 'is_dir', return_value=True), \
+                    patch.object(backlight.os, 'execvp') as execute, \
+                    patch.object(display, 'hyprctl') as compositor, \
+                    patch.object(display.time, 'sleep') as delay:
+                display.main()
+                execute.assert_called_once_with('xbacklight',
+                    ['xbacklight', '-ctrl', 'panel', '-perceived', option, '5'])
+                compositor.assert_not_called()
+                delay.assert_not_called()
+
     def test_help_is_safe_at_leaf(self):
-        for command, leaf in [('backlight', 'up'), ('screenshot', 'region'), ('git', 'enable-write'), ('git', 'setup-hooks')]:
+        for command, leaf in [('display', 'backlight'), ('screenshot', 'region'), ('git', 'enable-write'), ('git', 'setup-hooks')]:
             for prefix in [[str(BIN / 'agentoo'), command], [str(BIN / ('agentoo-' + command))]]:
                 result = subprocess.run([*prefix, leaf, '--help'], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)

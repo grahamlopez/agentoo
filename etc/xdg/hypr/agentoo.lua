@@ -15,6 +15,9 @@ hl.config({
     decoration = { rounding = 0, blur = { enabled = false }, shadow = { enabled = false } },
     animations = { enabled = false },
     misc = {
+        -- Wake DPMS-blanked displays from the keyboard, avoiding mouse wakeups.
+        mouse_move_enables_dpms = false,
+        key_press_enables_dpms = true,
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
         background_color = "rgb(111111)",
@@ -67,8 +70,8 @@ hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ to
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"))
 
 -- Standard key meanings; laptops install @laptop for acpilight.
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("agentoo backlight up"), { repeating = true })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("agentoo backlight down"), { repeating = true })
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("agentoo display backlight up"), { repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("agentoo display backlight down"), { repeating = true })
 
 hl.bind("Print", hl.dsp.exec_cmd("agentoo screenshot full"))
 hl.bind("SHIFT + Print", hl.dsp.exec_cmd("agentoo screenshot region"))

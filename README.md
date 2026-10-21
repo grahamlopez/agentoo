@@ -102,5 +102,6 @@ mounts suppress Btrfs log replay and require kernel 5.9 or newer. See
 [checkpoint planning and recovery](usr/local/share/agentoo/docs/checkpoints.md)
 for temporary inspection effects and the exact recovery boundaries.
 
+Backlight controls are under `agentoo display backlight up|down [CONTROLLER]`.
 The existing `agentoo-backlight` and `agentoo-screenshot` names remain supported.
 Screenshot files go to `~/Downloads/Screenshots`.

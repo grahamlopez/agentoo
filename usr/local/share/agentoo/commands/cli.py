@@ -20,7 +20,7 @@ COMMANDS = {
     'checkpoint': 'Create, list, inspect, and restore system checkpoints',
     'permissions': 'Check or repair managed ownership and permissions',
     'secrets': 'Install secret files from Proton Pass',
-    'backlight': 'Adjust display brightness',
+    'display': 'Manage display output and backlight brightness',
     'screenshot': 'Capture all displays or a selected region',
     'power': 'Show battery and CPU power status',
     'fonts': 'Diagnose, preview, and select installed fonts',
