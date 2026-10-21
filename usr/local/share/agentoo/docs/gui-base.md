@@ -231,6 +231,7 @@ creating a previously absent optional file.
 |---|---|
 | Super+Enter | Kitty |
 | Super+grave (backtick) | Show / hide the persistent terminal overlay |
+| Alt+Tab / Alt+Shift+Tab | Cycle recent windows forward / backward, including the visible dropdown |
 | Super+Q | Close active window |
 | Super+Shift+E | Exit Hyprland |
 | Super+F / Super+V | Toggle fullscreen / floating |
@@ -244,6 +245,19 @@ creating a previously absent optional file.
 
 Caps Lock acts as Control, matching the shared console keymap. The background
 is plain dark gray.
+
+`/etc/xdg/hypr/alt-tab.lua` tracks focus history for the active monitor's regular
+workspace and includes the terminal overlay while it is visible. Press and
+release Alt+Tab to bounce between the two most recent windows. Hold Alt and press
+Tab again to advance through a frozen snapshot of that history; Shift+Tab moves
+backward. Releasing the last Alt key commits the actual focused window. Closed,
+hidden and moved windows are skipped; new windows join the next gesture.
+Reloading seeds history from Hyprland's current focus order. This fragment uses
+the standard evdev left/right Alt keycodes, matching Agentoo's US keyboard layout.
+Run `lua usr/local/share/agentoo/tests/test_hypr_alt_tab.lua` from the checkout
+for the mocked switching checks. On a live session, check two-window bouncing,
+held-Alt multi-window cycling, reverse cycling, mouse focus, closing a candidate,
+and cycling with the dropdown shown and hidden.
 
 The terminal overlay uses a named special workspace and launches Kitty on demand.
 It requests 160 columns by 45 rows, centered horizontally with its top edge
