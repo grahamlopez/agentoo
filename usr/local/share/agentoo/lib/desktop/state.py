@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 
-from desktop_common import atomic_write, xdg_directory
+from desktop.common import atomic_write, xdg_directory
 
 SECTIONS = ('transparency', 'blur', 'corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')
 
@@ -26,9 +26,9 @@ def read_json(path):
 
 
 def validate_sections(data, *, partial=False):
-    import desktop_blur as blur
-    import desktop_effects as effects
-    import desktop_transparency as transparency
+    from desktop import blur as blur
+    from desktop import effects as effects
+    from desktop import transparency as transparency
     unknown = set(data) - set(SECTIONS)
     if unknown:
         raise RuntimeError('Unknown appearance sections: ' + ', '.join(sorted(unknown)))
@@ -75,7 +75,7 @@ def imported(path, command=None):
 
 def merged(previous, patch):
     """Partial sections and window groups retain omitted fields."""
-    from desktop_effects import animation_update
+    from desktop.effects import animation_update
     result = dict(previous)
     for name, values in patch.items():
         if name == 'animations':
@@ -89,9 +89,9 @@ def merged(previous, patch):
 
 
 def update(args, directory, write=atomic_write, parser=None):
-    import desktop_blur as blur
-    import desktop_effects as effects
-    import desktop_transparency as transparency
+    from desktop import blur as blur
+    from desktop import effects as effects
+    from desktop import transparency as transparency
 
     command = getattr(args, 'command', None)
     file = getattr(args, 'appearance_file', None)
@@ -150,7 +150,7 @@ def update(args, directory, write=atomic_write, parser=None):
                 selected = data.get('transparency', {})
                 if any(transparency.effective(selected, 'kitty', focus) is not None for focus in transparency.STATES):
                     kitty = transparency.kitty_defaults()
-                    watcher = str(Path(transparency.__file__).with_name('kitty') / 'transparency.py')
+                    watcher = str(Path(transparency.__file__).parents[1] / 'kitty/transparency.py')
                     if not kitty or not kitty[1] or watcher not in kitty[2]:
                         raise RuntimeError('Kitty needs the Agentoo watcher and dynamic_background_opacity yes; restart older Kitty processes')
             # Validate duration against the receiving desktop without saving curves.

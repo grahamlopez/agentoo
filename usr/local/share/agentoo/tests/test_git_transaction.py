@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-PATH = Path(__file__).resolve().parents[1] / 'commands/git-transaction.py'
+PATH = Path(__file__).resolve().parents[1] / 'lib/git_transaction.py'
 SPEC = importlib.util.spec_from_file_location('git_transaction', PATH)
 GUARD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GUARD)

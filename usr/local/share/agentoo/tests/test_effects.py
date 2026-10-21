@@ -15,9 +15,9 @@ from unittest.mock import patch
 
 SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
-sys.path.insert(0, str(SHARE))
-import desktop_effects as effects
-import desktop_state as state
+sys.path.insert(0, str(SHARE / 'lib'))
+from desktop import effects
+from desktop import state
 
 spec = importlib.util.spec_from_loader('effects_desktop', importlib.machinery.SourceFileLoader(
     'effects_desktop', str(ROOT / 'usr/local/bin/agentoo-desktop')))
@@ -143,7 +143,7 @@ class EffectsTest(unittest.TestCase):
         self.directory.mkdir()
         module = self.root / 'effects.lua'
         module.write_text((ROOT / 'etc/xdg/hypr/effects.lua').read_text().replace(
-            '/usr/local/share/agentoo/desktop_effects.py', str(SHARE / 'desktop_effects.py')))
+            '/usr/local/share/agentoo/lib/desktop/effects.py', str(SHARE / 'lib/desktop/effects.py')))
         env = dict(os.environ, XDG_STATE_HOME=str(self.root))
         cases = [({}, ''), ({
             'corners': {'radius': 10, 'power': 4}, 'gaps': {'inner': 3, 'outer': 9},

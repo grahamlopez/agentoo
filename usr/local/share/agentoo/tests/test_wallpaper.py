@@ -10,8 +10,8 @@ import unittest
 from unittest.mock import patch
 
 BIN = Path(__file__).resolve().parents[3] / 'bin'
-sys.path.insert(0, str(BIN.parent / 'share/agentoo'))
-import desktop_wallpaper as desktop
+sys.path.insert(0, str(BIN.parent / 'share/agentoo/lib'))
+from desktop import wallpaper as desktop
 
 
 class Wallpaper(unittest.TestCase):
@@ -44,7 +44,7 @@ class Wallpaper(unittest.TestCase):
             env=dict(os.environ, **environment), capture_output=True, text=True, timeout=8)
 
     def startup(self, **environment):
-        return subprocess.run([sys.executable, str(BIN.parent / 'share/agentoo/desktop_wallpaper.py')],
+        return subprocess.run([sys.executable, str(BIN.parent / 'share/agentoo/lib/desktop/wallpaper.py')],
             env=dict(os.environ, **environment), capture_output=True, text=True, timeout=8)
 
     def clear(self):

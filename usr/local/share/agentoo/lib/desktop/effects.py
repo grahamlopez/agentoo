@@ -9,10 +9,13 @@ import math
 import os
 import re
 import sys
+from pathlib import Path
 
 sys.dont_write_bytecode = True
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cli import ArgumentParser
-from desktop_common import hyprctl
+from desktop.common import hyprctl
 
 COMMANDS = ('corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')
 WINDOW_STYLES = ('slide', 'popin', 'gnome', 'gnomed')
@@ -76,7 +79,7 @@ def add_parsers(commands):
             epilog='Supply at least one adjustment or --file. --file cannot accompany adjustments.')
         clear = actions.add_parser('clear', help='Remove saved overrides and apply configured defaults',
             description='Remove saved overrides and apply configured defaults.')
-        from desktop_state import file_option
+        from desktop.state import file_option
         file_option(p)
         parsers[name] = p
     p = parsers['corners']
@@ -141,12 +144,12 @@ def validate(args, parser):
 
 
 def state_path():
-    from desktop_state import state_path as shared_path
+    from desktop.state import state_path as shared_path
     return shared_path()
 
 
 def read_state(path, *, selected=None):
-    from desktop_state import read
+    from desktop.state import read
     data = {k: v for k, v in read(path).items() if k in COMMANDS and (selected is None or k == selected)}
     return validate_sections(data)
 

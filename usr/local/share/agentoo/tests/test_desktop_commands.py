@@ -96,7 +96,7 @@ class DesktopCommands(unittest.TestCase):
         with patch.object(git.os, 'geteuid', return_value=0):
             command = git.git_command(args)
         self.assertEqual(command[-len(args):], args)
-        self.assertIn(str(git.SHARE / 'commands/git-transaction.py'), command)
+        self.assertIn(str(git.SHARE / 'lib/git_transaction.py'), command)
 
 
 if __name__ == '__main__':

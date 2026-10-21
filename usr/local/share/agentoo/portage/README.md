@@ -87,8 +87,9 @@ at <https://proton.me/download/pass-cli/versions.json>.
 ## User-managed AI clients
 
 `dev-util/codex-cli-deps` and `dev-util/claude-code-deps` supply prerequisites
-for user-owned upstream installations. Both are selected by `@early_install`,
-with testing keywords accepted in agentoo's common configuration.
+for user-owned upstream installations, with testing keywords accepted in
+agentoo's common configuration. Select them explicitly; the former
+`early_install` package list is now [historical reference](../docs/history/package-sets/early-install.txt).
 `dev-util/pi-coding-agent-deps` supplies the same model for Pi and can be selected
 separately (accept its testing keyword on your system first).
 
@@ -99,9 +100,8 @@ emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps
 These dependency-only packages install no client binaries or launchers. They
 print install instructions but do not run vendor installers, authenticate, or
 modify user homes during any Portage phase. Package version `1` describes the
-prerequisite recipe, not an upstream client version. The installer does not
-emerge the entire `@early_install` set automatically; its kernel phase uses an
-explicit package list.
+prerequisite recipe, not an upstream client version. The installer uses explicit package lists rather than the historical
+`early_install` list.
 
 ### Install and update as your normal user
 

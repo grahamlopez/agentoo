@@ -13,10 +13,10 @@ import unittest
 from unittest.mock import patch
 
 SHARE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(SHARE))
-import desktop_blur as blur
-import desktop_effects as effects
-import desktop_state as state
+sys.path.insert(0, str(SHARE / 'lib'))
+from desktop import blur
+from desktop import effects
+from desktop import state
 
 
 class Blur(unittest.TestCase):
@@ -299,8 +299,8 @@ class Blur(unittest.TestCase):
         self.directory.mkdir(parents=True)
         source = SHARE.parents[3] / 'etc/xdg/hypr/blur.lua'
         module = self.root / 'blur.lua'
-        module.write_text(source.read_text().replace('/usr/local/share/agentoo/desktop_blur.py',
-                                                   str(SHARE / 'desktop_blur.py')).replace(
+        module.write_text(source.read_text().replace('/usr/local/share/agentoo/lib/desktop/blur.py',
+                                                   str(SHARE / 'lib/desktop/blur.py')).replace(
             '/etc/xdg/hypr/window-classes.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/window-classes.lua')))
         for data, baseline, expected_engine in (
             ({}, False, False),

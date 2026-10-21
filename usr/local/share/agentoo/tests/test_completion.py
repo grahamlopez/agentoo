@@ -21,7 +21,7 @@ class CompletionTests(unittest.TestCase):
     def test_tab_completion(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
-            (work / '_agentoo').write_text((SHARE / 'zsh/_agentoo').read_text())
+            (work / '_agentoo').write_text((SHARE / 'shell/_agentoo').read_text())
             entry = SHARE.parent.parent / 'bin/agentoo'
             (work / 'agentoo').write_text(entry.read_text().replace(
                 "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(SHARE)!r})"))

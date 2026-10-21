@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 ENTRY = Path(__file__).resolve().parents[3] / 'bin/agentoo'
-COMMANDS = Path(__file__).resolve().parents[1] / 'commands'
+COMMANDS = Path(__file__).resolve().parents[1] / 'lib'
 
 
 class CliTest(unittest.TestCase):
@@ -47,7 +47,7 @@ class CliTest(unittest.TestCase):
                 self.assertIn('usage:', result.stdout.lower())
 
     def test_git_arguments_run_without_sudo(self):
-        commands = self.root / 'commands'
+        commands = self.root / 'lib'
         commands.mkdir()
         repository = self.root / 'repository.git'
         repository.mkdir()
@@ -58,7 +58,7 @@ class CliTest(unittest.TestCase):
             '/var/lib/agentoo/repository.git', str(repository)).replace(
             "SHARE = Path(__file__).resolve().parent.parent / 'share/agentoo'",
             f"SHARE = Path({str(COMMANDS.parent)!r})").replace(
-            "command = [sys.executable, str(SHARE / 'commands/git-transaction.py'), *command]",
+            "command = [sys.executable, str(SHARE / 'lib/git_transaction.py'), *command]",
             "command = command"))
         executable.chmod(0o755)
         fake_git = self.root / 'git'
@@ -154,7 +154,7 @@ class CliTest(unittest.TestCase):
     def test_completion_never_dispatches_operations(self):
         commands = self.root / 'completion-commands'
         commands.mkdir()
-        (commands / 'cli.py').write_text((COMMANDS / 'cli.py').read_text().replace(
+        (commands / 'completion.py').write_text((COMMANDS / 'completion.py').read_text().replace(
             "HERE.parents[2] / 'bin'", f"Path({str(self.root)!r})"))
         marker = self.root / 'operation-ran'
         for name in ('checkpoint', 'secrets', 'permissions', 'git'):
@@ -171,7 +171,7 @@ class CliTest(unittest.TestCase):
                 '    return parser\n'
                 f'if __name__ == "__main__": Path({str(marker)!r}).touch()\n')
         self.entry.write_text(self.entry.read_text().replace(
-            "SHARE / 'commands/cli.py'", repr(str(commands / 'cli.py'))))
+            "SHARE / 'lib/completion.py'", repr(str(commands / 'completion.py'))))
         for words in [('checkpoint', 'restore', 'saved', ''),
                       ('secrets', 'install', ''), ('permissions', 'fix', ''),
                       ('git', 'enable-write', '')]:

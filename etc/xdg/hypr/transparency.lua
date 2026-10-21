@@ -1,6 +1,6 @@
 -- Loaded after host/personal settings. JSON remains the only saved authority.
 -- The helper emits group/state/percentage records, never executable Lua.
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/desktop_transparency.py rules", "r"))
+local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/transparency.py rules", "r"))
 local contents = stream:read("*a")
 -- Hyprland's SIGCHLD handler can reap popen's child before pclose, which then
 -- reports ECHILD even for a successful helper. Require its completion record.

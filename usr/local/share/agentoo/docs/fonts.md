@@ -275,7 +275,7 @@ files are left untouched; inspect old installations before removing them manuall
 ## Development checks
 
 ```sh
-python3 -m unittest discover -s usr/local/share/agentoo/fonts/tests -v
+python3 -m unittest discover -s usr/local/share/agentoo/tests -p 'test_fonts*.py' -v
 python3 usr/local/bin/agentoo-fonts doctor --json
 python3 usr/local/bin/agentoo-fonts test --target firefox --no-open --output /tmp/fonts.html
 ```

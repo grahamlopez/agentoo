@@ -252,7 +252,7 @@ def main():
     # Invoked only by agentoo __complete; import/parsing never runs operations.
     mode, current, *words = sys.argv[1:]
     if mode != 'complete':
-        raise SystemExit('usage: cli.py complete CURRENT [WORDS...]')
+        raise SystemExit('usage: completion.py complete CURRENT [WORDS...]')
     complete(int(current), words)
 
 

@@ -13,7 +13,7 @@ _share = str(Path(__file__).resolve().parents[1])
 # lasting search path. Some state imports are intentionally deferred until read.
 sys.path.insert(0, _share)
 try:
-    _state = runpy.run_path(str(Path(_share) / 'desktop_transparency.py'),
+    _state = runpy.run_path(str(Path(_share) / 'desktop/transparency.py'),
                            run_name='agentoo_transparency_state')
 finally:
     sys.path.remove(_share)

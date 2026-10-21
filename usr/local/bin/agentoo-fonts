@@ -19,7 +19,7 @@ import tty
 import unicodedata
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser as BaseArgumentParser
 
 DATA = Path(__file__).resolve().parent.parent / 'share/agentoo/fonts'
@@ -179,7 +179,7 @@ def kitty_settings(extra=None):
     env.pop('AGENTOO_KITTY_EXTRA', None)
     if extra:
         env['AGENTOO_KITTY_EXTRA'] = str(extra)
-    code = 'import runpy; runpy.run_path(' + repr(str(DATA / 'kitty-settings.py')) + ')'
+    code = 'import runpy; runpy.run_path(' + repr(str(DATA.parent / 'lib/fonts/kitty_settings.py')) + ')'
     return json.loads(run('kitty', '+runpy', code, env=env, capture_output=True, text=True, timeout=15).stdout)
 
 

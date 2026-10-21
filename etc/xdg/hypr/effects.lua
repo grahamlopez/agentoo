@@ -1,7 +1,7 @@
 -- Saved global preferences follow authored defaults. Python validates values;
 -- this file only translates data into native Hyprland configuration calls.
 agentoo_effects_report = nil
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/desktop_effects.py settings", "r"))
+local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/effects.py settings", "r"))
 local contents = stream:read("*a")
 stream:close() -- Hyprland may reap popen's child before pclose.
 assert(contents:sub(-4) == "end\n", "Cannot load Agentoo effects state; see session stderr")

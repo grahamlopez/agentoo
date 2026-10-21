@@ -9,10 +9,13 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 import time
 
 sys.dont_write_bytecode = True
-from desktop_common import authored_hypr_paths, hyprctl
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from desktop.common import authored_hypr_paths, hyprctl
 
 GROUPS = ('all', 'kitty', 'browser')
 STATES = ('focused', 'unfocused')
@@ -41,8 +44,8 @@ def add_parser(commands):
     feature = commands.add_parser('blur', help='Show or change window background blur',
         description='Without an action, show current blur settings. Blur is off by default.',
         epilog='Blur does not change transparency. Applications must have transparent content and permit compositor blur. '
-               'Troubleshooting: /usr/local/share/agentoo/docs/gui-base.md#window-blur')
-    from desktop_state import file_option, window_option
+               'Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur')
+    from desktop.state import file_option, window_option
     window_option(feature)
     feature.add_argument('--diagnose', action='store_true',
                          help='Show version, renderer/GPU, settings, compatibility and conflicts; makes no changes')
@@ -75,12 +78,12 @@ def validate(args, parser):
 
 
 def state_path():
-    from desktop_state import state_path as shared_path
+    from desktop.state import state_path as shared_path
     return shared_path()
 
 
 def read_state(path):
-    from desktop_state import section
+    from desktop.state import section
     return validate_data(section('blur', path))
 
 
@@ -235,7 +238,7 @@ def diagnose(path, selected):
     show_section('Open window classes', classes)
     show_section('Potential conflicting rules', None if rule_conflicts is None else '\n'.join(rule_conflicts))
     print('\nClient blur regions and actual rendering are not verified by this API.')
-    print('Troubleshooting: /usr/local/share/agentoo/docs/gui-base.md#window-blur')
+    print('Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur')
     for error in errors:
         print(f'agentoo desktop: {error}', file=sys.stderr)
     return 1 if errors or config_errors else 0

@@ -15,11 +15,11 @@ from unittest.mock import patch
 
 SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
-sys.path.insert(0, str(SHARE))
-import desktop_state as state
-import desktop_effects as effects
-import desktop_blur as blur
-import desktop_transparency as transparency
+sys.path.insert(0, str(SHARE / 'lib'))
+from desktop import state
+from desktop import effects
+from desktop import blur
+from desktop import transparency
 
 spec = importlib.util.spec_from_loader('state_desktop', importlib.machinery.SourceFileLoader(
     'state_desktop', str(ROOT / 'usr/local/bin/agentoo-desktop')))
@@ -43,7 +43,7 @@ class DesktopStateTest(unittest.TestCase):
             patch.object(blur, 'require_integration'), patch.object(blur, 'check_conflicts'),
             patch.object(blur, 'reload_saved'), patch.object(transparency, 'require_integration'),
             patch.object(transparency, 'conflicts', return_value=[]),
-            patch.object(transparency, 'kitty_defaults', return_value=[1, True, [str(SHARE / 'kitty/transparency.py')]]),
+            patch.object(transparency, 'kitty_defaults', return_value=[1, True, [str(SHARE / 'lib/kitty/transparency.py')]]),
         ):
             manager.start()
             self.addCleanup(manager.stop)
@@ -200,7 +200,7 @@ class DesktopStateTest(unittest.TestCase):
         self.path.write_text(json.dumps({'animations': {'windows': 'popin', 'window_size': 80}}))
         module = self.root / 'effects.lua'
         module.write_text((ROOT / 'etc/xdg/hypr/effects.lua').read_text().replace(
-            '/usr/local/share/agentoo/desktop_effects.py', str(SHARE / 'desktop_effects.py')))
+            '/usr/local/share/agentoo/lib/desktop/effects.py', str(SHARE / 'lib/desktop/effects.py')))
         capture = (ROOT / 'etc/xdg/hypr/hyprland.lua').read_text().split('-- Hyprland discovers', 1)[0]
         for speed in (3, 7):
             config = self.root / 'hyprland.lua'

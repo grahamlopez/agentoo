@@ -1,6 +1,6 @@
 #!/bin/sh
 # CHECKPOINT CLI CONTRACT — standalone POSIX sh; no Python, Bash, or shared
-# runtime helpers. Normal-command development policy: /usr/local/share/agentoo/cli.py.
+# runtime helpers. Normal-command development policy: /usr/local/share/agentoo/lib/cli.py.
 # Validate/help before privileges/effects. Stdout results; stderr plans/progress.
 # --no-input must never prompt; restore authorization names the exact checkpoint.
 # Rescue dependencies are checked below; sh alone does not supply filesystem tools.

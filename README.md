@@ -6,7 +6,7 @@ and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
 secrets, display backlight, screenshots, desktop wallpaper, window transparency
-and blur, [desktop appearance](usr/local/share/agentoo/docs/gui-base.md#desktop-appearance),
+and blur, [desktop appearance](usr/local/share/agentoo/docs/desktop.md#desktop-appearance),
 power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
 
 Each command also has an independently runnable executable: `agentoo power`
@@ -16,7 +16,7 @@ paths. `agentoo help fonts doctor` shows nested help, and `agentoo --version`
 reports the repository revision when readable.
 
 The concise command policy lives in
-[`usr/local/share/agentoo/cli.py`](usr/local/share/agentoo/cli.py).
+[`usr/local/share/agentoo/lib/cli.py`](usr/local/share/agentoo/lib/cli.py).
 Command scripts own their parsing, help, privileges, and output. Shared helpers
 stay small; no plugin discovery or command framework is required.
 Checkpoint is the recovery exception: invoke `agentoo-checkpoint` directly or
@@ -28,13 +28,13 @@ Managed shells load it automatically in new sessions after deployment. To enable
 it in an existing shell (or try it from a checkout), run:
 
 ```zsh
-fpath=(/path/to/agentoo/usr/local/share/agentoo/zsh $fpath)
+fpath=(/path/to/agentoo/usr/local/share/agentoo/shell $fpath)
 autoload -Uz compinit
 compinit
 compdef _agentoo agentoo
 ```
 
-For a deployed system, use `/usr/local/share/agentoo/zsh` instead. The checkout
+For a deployed system, use `/usr/local/share/agentoo/shell` instead. The checkout
 command enables completion for whichever `agentoo` is on your `PATH`.
 Zsh asks `agentoo __complete` for suggestions. Python command options come from
 the same argument parsers used to run those commands. Checkpoint keeps its
@@ -105,3 +105,12 @@ for temporary inspection effects and the exact recovery boundaries.
 Backlight controls are under `agentoo display backlight up|down [CONTROLLER]`.
 The existing `agentoo-backlight` and `agentoo-screenshot` names remain supported.
 Screenshot files go to `~/Downloads/Screenshots`.
+
+Run the Python and Lua repository checks together:
+
+```sh
+python3 usr/local/share/agentoo/tests/run_tests.py
+```
+
+The unified Python suite includes font selection tests. Lua regression tests
+are reported as skipped when the Lua interpreter is unavailable.

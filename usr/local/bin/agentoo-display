@@ -5,9 +5,9 @@ import sys
 import time
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
-from desktop_common import hyprctl
+from desktop.common import hyprctl
 import display_backlight
 
 

@@ -10,7 +10,7 @@ local function session(monitors)
     function api.get_monitors() return env.monitors end
     function api.on(event, callback) env.events[event] = callback end
     function api.exec_cmd(command)
-        assert(command == "python3 /usr/local/share/agentoo/desktop_wallpaper.py")
+        assert(command == "python3 /usr/local/share/agentoo/lib/desktop/wallpaper.py")
         env.restores = env.restores + 1
     end
     function api.timer(callback, options)

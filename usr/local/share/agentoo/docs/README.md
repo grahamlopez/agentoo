@@ -1,7 +1,7 @@
 # agentoo
 
 An opinionated Gentoo distribution with development and system administration
-at its center. This repository brings its configuration and installer under one roof, with custom ebuilds planned.
+at its center. This repository brings its configuration and installer under one roof, with a local overlay for custom ebuilds.
 
 ## Font troubleshooting for agents
 
@@ -21,62 +21,72 @@ editing a tracked file changes the live configuration and appears in Git.
 
 ```text
 /
-├── etc/
-│   ├── agentoo/                      # Host identity, policy, and permissions manifest
-│   ├── portage/                      # Portage configuration and package sets
-│   ├── zsh/, vim/, xdg/nvim/          # Shared shell and editor defaults
-│   ├── gitconfig, tmux.conf           # Shared Git and tmux defaults
-│   ├── ssh/                          # Client defaults and account access policy
-│   └── …                             # Application system defaults (as added)
+├── etc/                              # Shared configuration, host fragments, and policy
 ├── boot/agentoo/checkpoint.sh         # Standalone recovery-capable shell tool
-├── home/<user>/.config/               # Real user configs / local overrides (TBD)
-├── root/
-│   ├── 001-firstboot-verify-and-checkpoint.sh # Verify and optionally checkpoint
-│   └── 002-agentoo-setup-user.sh       # Create Graham’s account and access
-├── usr/local/
-│   ├── bin/
-│   │   ├── agentoo                    # Thin command dispatcher and root help
-│   │   └── agentoo-*                  # Independently runnable command implementations
-│   └── share/agentoo/
-│       ├── cli.py                    # Concise CLI policy and small shared Python helpers
-│       ├── commands/                 # Completion service and internal Git deployment helper
-│       ├── docs/                     # Project documentation
-│       │   └── skills/qemu-nbd/       # QEMU/NBD procedures and recovery reference
-│       ├── kanban/
-│       │   ├── Backlog/              # Deferred work
-│       │   ├── Open/                 # Active work
-│       │   └── Completed/            # Finished work
-│       ├── git-hooks/                # Live-system permission automation
-│       ├── installer/
-│       │   ├── gentoo-install.sh     # Installer
-│       │   └── QEMU-NBD-INSTALL.md    # Installation runbook
-│       └── portage/                  # Custom ebuild repository (planned)
-│           ├── metadata/             # Repository metadata (planned)
-│           ├── profiles/             # Distribution package policy (planned)
-│           ├── eclass/               # Shared build logic, if needed (planned)
-│           └── <category>/<package>/ # Custom ebuilds (planned)
-└── var/lib/agentoo/repository.git/    # Bare Git database (local state)
+├── root/                             # First-boot verification and user setup
+└── usr/local/
+    ├── bin/                          # User-facing agentoo commands
+    └── share/agentoo/
+        ├── lib/                      # Python implementation and internal entry points
+        │   ├── cli.py                # Parser policy and shared CLI helpers
+        │   ├── completion.py         # Read-only completion service
+        │   ├── git_transaction.py    # Internal Git deployment helper
+        │   ├── display_backlight.py
+        │   ├── desktop/              # Desktop state, effects, and wallpaper
+        │   ├── fonts/                # Font configuration inspection helper
+        │   └── kitty/                # Kitty host selection and watcher
+        ├── fonts/                    # Font sample data
+        ├── wallpapers/               # Wallpaper assets and attribution
+        ├── docs/                     # Current guides and reference
+        │   ├── history/              # Historical investigations and package lists
+        │   └── skills/qemu-nbd/       # QEMU/NBD procedures and recovery reference
+        ├── tests/                    # Python and Lua tests; run_tests.py runs both
+        ├── git-hooks/                # Live-system permission automation
+        ├── installer/                # Installer and installation runbook
+        ├── kanban/                   # Backlog, Open, and Completed work
+        ├── portage/                  # Working local Gentoo overlay
+        ├── secrets/                  # Secret profile format and workflow
+        └── shell/                    # Git prompt and Zsh completion integration
 ```
 
-This is the intended layout, not an inventory: planned paths need not exist.
+Application-native support files also live under `usr/local/share/nvim/` and
+`usr/share/keymaps/`. The bare database at `/var/lib/agentoo/repository.git`,
+local host selectors, user overrides, and runtime state are not repository payload.
 User configuration ownership and the choice of shared or separate home Git work
-trees remain TBD. Local host identity, overrides, and Git databases are not
-repository payload; a path appearing here does not mean its contents are tracked.
+trees remain TBD.
 
 The authoritative installer and runbook live in `installer/` beside these docs.
 The copies in `gentoo-notes` remain historical and are no longer maintained.
-Development material may accompany deployed configuration at this stage.
+Development material accompanies deployed configuration deliberately.
 
 Project skills live under `docs/skills/`. Ask agents explicitly to read
 [the QEMU/NBD skill](skills/qemu-nbd/SKILL.md) before target operations.
 Automatic discovery and agent-specific integration are future work; no skill
 copies or symlinks are installed into user discovery directories.
 
-The future Portage repository can live inside this Git repository: `repos.conf`
-will point to its directory, and the project Git workflow will update it.
-Ebuilds own packaged software and dependencies; profiles express distribution
-package policy while inheriting Gentoo. USE flags select features, rather than
-host identities. Avoid giving Git and ebuilds competing ownership of a file.
+The [Portage overlay](../portage/README.md) is enabled by the tracked
+`/etc/portage/repos.conf/agentoo.conf` and updated through the project Git workflow.
+Ebuilds own packaged software and dependencies; USE flags select features rather
+than host identities. Avoid giving Git and ebuilds competing ownership of a file.
+
+## Guides and verification
+
+- [GUI installation and session setup](gui-base.md)
+- [Audio setup and diagnostics](audio.md)
+- [Displays, HiDPI, and laptop lid behavior](displays.md)
+- [Desktop preferences](desktop.md)
+- [Font diagnostics and selection](fonts.md)
+
+Run the repository checks from a checkout:
+
+```sh
+python3 usr/local/share/agentoo/tests/run_tests.py
+```
+
+This runs the unified Python discovery suite followed by every Lua regression
+script. Lua checks are explicitly reported as skipped when `lua` is unavailable.
+Python tests that require optional native tools report their own skips. Tests use
+disposable files and mocks; they do not establish live hardware correctness.
 
 ## Configuration philosophy
 

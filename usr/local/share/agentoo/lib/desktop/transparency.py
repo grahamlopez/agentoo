@@ -10,8 +10,11 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 sys.dont_write_bytecode = True
-from desktop_common import authored_hypr_paths, hyprctl
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from desktop.common import authored_hypr_paths, hyprctl
 
 GROUPS = ('all', 'kitty', 'browser')
 STATES = ('focused', 'unfocused')
@@ -28,12 +31,12 @@ def percentage(value):
 
 
 def state_path():
-    from desktop_state import state_path as shared_path
+    from desktop.state import state_path as shared_path
     return shared_path()
 
 
 def read_state(path):
-    from desktop_state import section
+    from desktop.state import section
     return validate_data(section('transparency', path))
 
 

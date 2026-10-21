@@ -13,7 +13,7 @@
 # Add completions only if they exist on this machine. /some/path/to/dir(N/)
 # matches a 'dir/' directory, but not recursively, and "N" drops the path when
 # there is no match, instead of leaving a dead path sitting in fpath.
-fpath=(~/.zsh/completion(N/) ~/.zsh/completion/conda-zsh-completion(N/) /usr/local/share/agentoo/zsh(N/) $fpath)
+fpath=(~/.zsh/completion(N/) ~/.zsh/completion/conda-zsh-completion(N/) /usr/local/share/agentoo/shell(N/) $fpath)
 
 # completion system (see 20.2.1 of the zsh manual)
 autoload -Uz compinit

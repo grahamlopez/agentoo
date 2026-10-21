@@ -6,9 +6,9 @@ import signal
 import sys
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
-from desktop_common import atomic_write
+from desktop.common import atomic_write
 
 
 def build_parser():
@@ -23,7 +23,7 @@ def build_parser():
                '  agentoo desktop blur clear --window kitty\n'
                '  agentoo desktop clear\n\n'
                'Exit 0: success; 1: operational failure; 2: invalid arguments.')
-    from desktop_state import file_option, window_option
+    from desktop.state import file_option, window_option
     parser.set_defaults(action=None, appearance_file=None, window='all')
     commands = parser.add_subparsers(dest='command', prog=parser.prog)
     setter = commands.add_parser('set', help='Apply and remember appearance settings from JSON',
@@ -57,7 +57,7 @@ def build_parser():
                'Supply at least one adjustment or --file; --file cannot accompany adjustments '
                'or a kitty/browser window category.')
     window_option(setter, child=True)
-    from desktop_transparency import percentage
+    from desktop.transparency import percentage
     setter.add_argument('--focused', type=percentage, metavar='PERCENT', help='Focused-window transparency, 0–90')
     setter.add_argument('--unfocused', type=percentage, metavar='PERCENT', help='Unfocused-window transparency, 0–90')
     file_option(setter)
@@ -65,19 +65,19 @@ def build_parser():
         description='Remove saved transparency overrides and apply configured defaults. '
                     'Clearing kitty/browser restores inheritance; all clears shared and category overrides.')
     window_option(clear, child=True)
-    from desktop_blur import add_parser
+    from desktop.blur import add_parser
     add_parser(commands)
-    from desktop_effects import add_parsers
+    from desktop.effects import add_parsers
     add_parsers(commands)
     return parser
 
 
 def main():
-    from desktop_state import update, state_path
-    import desktop_wallpaper as wallpaper
-    import desktop_blur as blur
-    import desktop_transparency as transparency
-    import desktop_effects as effects
+    from desktop.state import update, state_path
+    from desktop import wallpaper as wallpaper
+    from desktop import blur as blur
+    from desktop import transparency as transparency
+    from desktop import effects as effects
 
     parser = build_parser()
     args = parser.parse_args()

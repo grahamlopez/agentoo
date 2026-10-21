@@ -29,10 +29,10 @@ The user approved the behavior changes with these qualifications:
   executable containing its implementation. Direct/grouped invocations agree.
 - Each normal command owns one parser for execution, help, and completion.
   No duplicate prevalidation or argument translation in the dispatcher.
-- `usr/local/share/agentoo/cli.py` contains the authoritative concise policy and
+- `usr/local/share/agentoo/lib/cli.py` contains the authoritative concise policy and
   small parser helper. Imports use the sibling installed share directory and
-  work from a checkout. Completion lives in `commands/cli.py`; the other retained
-  command helper is `commands/git-transaction.py`.
+  work from a checkout. Completion lives in `lib/completion.py`; the other retained
+  command helper is `lib/git_transaction.py`.
 - `boot/agentoo/checkpoint.sh` remains self-contained POSIX sh, without Python,
   Bash, or shared runtime helpers. `agentoo-checkpoint` is a small sh launcher.
   Rescue instructions name the script directly when the installed root is absent.

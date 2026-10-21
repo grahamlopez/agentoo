@@ -15,10 +15,10 @@ import unittest
 from unittest.mock import patch
 
 SHARE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(SHARE))
-import desktop_transparency as transparency
-import desktop_effects as effects
-import desktop_state as state
+sys.path.insert(0, str(SHARE / 'lib'))
+from desktop import transparency
+from desktop import effects
+from desktop import state
 
 
 class Transparency(unittest.TestCase):
@@ -125,7 +125,7 @@ class Transparency(unittest.TestCase):
         self.assertFalse(self.directory.exists())
 
     def test_kitty_background_only_focus_live_changes_and_reset(self):
-        spec = importlib.util.spec_from_file_location('agentoo_kitty_transparency', SHARE / 'kitty/transparency.py')
+        spec = importlib.util.spec_from_file_location('agentoo_kitty_transparency', SHARE / 'lib/kitty/transparency.py')
         watcher = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(watcher)
         data = {'all': {'focused': 5, 'unfocused': 10}}
@@ -167,7 +167,7 @@ class Transparency(unittest.TestCase):
         repository = SHARE.parents[3]
         module = self.root / 'transparency.lua'
         module.write_text((repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(
-            '/usr/local/share/agentoo/desktop_transparency.py', str(SHARE / 'desktop_transparency.py')).replace(
+            '/usr/local/share/agentoo/lib/desktop/transparency.py', str(SHARE / 'lib/desktop/transparency.py')).replace(
             '/etc/xdg/hypr/window-classes.lua', str(repository / 'etc/xdg/hypr/window-classes.lua')))
         config = self.root / 'hyprland.lua'
         config.write_text('dofile(' + json.dumps(str(module)) + ')\n')
@@ -181,7 +181,7 @@ class Transparency(unittest.TestCase):
         (self.directory / 'appearance.json').write_text(json.dumps({'transparency': {'all': {'focused': 30, 'unfocused': 50}}}))
         code = ('import runpy, sys; '
                 'original_path = list(sys.path); '
-                f'm = runpy.run_path({str(SHARE / "kitty/transparency.py")!r}, run_name="agentoo_watcher_check"); '
+                f'm = runpy.run_path({str(SHARE / "lib/kitty/transparency.py")!r}, run_name="agentoo_watcher_check"); '
                 'assert callable(m["on_load"]); '
                 'assert m["read_preferences"]() == {"all": {"focused": 30, "unfocused": 50}}; '
                 'assert sys.path == original_path; print("Watcher reads OK")')

@@ -157,7 +157,7 @@ it on a target.
 ### Kitty host defaults
 
 Kitty loads `/etc/xdg/kitty/kitty.conf` before user configuration. Its native
-`geninclude` runs `/usr/local/share/agentoo/kitty/host-config.py` when configuration
+`geninclude` runs `/usr/local/share/agentoo/lib/kitty/host_config.py` when configuration
 is loaded, including on startup and reload. The helper reads
 `/etc/agentoo/target-host` as data and outputs the selected
 `/etc/xdg/kitty/hosts/<name>.conf` fragment. Missing selectors or host fragments
@@ -173,7 +173,7 @@ The shared configuration also enables dynamic background opacity and loads the
 Agentoo transparency watcher. `agentoo desktop transparency` stores personal
 focused/unfocused choices in XDG state; Kitty text stays opaque. Processes
 started before this integration was installed need a one-time restart. See
-[window transparency](../../usr/local/share/agentoo/docs/gui-base.md#window-transparency)
+[window transparency](../../usr/local/share/agentoo/docs/desktop.md#window-transparency)
 for inheritance, reset, conflict handling, and validation.
 
 ## Optional systemd features and snapshot boundaries

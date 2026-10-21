@@ -6,7 +6,7 @@ local baseline = on(hl.get_config("decoration.blur.enabled"))
 local baseline_size = hl.get_config("decoration.blur.size")
 local baseline_passes = hl.get_config("decoration.blur.passes")
 
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/desktop_blur.py rules", "r"))
+local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/blur.py rules", "r"))
 local contents = stream:read("*a")
 -- Hyprland can reap popen's child before pclose. Check the completion record,
 -- not pclose's potentially spurious ECHILD result (also used by transparency).

@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-command = Path(__file__).resolve().parents[4] / 'bin/agentoo-fonts'
+command = Path(__file__).resolve().parents[3] / 'bin/agentoo-fonts'
 spec = importlib.util.spec_from_loader('fonts', SourceFileLoader('fonts', str(command)))
 f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)

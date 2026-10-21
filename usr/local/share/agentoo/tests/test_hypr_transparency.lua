@@ -8,7 +8,7 @@ local context = setmetatable({
     end,
     hl = { window_rule = function(rule) rules[#rules + 1] = rule end },
     io = { popen = function(command, mode)
-        assert(command:match("desktop_transparency.py rules$") and mode == "r")
+        assert(command:match("lib/desktop/transparency.py rules$") and mode == "r")
         return {
             read = function() return "all\tfocused\t5\nkitty\tfocused\t5\nbrowser\tfocused\t0\nend\n" end,
             close = function() return true end,

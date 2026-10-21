@@ -12,7 +12,7 @@
 --   hyprctl layers -j: DP-4/background namespace="wallpaper", x=1920, y=0,
 --     w=3840, h=2160. The disabled eDP-1 panel was 3840 pixels at scale=2,
 --     explaining the stale 1920-logical-pixel offset. Fullscreen Kitty fit.
---   After `python3 /usr/local/share/agentoo/desktop_wallpaper.py`, the wallpaper layer was x=0,
+--   After `python3 /usr/local/share/agentoo/lib/desktop/wallpaper.py`, the wallpaper layer was x=0,
 --     y=0, w=3840, h=2160 and covered the external output correctly.
 -- The symptom was reported during both custom and distribution kernel tests.
 -- No exact upstream issue was found. This is evidence of a compositor layer
@@ -29,7 +29,7 @@
 --    require for this file. Do this in the actual config/include being loaded,
 --    then run `hyprctl reload` so this handler is no longer registered.
 -- 2. With the lid open, connect the external monitor. Run
---    `python3 /usr/local/share/agentoo/desktop_wallpaper.py` ONCE to establish a correctly placed
+--    `python3 /usr/local/share/agentoo/lib/desktop/wallpaper.py` ONCE to establish a correctly placed
 --    client before testing. Confirm both outputs are active and DP-4 starts
 --    to the right of eDP-1; an output already fixed at x=0 won't test this bug.
 -- 3. Capture `hyprctl monitors -j` and `hyprctl layers -j`, close the lid, and
@@ -40,7 +40,7 @@
 --    changes. A nonzero origin is valid: compare each layer with its own
 --    monitor's position, not with an assumed desktop origin of zero.
 -- 5. If the stale layer returns, re-enable the require and reload, then run
---    `python3 /usr/local/share/agentoo/desktop_wallpaper.py` to repair the existing layer. Reload
+--    `python3 /usr/local/share/agentoo/lib/desktop/wallpaper.py` to repair the existing layer. Reload
 --    alone intentionally preserves the client when geometry hasn't changed.
 --    If repeated tests pass without this handler, remove its include, this
 --    file and its geometry regression test; retain equivalent startup-only
@@ -64,7 +64,7 @@ hl.on("hyprland.start", function()
     previous = geometry()
     -- Restore is a quiet no-op if no wallpaper is selected. It replaces only
     -- this session's recorded client, preserving independently started clients.
-    hl.exec_cmd("python3 /usr/local/share/agentoo/desktop_wallpaper.py")
+    hl.exec_cmd("python3 /usr/local/share/agentoo/lib/desktop/wallpaper.py")
 end)
 
 hl.on("monitor.layout_changed", function()
@@ -79,6 +79,6 @@ hl.on("monitor.layout_changed", function()
         local current, count = geometry()
         if count == 0 or current == previous then return end
         previous = current
-        hl.exec_cmd("python3 /usr/local/share/agentoo/desktop_wallpaper.py")
+        hl.exec_cmd("python3 /usr/local/share/agentoo/lib/desktop/wallpaper.py")
     end, { timeout = 250, type = "oneshot" })
 end)

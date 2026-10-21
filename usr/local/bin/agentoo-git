@@ -11,7 +11,7 @@ import sys
 
 sys.dont_write_bytecode = True
 SHARE = Path(__file__).resolve().parent.parent / 'share/agentoo'
-sys.path.insert(0, str(SHARE))
+sys.path.insert(0, str(SHARE / 'lib'))
 from cli import ArgumentParser
 
 GIT_DIR = '/var/lib/agentoo/repository.git'
@@ -40,7 +40,7 @@ def git_command(args):
                            'Run this system repository operation with sudo agentoo git ...')
     command = ['git', '--git-dir=' + GIT_DIR, '--work-tree=/', *args]
     if os.geteuid() == 0 and (not args or args[0] not in GUARD_BYPASS):
-        command = [sys.executable, str(SHARE / 'commands/git-transaction.py'), *command]
+        command = [sys.executable, str(SHARE / 'lib/git_transaction.py'), *command]
     return command
 
 
