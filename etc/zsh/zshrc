@@ -128,6 +128,20 @@ bindkey '^D' kill-word
 bindkey '^B' backward-word
 bindkey '^F' forward-word
 
+# Ctrl+Left/Right move by words.
+bindkey '^[[1;5D' backward-word
+bindkey '^[[1;5C' forward-word
+
+# Home/End: normal, application, and numbered terminal sequences.
+bindkey '^[[H' beginning-of-line
+bindkey '^[[F' end-of-line
+bindkey '^[OH' beginning-of-line
+bindkey '^[OF' end-of-line
+bindkey '^[[1~' beginning-of-line
+bindkey '^[[4~' end-of-line
+bindkey '^[[7~' beginning-of-line
+bindkey '^[[8~' end-of-line
+
 # for quick alternate command
 # - can also use ^U (cut) ^Y (paste) as well
 bindkey '^K' push-line
