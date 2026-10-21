@@ -330,3 +330,62 @@ retains the archive's licenses; Gentoo continues to own standalone symbols.
 
 See [font usage and diagnostics](../docs/fonts.md) for commands and selection.
 These packages install fonts only, with no application configuration changes.
+
+## Terminal animations
+
+Seven optional `games-misc` packages provide terminal animations. Both bonsai
+variants and both aquarium variants can be installed together:
+
+| Package | Version | Command |
+| --- | --- | --- |
+| `games-misc/cbonsai` | 1.4.2, John Allbritten upstream | `cbonsai` |
+| `games-misc/cbonsai-enhanced` | 1.4.2_p20260615, jakobrees fork | `cbonsai-enhanced` |
+| `games-misc/asciiquarium` | 1.6, nothub fork | `asciiquarium` |
+| `games-misc/asciiquarium-redux` | 1.5.0, cognitivegears Python rewrite | `asciiquarium-redux` |
+| `games-misc/csakura` | 3.0.0 | `csakura` |
+| `games-misc/neo` | 0.6.1 | `neo` |
+| `games-misc/lavat` | 3.0.0 | `lavat` |
+
+```sh
+emerge --ask games-misc/cbonsai games-misc/cbonsai-enhanced \
+  games-misc/asciiquarium games-misc/asciiquarium-redux \
+  games-misc/csakura games-misc/neo games-misc/lavat
+```
+
+These packages are selected explicitly; no package set installs them automatically.
+Agentoo's common keyword configuration accepts their testing keywords and the
+three overlay dependencies: `dev-perl/Term-Animation`, `dev-python/asciimatics`,
+and `dev-python/pyfiglet`. Most packages carry `~amd64` and `~arm64` keywords.
+Classic Asciiquarium and Term-Animation initially carry only `~amd64` because
+Gentoo's `dev-perl/Curses` dependency has no arm64 keyword. On systems without
+Agentoo's keyword configuration, accept the appropriate testing keywords first.
+
+The enhanced bonsai is pinned to commit
+`298bf698ad080f13fa0d051588482bab8903d988`; upstream has no release tags.
+Its command, man page, Bash completion, and default cache filename use
+`cbonsai-enhanced`. Its default save file is
+`$XDG_CACHE_HOME/cbonsai-enhanced` or `~/.cache/cbonsai-enhanced`, separate from
+the classic tree. Upstream's documentation uses the original `cbonsai` name;
+substitute `cbonsai-enhanced` when following the fork's examples.
+
+Redux exports only `asciiquarium-redux`; its conflicting `asciiquarium` alias
+is omitted. It installs example TOML configurations under
+`/usr/share/doc/asciiquarium-redux-1.5.0/`. The terminal backend is available
+by default; `USE=tk` enables the optional Tk backend's Python dependency.
+For an explicit terminal session, run `asciiquarium-redux --backend terminal`.
+
+Use a UTF-8 locale and a terminal font with the required glyphs. `cbonsai -l`
+and `cbonsai-enhanced -l` animate tree growth; `csakura -t` preserves terminal
+transparency, and `lavat -G` enables gravity and buoyancy. Press `q` to quit
+these animations. `csakura` and `lavat` document options with `-h`.
+
+`app-misc/no-more-secrets` remains supplied by Gentoo; install it separately
+and accept its testing keyword if needed. This overlay does not duplicate it.
+
+All ten overlay recipes passed Portage build and staged-install phases on
+amd64 with Python 3.14 on 2026-10-21. Dependency resolution succeeded for all
+seven applications together. Each application rendered in a pseudo-terminal
+and exited successfully with `q`; staged file checks found no collisions.
+The asciimatics upstream suite also passed (199 tests, 40 skipped).
+The checks used isolated build and dependency images, without merging packages
+into the running system. Arm64 and the optional Tk GUI were not runtime-tested.

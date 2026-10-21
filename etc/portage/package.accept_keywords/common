@@ -21,3 +21,15 @@ app-misc/chatgpt-desktop-bin::agentoo ~amd64
 
 # Other agentoo ebuilds
 app-misc/ttfx ~amd64
+
+# Optional terminal animations; classic and enhanced variants coexist.
+games-misc/cbonsai::agentoo ~amd64 ~arm64
+games-misc/cbonsai-enhanced::agentoo ~amd64 ~arm64
+games-misc/asciiquarium::agentoo ~amd64
+games-misc/asciiquarium-redux::agentoo ~amd64 ~arm64
+games-misc/csakura::agentoo ~amd64 ~arm64
+games-misc/neo::agentoo ~amd64 ~arm64
+games-misc/lavat::agentoo ~amd64 ~arm64
+dev-perl/Term-Animation::agentoo ~amd64
+dev-python/asciimatics::agentoo ~amd64 ~arm64
+dev-python/pyfiglet::agentoo ~amd64 ~arm64

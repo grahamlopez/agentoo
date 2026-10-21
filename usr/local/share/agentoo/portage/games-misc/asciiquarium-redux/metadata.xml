@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<use>
+		<flag name="tk">Enable the optional Tk window rendering backend</flag>
+	</use>
+	<upstream>
+		<remote-id type="github">cognitivegears/asciiquarium_redux</remote-id>
+	</upstream>
+</pkgmetadata>
