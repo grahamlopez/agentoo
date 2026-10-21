@@ -249,6 +249,8 @@ The terminal overlay uses a named special workspace and launches Kitty on demand
 It requests 160 columns by 45 rows, centered horizontally with its top edge
 15% of the monitor height from the top. Hiding it keeps the shell and running
 programs alive; closing the terminal lets the next toggle create a fresh one.
+New application windows opened in the dropdown workspace are moved to the
+regular workspace on that monitor, so hiding the dropdown leaves them visible.
 The cell size follows the normal Kitty font settings; the requested geometry
 requires enough monitor space at the selected font size and display scale.
 

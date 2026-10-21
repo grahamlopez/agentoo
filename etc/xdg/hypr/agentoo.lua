@@ -37,6 +37,18 @@ hl.window_rule({
     move = "(monitor_w-window_w)/2 monitor_h*0.15",
 })
 hl.bind("SUPER + grave", hl.dsp.workspace.toggle_special("terminal"))
+-- Keep applications launched from the dropdown on the regular workspace below.
+hl.on("window.open", function(window)
+    local workspace = window.workspace
+    if window.class == "agentoo-dropdown" or not workspace or workspace.name ~= "special:terminal" then
+        return
+    end
+    local monitor = window.monitor
+    local target = monitor and monitor.active_workspace
+    if target then
+        hl.dispatch(hl.dsp.window.move({ window = window, workspace = target, follow = false }))
+    end
+end)
 hl.bind("SUPER + SHIFT + Return", hl.dsp.exec_cmd("firefox-bin"))
 hl.bind("SUPER + Q", hl.dsp.window.close())
 hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
