@@ -73,3 +73,4 @@
 [safe]
     directory = /var/db/repos/gentoo
 	directory = /var/db/repos/hyproverlay
+	directory = /var/db/repos/guru
