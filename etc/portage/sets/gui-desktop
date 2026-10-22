@@ -7,6 +7,8 @@ gui-libs/gdk-pixbuf-loader-webp
 # File-only Wayland screenshots and interactive region selection.
 gui-apps/grim
 gui-apps/slurp
+# Clipboard history; GURU policy permits only this package.
+app-misc/cliphist::guru
 # Fonts
 media-fonts/unifont
 media-fonts/noto-emoji

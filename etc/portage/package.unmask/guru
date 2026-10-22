@@ -1,0 +1,2 @@
+# Clipboard history; keep all other GURU packages masked.
+app-misc/cliphist::guru
