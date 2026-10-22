@@ -154,6 +154,27 @@ bindkey '^U' kill-whole-line
 if (( $+commands[fzf] )) && [[ -r /usr/share/fzf/key-bindings.zsh ]]; then
   source /usr/share/fzf/key-bindings.zsh
   bindkey '^G' fzf-cd-widget
+
+  # Preserve fzf's history handling, including multiline commands. Enter
+  # marks the selection for execution; Alt+Enter leaves it for editing.
+  # A private marker carries the choice out of fzf's subprocess without eval.
+  _agentoo_fzf_history() {
+    local work ret
+    work=$(mktemp -d) || return
+    local FZF_CTRL_R_OPTS="${FZF_CTRL_R_OPTS-} --bind='enter:execute-silent(touch ${(q)work}/execute)+accept,alt-enter:accept'"
+    {
+      zle fzf-history-widget
+      ret=$?
+      if (( ret == 0 )) && [[ -f $work/execute && -n $BUFFER ]]; then
+        zle accept-line
+      fi
+    } always {
+      rm -rf -- "$work"
+    }
+    return $ret
+  }
+  zle -N _agentoo_fzf_history
+  bindkey '^R' _agentoo_fzf_history
 fi
 
 # general commands defaults
