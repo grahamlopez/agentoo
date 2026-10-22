@@ -9,6 +9,8 @@ gui-apps/grim
 gui-apps/slurp
 # Clipboard history; GURU policy permits only this package.
 app-misc/cliphist::guru
+gui-apps/wl-clipboard
+app-shells/fzf
 # Fonts
 media-fonts/unifont
 media-fonts/noto-emoji

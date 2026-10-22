@@ -339,10 +339,42 @@ before testing the physical keys. Confirm visible changes, held-key repetition,
 usable minimum and maximum levels, and recovery after suspend/resume. A low
 resolution or unsuitable panel curve may need a host-specific adjustment.
 
+### Clipboard history
+
+`@gui-desktop` supplies `app-misc/cliphist::guru`, wl-clipboard, and fzf;
+Kitty comes from `@gui-base`. GURU is masked except for cliphist. Sync it with
+`sudo emaint sync -r guru` before installing the set.
+
+At Hyprland startup, `wl-paste --type text --watch cliphist store` captures
+text copies. Reloading configuration does not start another watcher. After
+deployment, log out and back in to start capture, or run that command once in
+a terminal for the current session.
+
+Press **Ctrl+0** to search history in a floating Kitty/fzf window. Enter restores
+the selected entry to the desktop clipboard; Escape cancels without changing it.
+Shift+Delete deletes the highlighted history entry and refreshes the list;
+it leaves the active clipboard unchanged. Backspace and Delete edit the search
+query normally. The window closes when the picker exits. Paste normally, for example with
+Ctrl+Shift+V in Kitty or `p` in Neovim. tmux's Ctrl+A, ] still reads its own
+buffer; history selection does not update it.
+
+The picker follows [cliphist's upstream fzf recipe](https://github.com/sentriz/cliphist#picker-examples).
+Decoding restores original whitespace and multiline content rather than the
+one-line preview. Images are not captured by this text-only watcher.
+Installed cliphist 0.7.0 defaults to 750 entries, stored in
+`${XDG_CACHE_HOME:-~/.cache}/cliphist/db`, retained across logins until evicted
+or cleared. Run `cliphist wipe` to clear history; the active desktop clipboard
+is separate. Configure cliphist through its native user configuration if needed.
+
+Verify copies from graphical applications, Neovim, and tmux appear in the picker;
+restore an older multiline entry and check whitespace and Unicode. Check Escape
+preserves the current clipboard, and confirm a fresh login starts capture and
+configuration reloads leave only one watcher.
+
 ### Screenshots
 
 `@gui-desktop` extends `@gui-base` with desktop conveniences, initially
-`gui-apps/grim`, `gui-apps/slurp`, and `gui-apps/swaybg`. Install it with
+screenshots, wallpapers, and text clipboard history. Install it with
 `sudo emerge --ask @gui-desktop`; keep `@gui-base` as the minimal graphics/audio
 foundation and `@laptop` as an independent hardware-utility set. Run
 `agentoo screenshot full` to capture all outputs in one image, or

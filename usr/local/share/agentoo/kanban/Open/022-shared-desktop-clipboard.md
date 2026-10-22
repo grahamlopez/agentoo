@@ -69,8 +69,26 @@ Neovim clipboard integration or tmux copy behavior.
 
 Packaging decision: enable GURU, mask `*/*::guru`, and unmask/accept testing
 keywords only for `app-misc/cliphist::guru`. These configuration files are
-prepared in the checkout. Live deployment and sync remain pending because
-noninteractive sudo requires a password; no package has been installed.
+tracked in the checkout. User subsequently synced GURU and installed cliphist
+0.7.0; the executable is now available.
+
+## Implementation (2026-10-22)
+
+- Added a `hyprland.start` hook for the upstream text watcher command; config
+  reloads do not run that startup event again.
+- Ctrl+0 launches the upstream cliphist/fzf picker recipe in a floating Kitty
+  window. Selection restores via wl-copy; cancellation leaves the clipboard
+  untouched. Kitty closes when the script exits, without remote control.
+- Shift+Delete deletes the highlighted entry and reloads the list through
+  native fzf actions, with no custom Kitty key mapping. Backspace remains
+  query editing; deleting history leaves the active clipboard unchanged.
+- Added explicit wl-clipboard/fzf desktop set dependencies and included the
+  picker class in Kitty appearance rules. Documented use, retention, and wipe.
+- Bash syntax, Hyprland `--verify-config`, and diff checks passed. An isolated
+  database test using real cliphist/fzf and a capture replacement for wl-copy
+  preserved multiline text, indentation, Unicode, and trailing newlines;
+  no selection and simulated cancellation did not invoke wl-copy.
+- Live deployment and interactive/fresh-login acceptance checks remain pending.
 
 - [ ] Multiple graphical, Neovim, and tmux copies appear in the history picker.
 - [ ] Selecting an older entry restores it to the desktop clipboard with

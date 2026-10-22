@@ -29,6 +29,18 @@ hl.config({
 })
 
 hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"))
+
+-- Capture text once per session; configuration reloads do not start watchers.
+hl.on("hyprland.start", function()
+    hl.exec_cmd("wl-paste --type text --watch cliphist store")
+end)
+hl.bind("CTRL + 0", hl.dsp.exec_cmd("kitty --class agentoo-clipboard -o remember_window_size=no -o initial_window_width=100c -o initial_window_height=25c bash /usr/local/share/agentoo/lib/desktop/clipboard-picker.sh"))
+hl.window_rule({
+    match = { class = "agentoo-clipboard" },
+    float = true,
+    move = "(monitor_w-window_w)/2 (monitor_h-window_h)/2",
+})
+
 -- A persistent terminal overlay; Kitty sizes the content in columns and rows.
 hl.workspace_rule({
     workspace = "special:terminal",
