@@ -106,6 +106,10 @@ Backlight controls are under `agentoo display backlight up|down [CONTROLLER]`.
 External monitor controls are under `agentoo display external`: `list`,
 `capabilities`, `brightness [0..100|up|down]`, `volume [0..100|up|down]`,
 `mute [on|off]`, `input [VALUE]`, and explicit VCP `get`/`set`.
+Mapped Dell U5226KW controls include `layout [MODE]`, `pip-position next`,
+`sub-input [thunderbolt|hdmi1]`, `audio-source [window1|window2]`,
+`speakers [on|off]`, and `usb [next|thunderbolt|hdmi1]`. Its volume control
+decodes the mute flag and retains the speaker state.
 See [display control and setup](usr/local/share/agentoo/docs/displays.md#external-monitor-controls-ddcci)
 for dependencies, selectors, and current Dell investigation limits.
 The existing `agentoo-backlight` and `agentoo-screenshot` names remain supported.

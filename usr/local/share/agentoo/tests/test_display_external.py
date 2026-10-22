@@ -1,5 +1,6 @@
 """DDC command selection and validation; never writes real monitor settings."""
 from pathlib import Path
+import io
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ class ExternalDisplay(unittest.TestCase):
         parser = DISPLAY.build_parser()
         args = parser.parse_args(['external', *tokens])
         with patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'dell_u5226kw_connected', return_value=False), \
                 patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], status)) as run:
             self.assertEqual(EXTERNAL.run(args, parser), status)
         return run.call_args.args[0]
@@ -47,6 +49,7 @@ class ExternalDisplay(unittest.TestCase):
     def test_nonstandard_relative_volume_never_writes(self):
         args = DISPLAY.build_parser().parse_args(['external', 'volume', 'up', '--bus', '13'])
         with patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'dell_u5226kw_connected', return_value=False), \
                 patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess(
                     [], 0, 'VCP 62 C 178 65380\n', '')) as run:
             with self.assertRaisesRegex(RuntimeError, 'nonstandard volume'):
@@ -57,11 +60,203 @@ class ExternalDisplay(unittest.TestCase):
     def test_standard_relative_volume(self):
         args = DISPLAY.build_parser().parse_args(['external', 'volume', 'down', '--bus', '13'])
         with patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'dell_u5226kw_connected', return_value=False), \
                 patch.object(EXTERNAL.subprocess, 'run', side_effect=[
                     subprocess.CompletedProcess([], 0, 'VCP 62 C 30 100\n', ''),
                     subprocess.CompletedProcess([], 0)]) as run:
             self.assertEqual(EXTERNAL.run(args, None), 0)
             self.assertEqual(run.call_args.args[0], ['ddcutil', '--bus', '13', 'setvcp', '62', '-', '5', '--verify'])
+
+    def test_dell_identity_required_even_with_explicit_bus(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(EXTERNAL, 'DRM', Path(directory)):
+            path = self.output(Path(directory), 'card0-DP-4', bus=13)
+            edid = bytearray(128)
+            edid[8:12] = bytes.fromhex('10ac9e43')
+            (path / 'edid').write_bytes(edid)
+            EXTERNAL.require_dell_u5226kw(13)
+            edid[10] = 0
+            (path / 'edid').write_bytes(edid)
+            args = DISPLAY.build_parser().parse_args(['external', 'layout', '50-50', '--bus', '13'])
+            with patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                    patch.object(EXTERNAL.subprocess, 'run') as run:
+                with self.assertRaisesRegex(RuntimeError, 'requires a connected Dell'):
+                    EXTERNAL.run(args, None)
+                run.assert_not_called()
+
+    def test_feature_read_formats_and_errors(self):
+        for reply, expected in [('VCP E9 CNC x00 xff x00 x22', 0x22),
+                                ('VCP E8 CNC xff xff x67 x31', 0x6731),
+                                ('VCP 60 SNC x19', 0x19), ('VCP 10 C 50 100', 50)]:
+            code = reply.split()[1]
+            with self.subTest(reply=reply), patch.object(EXTERNAL.subprocess, 'run',
+                    return_value=subprocess.CompletedProcess([], 0, reply, '')):
+                self.assertEqual(EXTERNAL.read_feature(['ddcutil', '--bus', '13'], code), expected)
+        with patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, 'VCP E9 ERR', '')):
+            with self.assertRaisesRegex(RuntimeError, 'Unexpected response'):
+                EXTERNAL.read_feature(['ddcutil'], 'E9')
+
+    def test_named_layout_waits_for_readback_without_rewriting(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', '33-67', '--bus', '13'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL.time, 'sleep'), patch('sys.stdout', new_callable=io.StringIO) as output, \
+                patch.object(EXTERNAL.subprocess, 'run', side_effect=[
+                    subprocess.CompletedProcess([], 0),
+                    subprocess.CompletedProcess([], 1, '', 'ENXIO'),
+                    subprocess.CompletedProcess([], 0, 'VCP E9 CNC x00 xff x00 x24', ''),
+                    subprocess.CompletedProcess([], 0, 'VCP E9 CNC x00 xff x00 x2d', '')]) as run:
+            self.assertEqual(EXTERNAL.run(args, None), 0)
+            writes = [c.args[0] for c in run.call_args_list if 'setvcp' in c.args[0]]
+            self.assertEqual(writes, [['ddcutil', '--bus', '13', 'setvcp', 'E9', '45', '--permit-unknown-feature', '--noverify']])
+            self.assertIn('33-67 (0x2D)', output.getvalue())
+
+    def test_readback_failure_never_repeats_write(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', 'off', '--bus', '13'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL.time, 'sleep'), \
+                patch.object(EXTERNAL, 'write_switch') as write, \
+                patch.object(EXTERNAL, 'read_feature', side_effect=RuntimeError('ENXIO')):
+            with self.assertRaisesRegex(RuntimeError, 'No write was retried'):
+                EXTERNAL.run(args, None)
+            write.assert_called_once()
+
+    def test_position_requires_pip_and_is_sent_only_once(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'pip-position', 'next', '--bus', '13'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'read_feature', return_value=0x24), \
+                patch.object(EXTERNAL, 'write_switch') as write:
+            with self.assertRaisesRegex(RuntimeError, 'requires pip-small or pip-large'):
+                EXTERNAL.run(args, None)
+            write.assert_not_called()
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'read_feature', return_value=0x22), \
+                patch.object(EXTERNAL, 'write_switch') as write, patch('sys.stderr'):
+            self.assertEqual(EXTERNAL.run(args, None), 0)
+            write.assert_called_once_with(['ddcutil', '--bus', '13'], 'E9', 2)
+
+    def test_sub_input_requires_mapped_active_layout(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'sub-input', 'hdmi1', '--bus', '13'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'read_feature', return_value=0), \
+                patch.object(EXTERNAL, 'write_switch') as write:
+            with self.assertRaisesRegex(RuntimeError, 'requires a mapped active'):
+                EXTERNAL.run(args, None)
+            write.assert_not_called()
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'read_feature', side_effect=[0x22, 0x6731]), \
+                patch.object(EXTERNAL.time, 'sleep'), \
+                patch.object(EXTERNAL, 'write_switch') as write, patch('sys.stdout'):
+            self.assertEqual(EXTERNAL.run(args, None), 0)
+            write.assert_called_once_with(['ddcutil', '--bus', '13'], 'E8', 0x6731)
+
+    def test_dell_volume_decodes_mute_without_writes(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'volume', '--bus', '13'])
+        with patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
+                patch.object(EXTERNAL, 'dell_u5226kw_connected', return_value=True), \
+                patch.object(EXTERNAL, 'read_feature', return_value=173), \
+                patch.object(EXTERNAL.subprocess, 'run') as run, patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(EXTERNAL.run(args, None), 0)
+            self.assertEqual(output.getvalue(), '45/100 (speakers off)\n')
+            run.assert_not_called()
+
+    def test_dell_relative_volume_restores_speaker_off(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'volume', 'up', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', side_effect=[173, 178]), \
+                patch.object(EXTERNAL.time, 'sleep'), patch('sys.stdout'), \
+                patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertEqual(EXTERNAL.run_dell_volume(args, ['ddcutil', '--bus', '13']), 0)
+            run.assert_called_once_with(['ddcutil', '--bus', '13', 'setvcp', '62', '50', '8D', '1', '--noverify'], check=False)
+
+    def test_dell_volume_clamps_without_toggling_speakers(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'volume', 'up', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', return_value=228), \
+                patch.object(EXTERNAL.subprocess, 'run') as run, patch('sys.stdout'):
+            self.assertEqual(EXTERNAL.run_dell_volume(args, ['ddcutil']), 0)
+            run.assert_not_called()
+
+    def test_dell_volume_failure_attempts_to_restore_speaker_off(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'volume', '40', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', return_value=173), \
+                patch.object(EXTERNAL.subprocess, 'run', side_effect=[
+                    subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0)]) as run:
+            with self.assertRaisesRegex(RuntimeError, 'Volume write failed'):
+                EXTERNAL.run_dell_volume(args, ['ddcutil'])
+            self.assertEqual(run.call_args.args[0], ['ddcutil', 'setvcp', '8D', '1', '--noverify'])
+        with patch.object(EXTERNAL, 'read_feature', return_value=173), \
+                patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)):
+            with self.assertRaisesRegex(RuntimeError, 'Speaker Off could not be restored'):
+                EXTERNAL.run_dell_volume(args, ['ddcutil'])
+
+    def test_dell_unknown_volume_encoding_fails_before_write(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'volume', '40', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', return_value=255), \
+                patch.object(EXTERNAL.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'Unexpected Dell volume encoding'):
+                EXTERNAL.run_dell_volume(args, ['ddcutil'])
+            run.assert_not_called()
+
+    def test_named_speakers_and_audio_source_values(self):
+        for name, value, code, raw in [('speakers', 'on', '8D', 2), ('speakers', 'off', '8D', 1),
+                                       ('audio-source', 'window1', '63', 0xF1), ('audio-source', 'window2', '63', 0xF2)]:
+            args = DISPLAY.build_parser().parse_args(['external', name, value, '--bus', '13'])
+            with self.subTest(name=name, value=value), patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                    patch.object(EXTERNAL, 'write_switch') as write, \
+                    patch.object(EXTERNAL, 'wait_for_feature') as verify, patch('sys.stdout'):
+                EXTERNAL.run_dell(args, ['ddcutil'], 13)
+                write.assert_called_once_with(['ddcutil'], code, raw)
+                verify.assert_called_once_with(['ddcutil'], code, raw)
+
+    def test_usb_status_uses_mh_not_assignment_bytes(self):
+        with patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                [], 0, 'VCP E7 CNC x04 x05 x16 x40', '')):
+            self.assertEqual(EXTERNAL.read_feature(['ddcutil'], 'E7', maximum=True), 0x0405)
+            self.assertEqual(EXTERNAL.read_feature(['ddcutil'], 'E7'), 0x1640)
+        args = DISPLAY.build_parser().parse_args(['external', 'usb', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', return_value=0x0405), \
+                patch.object(EXTERNAL, 'write_switch') as write, patch('sys.stdout', new_callable=io.StringIO) as output:
+            EXTERNAL.run_dell_usb(args, ['ddcutil'])
+            self.assertEqual(output.getvalue(), 'hdmi1 (status 0x04)\n')
+            write.assert_not_called()
+
+    def test_usb_already_selected_is_noop(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'usb', 'thunderbolt', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', return_value=0x0105) as read, \
+                patch.object(EXTERNAL, 'write_switch') as write, patch('sys.stdout'):
+            EXTERNAL.run_dell_usb(args, ['ddcutil'])
+            self.assertEqual(read.call_count, 1)
+            write.assert_not_called()
+
+    def test_usb_target_switch_writes_once_then_polls_status(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'usb', 'hdmi1', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', side_effect=[
+                0x0105, 0x2D, 0x11, 0x6739, 0x0105, 0x0405]), \
+                patch.object(EXTERNAL.time, 'sleep'), \
+                patch.object(EXTERNAL, 'write_switch') as write, patch('sys.stdout'):
+            EXTERNAL.run_dell_usb(args, ['ddcutil'])
+            write.assert_called_once_with(['ddcutil'], 'E7', 0xFF00)
+
+    def test_usb_unmapped_layout_or_target_never_switches(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'usb', 'next', '--bus', '13'])
+        for values in ([0x0205], [0x0105, 0, 0x11, 0x6739], [0x0105, 0x24, 0x19, 0x6739]):
+            with self.subTest(values=values), patch.object(EXTERNAL, 'read_feature', side_effect=values), \
+                    patch.object(EXTERNAL, 'write_switch') as write:
+                with self.assertRaisesRegex(RuntimeError, 'no switch sent'):
+                    EXTERNAL.run_dell_usb(args, ['ddcutil'])
+                write.assert_not_called()
+
+    def test_usb_failed_confirmation_does_not_cycle_again(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'usb', 'next', '--bus', '13'])
+        with patch.object(EXTERNAL, 'read_feature', side_effect=[0x0105, 0x24, 0x19, 0x6731]), \
+                patch.object(EXTERNAL, 'write_switch') as write, \
+                patch.object(EXTERNAL, 'wait_for_feature', side_effect=RuntimeError('not confirmed')):
+            with self.assertRaisesRegex(RuntimeError, 'not confirmed'):
+                EXTERNAL.run_dell_usb(args, ['ddcutil'])
+            write.assert_called_once_with(['ddcutil'], 'E7', 0xFF00)
 
     def test_invalid_values_fail_before_ddc(self):
         for tokens in [('brightness', '101'), ('brightness', '-1'), ('volume', 'toggle'),
