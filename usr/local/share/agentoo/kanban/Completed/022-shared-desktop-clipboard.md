@@ -1,8 +1,9 @@
 # Restore shared clipboard across Neovim, tmux, and Hyprland
 
 Created: 2026-10-21
-Status: Open
+Status: Completed
 Opened: 2026-10-22
+Completed: 2026-10-22
 
 Restore the legacy configuration's clipboard workflow so text copied in Neovim,
 tmux copy mode, and Hyprland applications can be pasted across all three.
@@ -17,7 +18,7 @@ tmux copy mode, and Hyprland applications can be pasted across all three.
   applications, including multiline text, after a fresh Hyprland login.
   Document required packages and bindings.
 
-## Current assessment (2026-10-22)
+## Initial assessment (2026-10-22)
 
 Neovim already enables `unnamed`/`unnamedplus`, and wl-clipboard is installed.
 The running tmux server uses `set-clipboard external` and exposes OSC 52 (`Ms`)
@@ -73,8 +74,11 @@ nothing. No continuous synchronization is added.
 
 An isolated tmux server test verified pane targeting, multiline/Unicode input,
 bracketed paste, original buffer preservation, temporary-buffer cleanup, and
-clipboard-read failure. The running default server has the trial binding using
-the checkout helper; deployment will use the managed helper path.
+clipboard-read failure. The user confirmed final deployment of the configuration
+and managed helper, replacing the initial live checkout trial.
+
+The user confirmed the live clipboard-paste trial works. The binding also
+falls back to native tmux paste if the helper is missing or unreadable.
 
 Clipboard history remains required. There is no need to replace working
 Neovim clipboard integration or tmux copy behavior.
@@ -102,12 +106,20 @@ tracked in the checkout. User subsequently synced GURU and installed cliphist
   database test using real cliphist/fzf and a capture replacement for wl-copy
   preserved multiline text, indentation, Unicode, and trailing newlines;
   no selection and simulated cancellation did not invoke wl-copy.
-- Live deployment and interactive/fresh-login acceptance checks remain pending.
+- wl-copy runs through systemd-cat so its background server does not retain
+  the picker terminal; diagnostics remain available in the journal.
+- The user confirmed all final deployment and interactive/fresh-login acceptance
+  checks, including picker closure, deletion, cancellation, exact text restoration,
+  startup capture, no duplicate watchers on reload, and the final tmux binding.
 
-- [ ] Multiple graphical, Neovim, and tmux copies appear in the history picker.
-- [ ] Selecting an older entry restores it to the desktop clipboard with
+- [x] Multiple graphical, Neovim, and tmux copies appear in the history picker.
+- [x] Selecting an older entry restores it to the desktop clipboard with
       multiline text, indentation, and Unicode intact.
-- [ ] Cancelling the picker leaves the current clipboard unchanged.
-- [ ] A fresh login starts capture automatically; Hyprland reloads do not
+- [x] Cancelling the picker leaves the current clipboard unchanged.
+- [x] A fresh login starts capture automatically; Hyprland reloads do not
       accumulate duplicate watchers.
-- [ ] Document history retention and how to clear stored entries.
+- [x] Document history retention and how to clear stored entries.
+
+- [x] Picker closes after selection with the systemd-cat fix.
+- [x] Shift+Delete removes the highlighted history entry.
+- [x] Final tmux configuration and helper deployed; desktop paste confirmed.
