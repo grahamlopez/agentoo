@@ -85,7 +85,7 @@ portageq get_repo_path / hyproverlay
 emerge --pretend --verbose --autounmask=n @gui-base
 ```
 
-Read the full plan before installing. Expect the four selected packages and
+Read the full plan before installing. Expect the selected packages and
 their dependencies, Hyprland's `systemd dbus-session` features, Kitty's `wayland`,
 and PipeWire's `sound-server pipewire-alsa pulseaudio systemd`. Both audio
 packages use user services, with `system-service` disabled. Hyprland's `guiutils`,

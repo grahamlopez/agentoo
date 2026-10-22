@@ -20,7 +20,7 @@ COMMANDS = {
     'checkpoint': 'Create, list, inspect, and restore system checkpoints',
     'permissions': 'Check or repair managed ownership and permissions',
     'secrets': 'Install secret files from Proton Pass',
-    'display': 'Manage display output and backlight brightness',
+    'display': 'Manage display output, backlights, and external monitor controls',
     'screenshot': 'Capture all displays or a selected region',
     'power': 'Show battery and CPU power status',
     'fonts': 'Diagnose, preview, and select installed fonts',
@@ -126,6 +126,10 @@ def values_for(action, supplied):
         kind = {'font': 'fonts', 'output': 'files'}.get(action.dest)
     if kind in ('files', 'directories', 'users'):
         emit(kind)
+    elif kind == 'external_outputs':
+        from display_external import connected_outputs
+        for path in connected_outputs():
+            emit('candidate', path.name)
     elif kind == 'controllers':
         for path in Path('/sys/class/backlight').glob('*'):
             emit('candidate', path.name)

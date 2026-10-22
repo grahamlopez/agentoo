@@ -5,7 +5,7 @@ An opinionated Gentoo distribution. See the
 and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
-secrets, display backlight, screenshots, desktop wallpaper, window transparency
+secrets, display and external monitor controls, screenshots, desktop wallpaper, window transparency
 and blur, [desktop appearance](usr/local/share/agentoo/docs/desktop.md#desktop-appearance),
 power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
 
@@ -103,6 +103,11 @@ mounts suppress Btrfs log replay and require kernel 5.9 or newer. See
 for temporary inspection effects and the exact recovery boundaries.
 
 Backlight controls are under `agentoo display backlight up|down [CONTROLLER]`.
+External monitor controls are under `agentoo display external`: `list`,
+`capabilities`, `brightness [0..100|up|down]`, `volume [0..100|up|down]`,
+`mute [on|off]`, `input [VALUE]`, and explicit VCP `get`/`set`.
+See [display control and setup](usr/local/share/agentoo/docs/displays.md#external-monitor-controls-ddcci)
+for dependencies, selectors, and current Dell investigation limits.
 The existing `agentoo-backlight` and `agentoo-screenshot` names remain supported.
 Screenshot files go to `~/Downloads/Screenshots`.
 

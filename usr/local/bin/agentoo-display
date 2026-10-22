@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage display output and backlight brightness."""
+"""Manage display output, laptop backlights, and external monitor controls."""
 from pathlib import Path
 import sys
 import time
@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/l
 from cli import ArgumentParser
 from desktop.common import hyprctl
 import display_backlight
+import display_external
 
 
 def build_parser():
@@ -18,6 +19,7 @@ def build_parser():
                    description='Waits one second for key release, then turns off all displays through DPMS. '
                                'Keyboard input wakes them with Agentoo defaults.')
     display_backlight.configure_parser(sub.add_parser('backlight', help='Adjust display brightness'))
+    display_external.configure_parser(sub.add_parser('external', help='Inspect and control external monitors through DDC/CI'))
     return parser
 
 
@@ -26,6 +28,8 @@ def main():
     args = parser.parse_args()
     if args.action == 'backlight':
         return display_backlight.run(args, parser)
+    if args.action == 'external':
+        return display_external.run(args, parser)
     time.sleep(1)
     result = hyprctl('eval', 'hl.dispatch(hl.dsp.dpms({ action = "off" }))')
     # Lua errors may be reported on stdout even when hyprctl exits successfully.

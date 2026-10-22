@@ -1,5 +1,7 @@
 # Desktop conveniences above the minimal graphics/audio base.
 @gui-base
+# External monitor DDC/CI controls; no background service required.
+app-misc/ddcutil
 # Static Wayland wallpapers.
 gui-apps/swaybg
 # GdkPixbuf's WebP decoder is packaged separately.
