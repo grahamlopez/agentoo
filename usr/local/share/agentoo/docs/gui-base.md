@@ -359,6 +359,9 @@ Ctrl+Shift+V in Kitty or `p` in Neovim. tmux's Ctrl+A, ] still reads its own
 buffer; history selection does not update it.
 
 The picker follows [cliphist's upstream fzf recipe](https://github.com/sentriz/cliphist#picker-examples).
+Its wl-copy process runs through systemd-cat so its background clipboard server
+does not retain the terminal; diagnostics are available with
+`journalctl -t agentoo-clipboard`.
 Decoding restores original whitespace and multiline content rather than the
 one-line preview. Images are not captured by this text-only watcher.
 Installed cliphist 0.7.0 defaults to 750 entries, stored in
