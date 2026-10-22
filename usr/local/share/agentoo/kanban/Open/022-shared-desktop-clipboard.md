@@ -57,10 +57,24 @@ buffer. The user explicitly chose to preserve this behavior and use either:
 - Neovim yank, then Kitty paste (`Ctrl+Shift+V`).
 - tmux copy mode over text displayed in Neovim, then tmux paste (`Ctrl+A`, `]`).
 
-Do not add buffer synchronization or change the tmux paste binding. Review of
+This initial decision was superseded by the clipboard-paste trial below. Review of
 the saved legacy configs found the same Neovim clipboard settings and no tmux
 clipboard bridge or custom paste binding. The legacy history picker also only
 updated the desktop clipboard.
+
+### Desktop paste trial
+
+The user subsequently requested trying prefix ] as a desktop clipboard paste.
+The binding reads wl-paste on demand into a temporary named tmux buffer, pastes
+with bracketed-paste support into the invoking pane, and removes that buffer.
+Existing tmux buffers remain accessible with prefix =. Without WAYLAND_DISPLAY
+it uses native tmux paste; a failed Wayland read reports an error and pastes
+nothing. No continuous synchronization is added.
+
+An isolated tmux server test verified pane targeting, multiline/Unicode input,
+bracketed paste, original buffer preservation, temporary-buffer cleanup, and
+clipboard-read failure. The running default server has the trial binding using
+the checkout helper; deployment will use the managed helper path.
 
 Clipboard history remains required. There is no need to replace working
 Neovim clipboard integration or tmux copy behavior.

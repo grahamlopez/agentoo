@@ -355,8 +355,10 @@ the selected entry to the desktop clipboard; Escape cancels without changing it.
 Shift+Delete deletes the highlighted history entry and refreshes the list;
 it leaves the active clipboard unchanged. Backspace and Delete edit the search
 query normally. The window closes when the picker exits. Paste normally, for example with
-Ctrl+Shift+V in Kitty or `p` in Neovim. tmux's Ctrl+A, ] still reads its own
-buffer; history selection does not update it.
+Ctrl+Shift+V in Kitty, `p` in Neovim, or Ctrl+A, ] in tmux. The tmux binding
+reads the desktop clipboard on demand and preserves internal buffers, accessible
+with Ctrl+A, =. Without the helper or Wayland it uses native buffer paste; if a Wayland
+clipboard read fails it reports an error rather than pasting stale contents.
 
 The picker follows [cliphist's upstream fzf recipe](https://github.com/sentriz/cliphist#picker-examples).
 Its wl-copy process runs through systemd-cat so its background clipboard server
