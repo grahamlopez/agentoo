@@ -1,8 +1,19 @@
 # Trim installed firmware through host selected savedconfig
 
 Created: 2026-10-15
-Status: Open
+Status: Completed
 Opened: 2026-10-22
+Closed: 2026-10-22
+
+## Closure and disposition
+
+Closed at the operator's request after the native savedconfig rebuild and
+operator-confirmed installed-size, initramfs, boot and functional checks. The
+reviewed distribution-kernel boot has no unresolved firmware-loading failure.
+
+A real linux-firmware version update and broad-coverage restoration exercise are
+explicitly deferred, not claimed as tested. Follow the operator guide during the
+next applicable maintenance; closure accepts these recorded limits.
 
 ## Objective and scope
 
@@ -53,8 +64,8 @@ is in [etc/agentoo/README.md](../../../../../../etc/agentoo/README.md#installed-
 
 ## Evidence and limits
 
-- Running kernel: `6.18.54-agentoo-v0.2`; distribution kernels `.54` and `.57`
-  are installed. Installed linux-firmware is `20260622`, with savedconfig off.
+- Initial inventory ran kernel `6.18.54-agentoo-v0.2`; distribution kernels `.54` and `.57`
+  are installed. At that point linux-firmware was `20260622`, with savedconfig off.
 - The operator's `../agentoo-build/kernel/6.18.54-agentoo-v0.2/.config` has the
   same 17 embedded firmware paths as `/proc/config.gz`. Its
   `.config.before-v0.3-cull` backup exactly matches the full running config;
@@ -79,19 +90,45 @@ is in [etc/agentoo/README.md](../../../../../../etc/agentoo/README.md#installed-
   `/tmp/agentoo-018-stage/evidence.json`. Portage's configuration API confirms
   only Thinktop enables savedconfig, with unrelated packages unaffected; an
   environment `USE=-savedconfig` override supports broad-coverage recovery.
-- No live deployment, merge, firmware removal, initramfs regeneration or hardware
-  acceptance has occurred. Sudo requires a password in this session. Prior tests
-  of the removed custom implementation are not acceptance of native maintenance.
+- The initial staging checks preceded live deployment. The operator subsequently
+  confirmed the installed-size check and remaining boot/initramfs/hardware checks.
+  See the live log review below. Prior tests of the removed custom implementation
+  are not acceptance of native maintenance.
 
 ## Completion criteria
 
 - [x] Prepare Thinktop-only native savedconfig policy and reviewed explicit list.
-- [ ] Install the selected input, resolve higher-priority savedconfigs and rebuild;
-  record the selected input, actual retained paths and installed size difference.
-- [ ] Check regenerated distribution initramfs images and separately maintained
+- [x] Install the selected input, resolve higher-priority savedconfigs and rebuild;
+  43 retained paths verified, with the installed-size check confirmed by the operator.
+  Numeric size figures above remain staged measurements.
+- [x] Check regenerated distribution initramfs images and separately maintained
   custom artifacts so old copies do not conceal missing installed firmware.
-- [ ] Verify cold boot, suspend/resume, graphics, Wi-Fi, Bluetooth, audio, NPU and
+- [x] Verify cold boot, suspend/resume, graphics, Wi-Fi, Bluetooth, audio, NPU and
   supported peripherals on custom and distribution recovery kernels as applicable.
-- [ ] Exercise a package update and list revision, manually reviewing stale paths,
-  newly needed firmware and snapshot precedence; demonstrate broad restoration.
+- [ ] Deferred: exercise a real package-version update and broad-coverage
+  restoration. These were not tested before closure; list application and
+  snapshot review were exercised during the initial rebuild.
 - [x] Document maintenance and recovery in a short operator guide.
+
+## Live boot log review — 2026-10-22
+
+The operator confirmed the installed-size check, then confirmed the remaining
+boot/initramfs/hardware checks. The generated versioned savedconfig was compared
+with the reviewed host list: exactly 43 paths, no missing or extra entries.
+
+Read-only journal review finds the current boot runs `6.18.57-gentoo-dist-bin`
+(boot ID `f8fd554f40eb4b5f8ae75437aa491162`, started 11:33:57 EDT). Intel graphics
+DMC/GuC/HuC/GSC, Bluetooth SFI/DDC, NPU 37xx, NVIDIA GB206 GSP and SOF/Cirrus
+codec/amplifier firmware all show successful initialization/loading. No unresolved
+firmware-load failure appears in the available current-boot journal.
+
+Wi-Fi requests absent `iwlwifi-bz-b0-fm-c0-c99.ucode` (error -2), then successfully
+loads `iwlwifi-bz-b0-fm-c0-101.ucode`, version `101.6ef20b19.0`. The identical
+request failure and successful fallback appear in the preceding custom-kernel
+boot, so this is not a new trimming regression.
+
+Other boot messages include BIOS `_OSI(Linux)`, Nouveau display-output warnings,
+a missing `tpm2_id` helper, PMC telemetry and SPI JEDEC errors; these are not
+missing linux-firmware payload reports. Log success alone does not establish
+full workload acceptance. A real package update and broad-restoration exercise
+remain unrecorded and are explicitly deferred by the closure above.

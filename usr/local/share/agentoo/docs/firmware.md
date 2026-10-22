@@ -119,5 +119,5 @@ working boot path or installation media: the fallback kernel shares the same
 root firmware directory.
 
 See [configuration details](../../../../../etc/agentoo/README.md#installed-firmware-selection)
-and [card 018](../kanban/Open/018-host-firmware-savedconfig.md) for implementation,
-validation evidence and remaining live acceptance work.
+and [card 018](../kanban/Completed/018-host-firmware-savedconfig.md) for implementation,
+validation evidence and explicitly deferred maintenance checks.

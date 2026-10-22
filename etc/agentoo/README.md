@@ -55,8 +55,8 @@ savedconfig and installing its selected input.
 See the [firmware operator guide](../../usr/local/share/agentoo/docs/firmware.md)
 for application, maintenance, diagnostics and recovery. This affects installed
 linux-firmware only; embedded kernel firmware, SOF, CPU microcode and regulatory
-data remain separate. Live rebuild and hardware acceptance are still pending
-in [card 018](../../usr/local/share/agentoo/kanban/Open/018-host-firmware-savedconfig.md).
+data remain separate. Implementation and acceptance evidence are recorded
+in [card 018](../../usr/local/share/agentoo/kanban/Completed/018-host-firmware-savedconfig.md).
 
 ## First-boot verification and checkpoint
 
