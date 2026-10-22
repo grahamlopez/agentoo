@@ -15,3 +15,6 @@ QEMU_SOFTMMU_TARGETS="x86_64"
 QEMU_USER_TARGETS="x86_64"
 
 FEATURES="parallel-fetch"
+
+# Consumed only by the linux-firmware package.env entry.
+AGENTOO_LINUX_FIRMWARE_USE="-savedconfig"

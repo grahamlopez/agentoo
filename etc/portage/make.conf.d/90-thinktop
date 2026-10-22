@@ -9,3 +9,6 @@ RUSTFLAGS="${RUSTFLAGS} -C target-cpu=arrowlake"
 PORTAGE_TMPDIR="/dev/shm"
 MAKEOPTS="-j12"
 VIDEO_CARDS="intel"
+
+# Use native savedconfig; keep files uncompressed for custom-kernel embedding.
+AGENTOO_LINUX_FIRMWARE_USE="savedconfig -deduplicate -compress-xz -compress-zstd"

@@ -35,6 +35,29 @@ then `90-${GENTOO_TARGET_HOST}` when present. `SOF_FIRMWARE` must be `yes` or
 `no`; the common default is `no`, and `thinktop` enables it for its audio DSP.
 These files describe the target hardware, independent of the installation host.
 
+## Installed firmware selection
+
+Thinktop enables native `linux-firmware[savedconfig]` through
+`AGENTOO_LINUX_FIRMWARE_USE` in `make.conf.d/90-thinktop`. The common fragment
+sets `-savedconfig`; `package.env/kernel` applies the variable only to this
+package. Do not add a conflicting package.use setting: it takes precedence over
+package.env. Other hosts retain broad coverage.
+
+`/etc/agentoo/firmware/thinktop.list` is the reviewed, explicit firmware list.
+The operator installs it as the machine-local
+`/etc/portage/savedconfig/sys-kernel/linux-firmware`. Gentoo consumes that file
+and writes a versioned snapshot after each build. Matching versioned and
+triplet-specific files take precedence; move them aside when applying a revised
+list. There are no Agentoo build hooks, automatic list expansion, or custom
+firmware validation. For another host, review its own list before enabling
+savedconfig and installing its selected input.
+
+See the [firmware operator guide](../../usr/local/share/agentoo/docs/firmware.md)
+for application, maintenance, diagnostics and recovery. This affects installed
+linux-firmware only; embedded kernel firmware, SOF, CPU microcode and regulatory
+data remain separate. Live rebuild and hardware acceptance are still pending
+in [card 018](../../usr/local/share/agentoo/kanban/Open/018-host-firmware-savedconfig.md).
+
 ## First-boot verification and checkpoint
 
 `/root/001-firstboot-verify-and-checkpoint.sh` is the combined interactive entry point

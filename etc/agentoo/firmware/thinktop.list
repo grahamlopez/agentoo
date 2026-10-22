@@ -1,0 +1,59 @@
+# Thinktop linux-firmware savedconfig: explicit paths, relative to /lib/firmware.
+# Copy to Portage as described in /usr/local/share/agentoo/docs/firmware.md.
+# Reviewed against linux-firmware-20260622; additions/renames need manual review.
+# SOF, microcode and regulatory data belong to separate packages.
+
+# Intel graphics: Meteor Lake firmware used by Arrow Lake i915/xe.
+i915/mtl_dmc.bin
+i915/mtl_dmc_ver2_10.bin
+i915/mtl_gsc_1.bin
+i915/mtl_guc_70.bin
+i915/mtl_huc_gsc.bin
+
+# Intel CNVi Wi-Fi: packaged API alternatives, root aliases and PNVM.
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-100.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-101.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-92.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-93.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-94.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-96.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-97.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-98.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-c101.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-c102.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0-c103.ucode
+intel/iwlwifi/iwlwifi-bz-b0-fm-c0.pnvm
+iwlwifi-bz-b0-fm-c0-100.ucode
+iwlwifi-bz-b0-fm-c0-101.ucode
+iwlwifi-bz-b0-fm-c0-92.ucode
+iwlwifi-bz-b0-fm-c0-93.ucode
+iwlwifi-bz-b0-fm-c0-94.ucode
+iwlwifi-bz-b0-fm-c0-96.ucode
+iwlwifi-bz-b0-fm-c0-97.ucode
+iwlwifi-bz-b0-fm-c0-98.ucode
+iwlwifi-bz-b0-fm-c0-c101.ucode
+iwlwifi-bz-b0-fm-c0-c102.ucode
+iwlwifi-bz-b0-fm-c0-c103.ucode
+iwlwifi-bz-b0-fm-c0.pnvm
+
+# Intel Bluetooth 8087:0037: executable and device configuration.
+intel/ibt-0093-0291.ddc
+intel/ibt-0093-0291.sfi
+
+# Meteor Lake NPU: production firmware and compatibility alias.
+intel/vpu/vpu_37xx_v0.0.bin
+intel/vpu/vpu_37xx_v1.bin
+
+# SoundWire codec and Thinktop amplifier tuning, including shared DSP payload.
+cirrus/cs35l56-b0-dsp1-misc-17aa2349-amp1.bin
+cirrus/cs35l56-b0-dsp1-misc-17aa2349-amp2.bin
+cirrus/cs35l56-b0-dsp1-misc-17aa2349.wmfw
+cirrus/cs35l56/CS35L56_Rev3.13.3R.wmfw
+cs42l43.bin
+
+# NVIDIA GB206 recovery-driver coverage, including shared GSP dependencies.
+nvidia/ga102/gsp/gsp-570.144.bin
+nvidia/gb202/gsp/bootloader-570.144.bin
+nvidia/gb202/gsp/fmc-570.144.bin
+nvidia/gb202/gsp/gsp-570.144.bin
+nvidia/gb206
