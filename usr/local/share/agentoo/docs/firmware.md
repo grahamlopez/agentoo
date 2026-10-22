@@ -27,8 +27,10 @@ sudo mkdir -p /root/firmware-savedconfig-backup
 sudo mv /etc/portage/savedconfig/sys-kernel/linux-firmware-20260622 /root/firmware-savedconfig-backup/
 ```
 
-Only move files that exist and match the version being built; check triplet
-subdirectories too. Mount the normal boot filesystems, then rebuild from source:
+In other words, moving a snapshot aside is needed when changing the selection
+and rebuilding the same version. Only move files that exist and match the
+version being built; check triplet subdirectories too. Mount the normal boot
+filesystems, then rebuild from source:
 
 ```sh
 sudo emerge --pretend --verbose --oneshot --usepkg=n =sys-kernel/linux-firmware-20260622
