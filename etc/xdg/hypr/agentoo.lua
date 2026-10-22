@@ -52,7 +52,7 @@ hl.window_rule({
     workspace = "special:terminal",
     move = "(monitor_w-window_w)/2 monitor_h*0.15",
 })
-hl.bind("SUPER + grave", hl.dsp.workspace.toggle_special("terminal"))
+hl.bind("CTRL + 9", hl.dsp.workspace.toggle_special("terminal"))
 -- Keep applications launched from the dropdown on the regular workspace below.
 hl.on("window.open", function(window)
     local workspace = window.workspace
