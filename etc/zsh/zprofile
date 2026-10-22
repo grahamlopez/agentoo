@@ -16,3 +16,17 @@ if (( $+commands[nvim] )); then
 elif (( $+commands[vim] )); then
   export EDITOR=vim VISUAL=vim
 fi
+
+# Keep a shell available when the desktop exits or fails. Never exec here.
+if [[ -o interactive && -o login &&
+      $USER == graham && $EUID == 1000 &&
+      $TTY == /dev/tty1 &&
+      -z $WAYLAND_DISPLAY && -z $DISPLAY &&
+      ! -e $HOME/.disable-hyprland-autostart ]]; then
+  if [[ -x /usr/bin/start-hyprland ]]; then
+    /usr/bin/start-hyprland
+    print -r -- 'Hyprland exited; console available. Run start-hyprland to retry.'
+  else
+    print -r -- 'start-hyprland is unavailable; console available.'
+  fi
+fi

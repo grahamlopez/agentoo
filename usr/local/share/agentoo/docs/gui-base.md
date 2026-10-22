@@ -5,12 +5,56 @@ Hyprland and its listed overlay dependencies accept testing release updates
 without exact version pins. Unkeyworded live ebuilds and package masks remain
 excluded by the normal Portage policy. Preview updates after syncing; new
 dependencies may require additional package-specific keyword decisions.
-Launch it explicitly from a normal user's TTY login with `start-hyprland`.
-There is no automatic session startup, greeter, UWSM, XWayland, launcher, panel,
+The system automatically logs graham in on tty1 and starts `start-hyprland`.
+Other users and TTYs can launch it explicitly with `start-hyprland`.
+There is no greeter, UWSM, XWayland, launcher, panel,
 notification daemon, portal, wallpaper daemon in the base, or screen locker. Suspend and
 lid-close suspend belong to systemd/logind. Hyprland routes displays for docked
 lid use as described below. Resume returns to an unlocked session.
 Networking remains dhcpcd and wpa_supplicant.
+
+## Automatic login and console recovery
+
+`/etc/systemd/system/getty@tty1.service.d/autologin.conf` adds graham autologin
+to the packaged getty command. `/etc/zsh/zprofile` launches Hyprland only for
+graham (UID 1000), in an interactive login shell on tty1, with no existing
+Wayland or X display. It calls the launcher without `exec`: when it returns,
+including after a startup failure, a shell remains available. There is no retry
+loop. Logging out of that shell starts a fresh autologin and desktop attempt.
+Personal Zsh startup files still run after the system login profile.
+
+`/etc/systemd/system/getty.target.d/50-recovery-console.conf` requests a separate
+normal password login on tty2. It needs no enablement symlink. After deploying,
+run as root:
+
+```sh
+systemctl daemon-reload
+systemctl start getty@tty2.service
+```
+
+Before rebooting, press Ctrl+Alt+F2 and verify a working login as graham with
+sudo, and/or root with its password. A root login also bypasses graham's personal
+shell configuration. Do not restart tty1's getty from its active session; the
+autologin change takes effect on the next boot or getty restart.
+
+If the desktop hangs or its configuration is unusable, switch to tty2. To skip
+automatic Hyprland startup, run as graham:
+
+```sh
+touch ~/.disable-hyprland-autostart
+```
+
+Remove that file to restore startup. Manual `start-hyprland` remains available.
+If autologin itself fails, tty2 still provides a normal login prompt. To remove
+autologin permanently, remove the tty1 drop-in and run `systemctl daemon-reload`;
+also disable the profile's automatic desktop launch if a manual tty1 login
+should remain a console.
+
+For boot recovery, append `systemd.unit=rescue.target` to the kernel command
+line for one boot and authenticate as root. Verify root's password before
+relying on this route. Console switching cannot recover a kernel or GPU hard
+lock. Autologin grants physical users access to graham's session after boot;
+this setup does not add a screen locker.
 
 ## Before pulling on thinktop
 
