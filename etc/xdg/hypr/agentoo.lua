@@ -34,7 +34,19 @@ hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"))
 hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
 end)
-hl.bind("CTRL + 0", hl.dsp.exec_cmd("kitty --class agentoo-clipboard -o remember_window_size=no -o initial_window_width=100c -o initial_window_height=25c bash /usr/local/share/agentoo/lib/desktop/clipboard-picker.sh"))
+hl.bind("CTRL + 0", function()
+    for _, window in ipairs(hl.get_windows()) do
+        if window.mapped and window.class == "agentoo-clipboard" then
+            -- send_shortcut marks this entire callback for key-release replay
+            -- in 0.56.2, which can reopen the picker after it has closed.
+            for _, state in ipairs({ "down", "up" }) do
+                hl.dispatch(hl.dsp.send_key_state({ mods = "", key = "Escape", state = state, window = window }))
+            end
+            return
+        end
+    end
+    hl.exec_cmd("kitty --class agentoo-clipboard -o remember_window_size=no -o initial_window_width=100c -o initial_window_height=25c bash /usr/local/share/agentoo/lib/desktop/clipboard-picker.sh")
+end)
 hl.window_rule({
     match = { class = "agentoo-clipboard" },
     float = true,

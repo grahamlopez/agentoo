@@ -350,7 +350,9 @@ text copies. Reloading configuration does not start another watcher. After
 deployment, log out and back in to start capture, or run that command once in
 a terminal for the current session.
 
-Press **Ctrl+0** to search history in a floating Kitty/fzf window. Enter restores
+Press **Ctrl+0** to search history in a floating Kitty/fzf window.
+Pressing Ctrl+0 again sends Escape to the existing picker, even if focus moved
+elsewhere, closing it without changing the clipboard. Enter restores
 the selected entry to the desktop clipboard; Escape cancels without changing it.
 Shift+Delete deletes the highlighted history entry and refreshes the list;
 it leaves the active clipboard unchanged. Backspace and Delete edit the search
