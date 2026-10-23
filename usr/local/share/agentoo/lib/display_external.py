@@ -17,9 +17,17 @@ DELL_LAYOUTS = {
     'pip-small': 0x21,
     'pip-large': 0x22,
 }
+DDC_TIMEOUT = 5
+DELL_PIP_CYCLE = 0x02
+DELL_USB_SWITCH = 0xFF00
+DELL_MAIN_INPUTS = {'thunderbolt': 0x19, 'hdmi1': 0x11}
 DELL_SECONDARY_INPUTS = {'thunderbolt': 0x6739, 'hdmi1': 0x6731}
 DELL_AUDIO_SOURCES = {'window1': 0xF1, 'window2': 0xF2}
 DELL_USB_TARGETS = {'thunderbolt': 1, 'hdmi1': 4}
+# VCP 8D names the mute state: 1=mute on, 2=mute off. The Dell OSD
+# names the inverse state, Speaker: on=2, off=1.
+MUTE_VALUES = {'on': 1, 'off': 2}
+DELL_SPEAKER_VALUES = {'on': MUTE_VALUES['off'], 'off': MUTE_VALUES['on']}
 
 
 def bus_number(value):
@@ -160,12 +168,9 @@ def select_bus(args):
 
 
 def check_relative_volume(command):
-    result = subprocess.run([*command, 'getvcp', '62', '--terse'],
-                            capture_output=True, text=True, check=False)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or 'Cannot read monitor volume')
-    match = re.search(r'^VCP 62 C (\d+) (\d+)$', result.stdout, re.MULTILINE)
-    if not match or not 0 <= int(match[1]) <= int(match[2]) <= 100:
+    encoding, current, maximum = _read_feature(command, '62')
+    # SNC/CNC parsing is shared, but only continuous volume is safe for +/-.
+    if encoding != 'C' or not 0 <= current <= maximum <= 100:
         raise RuntimeError('Monitor reports a nonstandard volume encoding; relative volume is unavailable. '
                            'Inspect external get 62 and use the OSD until its encoding is established.')
 
@@ -191,9 +196,17 @@ def require_dell_u5226kw(bus):
                        'use capabilities and explicit VCP access for other monitors')
 
 def read_feature(command, code, *, maximum=False):
+    _, current, limit = _read_feature(command, code)
+    if maximum and limit is None:
+        raise RuntimeError(f'VCP {code} response does not expose maximum/status bytes')
+    return limit if maximum else current
+
+
+def _read_feature(command, code):
+    """Read once; return (encoding, current, maximum/status or None for SNC)."""
     try:
         result = subprocess.run([*command, 'getvcp', code, '--terse'],
-                                capture_output=True, text=True, check=False, timeout=5)
+                                capture_output=True, text=True, check=False, timeout=DDC_TIMEOUT)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f'Timed out reading VCP {code}') from None
     if result.returncode:
@@ -204,14 +217,12 @@ def read_feature(command, code, *, maximum=False):
             continue
         try:
             if fields[2] == 'C' and len(fields) == 5:
-                return int(fields[4 if maximum else 3])
+                return 'C', int(fields[3]), int(fields[4])
             if fields[2] == 'SNC' and len(fields) == 4:
-                if maximum:
-                    raise RuntimeError(f'VCP {code} response does not expose maximum/status bytes')
-                return int(fields[3].removeprefix('x'), 16)
+                return 'SNC', int(fields[3].removeprefix('x'), 16), None
             if fields[2] == 'CNC' and len(fields) == 7:
-                index = 3 if maximum else 5
-                return (int(fields[index].removeprefix('x'), 16) << 8) | int(fields[index + 1].removeprefix('x'), 16)
+                values = [int(field.removeprefix('x'), 16) for field in fields[3:]]
+                return 'CNC', (values[2] << 8) | values[3], (values[0] << 8) | values[1]
         except ValueError:
             break
     raise RuntimeError(f'Unexpected response for VCP {code}: {result.stdout.strip()}')
@@ -219,8 +230,12 @@ def read_feature(command, code, *, maximum=False):
 def write_switch(command, code, value):
     # Reconfiguration can remove DDC during immediate verification. Never
     # resend an action automatically; doing so could cycle it a second time.
-    result = subprocess.run([*command, 'setvcp', code, str(value),
-                             '--permit-unknown-feature', '--noverify'], check=False)
+    try:
+        result = subprocess.run([*command, 'setvcp', code, str(value),
+                                 '--permit-unknown-feature', '--noverify'], check=False, timeout=DDC_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f'Timed out writing VCP {code}; the panel may have applied it. '
+                           'No write was retried; inspect the visible state and readback before retrying') from None
     if result.returncode:
         raise RuntimeError(f'VCP {code} write returned {result.returncode}; the panel may have applied it. '
                            'Inspect the visible state and readback before retrying')
@@ -252,9 +267,9 @@ def run_dell(args, command, bus):
         name = next((name for name, value in DELL_LAYOUTS.items() if value == expected), 'unknown')
         print(f'{name} (0x{expected:02X})')
     elif action == 'pip-position':
-        if read_feature(command, 'E9') not in (0x21, 0x22):
+        if read_feature(command, 'E9') not in (DELL_LAYOUTS['pip-small'], DELL_LAYOUTS['pip-large']):
             raise RuntimeError('Position cycling requires pip-small or pip-large')
-        write_switch(command, 'E9', 0x02)
+        write_switch(command, 'E9', DELL_PIP_CYCLE)
         print('PiP position-cycle command sent; position is not readable through the mapped registers.', file=sys.stderr)
     elif action == 'usb':
         return run_dell_usb(args, command)
@@ -272,7 +287,7 @@ def run_dell(args, command, bus):
         print(f'{name} (0x{expected:04X})')
     else:
         code, values = (('63', DELL_AUDIO_SOURCES) if action == 'audio-source'
-                        else ('8D', {'on': 2, 'off': 1}))
+                        else ('8D', DELL_SPEAKER_VALUES))
         if args.value is not None:
             expected = values[args.value]
             write_switch(command, code, expected)
@@ -292,16 +307,19 @@ def run_dell_usb(args, command):
     if args.value is not None:
         if active not in DELL_USB_TARGETS.values():
             raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no switch sent')
-        target = (4 if active == 1 else 1) if args.value == 'next' else DELL_USB_TARGETS[args.value]
+        # This toggle is deliberately restricted to the two mapped hosts.
+        target = (next(value for value in DELL_USB_TARGETS.values() if value != active)
+                  if args.value == 'next' else DELL_USB_TARGETS[args.value])
         if target != active:
             layout = read_feature(command, 'E9')
             main = read_feature(command, '60')
             secondary_raw = read_feature(command, 'E8')
-            secondary = {0x6739: 0x19, 0x6731: 0x11}.get(secondary_raw)
-            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != {0x19, 0x11}:
+            secondary = next((DELL_MAIN_INPUTS[name] for name, raw in DELL_SECONDARY_INPUTS.items()
+                              if raw == secondary_raw), None)
+            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != set(DELL_MAIN_INPUTS.values()):
                 raise RuntimeError('USB switching requires a mapped active two-window layout with '
                                    'Thunderbolt and HDMI1; no switch sent')
-            write_switch(command, 'E7', 0xFF00)
+            write_switch(command, 'E7', DELL_USB_SWITCH)
             wait_for_feature(command, 'E7', (target << 8) | (status & 0xFF), maximum=True)
             active = target
     name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), 'unknown')
@@ -327,15 +345,26 @@ def run_dell_volume(args, command):
             # invocation. This cannot promise there is no brief unmuted interval.
             change = [*command, 'setvcp', '62', str(target)]
             if speaker_off:
-                change += ['8D', '1']
+                change += ['8D', str(DELL_SPEAKER_VALUES['off'])]
             change += ['--noverify']
-            result = subprocess.run(change, check=False)
-            if result.returncode:
+            try:
+                result = subprocess.run(change, check=False, timeout=DDC_TIMEOUT)
+                failure = 'Volume write failed' if result.returncode else None
+            except subprocess.TimeoutExpired:
+                failure = 'Volume write timed out; the panel may have applied it'
+            if failure:
                 if speaker_off:
-                    restore = subprocess.run([*command, 'setvcp', '8D', '1', '--noverify'], check=False)
-                    if restore.returncode:
-                        raise RuntimeError('Volume write failed and Speaker Off could not be restored; inspect the panel')
-                raise RuntimeError('Volume write failed; read the level and speaker state before retrying')
+                    # Restore only Speaker Off, never retry the uncertain level write.
+                    try:
+                        restore = subprocess.run([*command, 'setvcp', '8D',
+                                                  str(DELL_SPEAKER_VALUES['off']), '--noverify'],
+                                                 check=False, timeout=DDC_TIMEOUT)
+                        restored = restore.returncode == 0
+                    except subprocess.TimeoutExpired:
+                        restored = False
+                    if not restored:
+                        raise RuntimeError(f'{failure}; Speaker Off could not be restored; speaker state is uncertain; inspect the panel')
+                raise RuntimeError(f'{failure}; no volume write was retried; read the level and speaker state before retrying')
             wait_for_feature(command, '62', target | (0x80 if speaker_off else 0))
     print(f'{target}/100 (speakers {"off" if speaker_off else "on"})')
     return 0
@@ -367,7 +396,7 @@ def run(args, parser):
                 if action == 'volume' and value in ('up', 'down'):
                     check_relative_volume(command)
                 if action == 'mute':
-                    value = '1' if value == 'on' else '2'
+                    value = str(MUTE_VALUES[value])
                 command += ['setvcp', code]
                 # Raw set is an explicit request, including unknown vendor codes.
                 command += (['+' if value == 'up' else '-', '5'] if value in ('up', 'down') else [value])
@@ -377,5 +406,6 @@ def run(args, parser):
                     command += ['--noverify']
                 else:
                     command += ['--verify']
-    # Preserve ddcutil's output and exit status. No sudo or automatic writes on reads.
+    # User-requested raw passthrough intentionally has no timeout: preserve
+    # ddcutil's output and exit status. Internal policy reads/writes are bounded.
     return subprocess.run(command, check=False).returncode

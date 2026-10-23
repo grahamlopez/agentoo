@@ -57,6 +57,61 @@ class ExternalDisplay(unittest.TestCase):
             self.assertEqual(run.call_count, 1)
             self.assertNotIn('setvcp', run.call_args.args[0])
 
+    def test_relative_volume_rejects_noncontinuous_even_in_range(self):
+        for reply in ('VCP 62 SNC x32', 'VCP 62 CNC x00 x64 x00 x32',
+                      'VCP 62 C 101 100', 'VCP 62 C 50 101'):
+            with self.subTest(reply=reply), patch.object(EXTERNAL.subprocess, 'run',
+                    return_value=subprocess.CompletedProcess([], 0, reply, '')) as run:
+                with self.assertRaisesRegex(RuntimeError, 'nonstandard volume'):
+                    EXTERNAL.check_relative_volume(['ddcutil'])
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(run.call_args.kwargs['timeout'], EXTERNAL.DDC_TIMEOUT)
+
+    def test_shared_read_returns_current_and_maximum_from_one_read(self):
+        for reply, expected in [('VCP 62 C 30 100', ('C', 30, 100)),
+                                ('VCP E7 CNC x04 x05 x16 x40', ('CNC', 0x1640, 0x0405))]:
+            with self.subTest(reply=reply), patch.object(EXTERNAL.subprocess, 'run',
+                    return_value=subprocess.CompletedProcess([], 0, reply, '')) as run:
+                self.assertEqual(EXTERNAL._read_feature(['ddcutil'], reply.split()[1]), expected)
+                self.assertEqual(run.call_count, 1)
+
+    def test_internal_read_timeout_is_safe(self):
+        for read in (lambda: EXTERNAL.read_feature(['ddcutil'], 'E9'),
+                     lambda: EXTERNAL.check_relative_volume(['ddcutil'])):
+            with patch.object(EXTERNAL.subprocess, 'run',
+                              side_effect=subprocess.TimeoutExpired('ddcutil', 5)) as run:
+                with self.assertRaisesRegex(RuntimeError, 'Timed out reading VCP'):
+                    read()
+                self.assertEqual(run.call_count, 1)
+
+    def test_switch_timeout_never_retries(self):
+        with patch.object(EXTERNAL.subprocess, 'run',
+                          side_effect=subprocess.TimeoutExpired('ddcutil', 5)) as run:
+            with self.assertRaisesRegex(RuntimeError, 'may have applied it.*No write was retried'):
+                EXTERNAL.write_switch(['ddcutil'], 'E7', 0xFF00)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.kwargs['timeout'], EXTERNAL.DDC_TIMEOUT)
+
+    def test_volume_timeout_restores_only_speaker_off(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'volume', '40', '--bus', '13'])
+        timeout = subprocess.TimeoutExpired('ddcutil', 5)
+        for raw, restoration in ((45, None), (173, subprocess.CompletedProcess([], 0)),
+                                 (173, subprocess.CompletedProcess([], 1)), (173, timeout)):
+            effects = [timeout] if restoration is None else [timeout, restoration]
+            with self.subTest(raw=raw, restoration=restoration), \
+                    patch.object(EXTERNAL, 'read_feature', return_value=raw), \
+                    patch.object(EXTERNAL.subprocess, 'run', side_effect=effects) as run:
+                message = ('speaker state is uncertain' if restoration is timeout or
+                           getattr(restoration, 'returncode', 0) else 'no volume write was retried')
+                with self.assertRaisesRegex(RuntimeError, message):
+                    EXTERNAL.run_dell_volume(args, ['ddcutil'])
+                self.assertEqual(run.call_count, len(effects))
+                for call in run.call_args_list:
+                    self.assertEqual(call.kwargs['timeout'], EXTERNAL.DDC_TIMEOUT)
+                if restoration is not None:
+                    self.assertEqual(run.call_args.args[0],
+                                     ['ddcutil', 'setvcp', '8D', '1', '--noverify'])
+
     def test_standard_relative_volume(self):
         args = DISPLAY.build_parser().parse_args(['external', 'volume', 'down', '--bus', '13'])
         with patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
@@ -170,7 +225,7 @@ class ExternalDisplay(unittest.TestCase):
                 patch.object(EXTERNAL.time, 'sleep'), patch('sys.stdout'), \
                 patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
             self.assertEqual(EXTERNAL.run_dell_volume(args, ['ddcutil', '--bus', '13']), 0)
-            run.assert_called_once_with(['ddcutil', '--bus', '13', 'setvcp', '62', '50', '8D', '1', '--noverify'], check=False)
+            run.assert_called_once_with(['ddcutil', '--bus', '13', 'setvcp', '62', '50', '8D', '1', '--noverify'], check=False, timeout=EXTERNAL.DDC_TIMEOUT)
 
     def test_dell_volume_clamps_without_toggling_speakers(self):
         args = DISPLAY.build_parser().parse_args(['external', 'volume', 'up', '--bus', '13'])
