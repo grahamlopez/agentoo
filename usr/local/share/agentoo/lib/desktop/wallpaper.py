@@ -15,11 +15,11 @@ sys.dont_write_bytecode = True
 if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop.common import atomic_write
+from xdg import xdg_directory
 
 
 def state_directory():
-    value = os.environ.get('XDG_STATE_HOME', '')
-    return (Path(value) if value and Path(value).is_absolute() else Path.home() / '.local/state') / 'agentoo'
+    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo'
 
 
 def selection(path):

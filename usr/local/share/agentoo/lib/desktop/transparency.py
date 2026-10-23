@@ -14,9 +14,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.common import authored_hypr_paths, hyprctl
-
-GROUPS = ('all', 'kitty', 'browser', 'other')
+from desktop.common import authored_hypr_paths, hyprctl, WINDOW_GROUPS as GROUPS
 STATES = ('focused', 'unfocused')
 
 

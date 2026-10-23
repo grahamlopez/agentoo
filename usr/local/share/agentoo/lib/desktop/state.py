@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 import sys
 
-from desktop.common import atomic_write, xdg_directory
+from desktop.common import atomic_write, WINDOW_GROUPS
+from xdg import xdg_directory
 
 SECTIONS = ('transparency', 'blur', 'corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')
 
@@ -59,7 +60,7 @@ def file_option(parser, *, required=False):
 
 
 def window_option(parser, *, child=False):
-    parser.add_argument('--window', choices=('all', 'kitty', 'browser', 'other'),
+    parser.add_argument('--window', choices=WINDOW_GROUPS,
                         default=argparse.SUPPRESS if child else 'all',
                         help='Window category; other excludes kitty and browsers (default: all)')
 

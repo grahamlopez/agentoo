@@ -21,6 +21,7 @@ import unicodedata
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser as BaseArgumentParser
+from xdg import xdg_directory
 
 DATA = Path(__file__).resolve().parent.parent / 'share/agentoo/fonts'
 ROLES = ('monospace', 'sans-serif', 'serif', 'emoji')
@@ -76,7 +77,7 @@ def write(path, text):
         Path(name).unlink(missing_ok=True)
 
 def config_home():
-    return Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config')))
+    return xdg_directory('XDG_CONFIG_HOME', '.config')
 
 def shell(*args):
     return shlex.join([str(x) for x in args])
@@ -125,7 +126,7 @@ def browser_test(a, font=None):
 <script>const f=document.querySelector('#font'),s=document.querySelector('#size'),r=document.querySelector('#role'),b=document.querySelector('#fallback');f.value=INITIAL;b.checked=FALLBACK;function update(){let quoted='"'+f.value.replaceAll('\\\\','\\\\\\\\').replaceAll('"','\\\\"')+'"';let stack=f.value?(b.checked?r.value+', '+quoted:quoted+', '+r.value):r.value;document.querySelectorAll('pre').forEach(p=>{p.style.fontSize=s.value+'px';p.style.fontFamily=p.classList.contains('candidate')?stack:r.value});}for(let e of [f,s,r,b])e.addEventListener('input',update);update();</script>'''
     page = page.replace('OPTIONS', options).replace('SECTIONS', sections).replace('INITIAL', json.dumps(font or nerd_fallback).replace('<', '\\u003c'))
     page = page.replace('FALLBACK', json.dumps(bool(nerd_fallback))).replace('SELECTION_NOTE', selection_note)
-    path = Path(a.output).expanduser().absolute() if a.output else Path(os.environ.get('XDG_CACHE_HOME', str(Path.home()/'.cache'))) / 'agentoo/fonts/preview.html'
+    path = Path(a.output).expanduser().absolute() if a.output else xdg_directory('XDG_CACHE_HOME', '.cache') / 'agentoo/fonts/preview.html'
     write(path, page)
     print(path)
     if not a.no_open:
@@ -608,19 +609,19 @@ def build_parser():
                '  +/- size, h/l width, j/k height, r reset, s save, q/Escape cancel\n'
                '  Saving reloads all your Kitty instances.')
     p.add_argument('suite', choices=suites, metavar='SUITE', nargs='?', default='all', help=suite_help)
-    p.add_argument('--font', help='installed family to preview; opens a dedicated Kitty window; default: current configuration')
+    p.add_argument('--font', help='installed family to preview; opens a dedicated Kitty window; default: current configuration').completion = 'fonts'
     p.add_argument('--size', type=float, help='Kitty point size, 4–96; opens an interactive window; default: configured size')
     p.add_argument('--style', help='installed Kitty face style; opens an interactive window; default: configured face')
     p.add_argument('--interactive', action='store_true', help='open the current configuration in a dedicated Kitty adjustment window')
     p.add_argument('--target', choices=('kitty', 'firefox'), metavar='TARGET', default='kitty', help='kitty (default): terminal samples or interactive preview; firefox: read-only HTML')
-    p.add_argument('--output', help='Firefox only: HTML path; default: $XDG_CACHE_HOME/agentoo/fonts/preview.html or ~/.cache/agentoo/fonts/preview.html')
+    p.add_argument('--output', help='Firefox only: HTML path; default: $XDG_CACHE_HOME/agentoo/fonts/preview.html or ~/.cache/agentoo/fonts/preview.html').completion = 'files'
     p.add_argument('--no-open', action='store_true', help='Firefox only: generate HTML without opening the browser')
     p = sub.add_parser('set', help='Choose interactively, apply a selection, or restore a fragment',
         epilog='Without selection options, open the native chooser, then the adjustment preview.\n'
                '--font applies immediately without a window.\n'
                'Every save reloads all your Kitty instances.')
     selection = p.add_mutually_exclusive_group()
-    selection.add_argument('--font', help='installed family to apply immediately; omit to open the native chooser')
+    selection.add_argument('--font', help='installed family to apply immediately; omit to open the native chooser').completion = 'fonts'
     selection.add_argument('--restore', metavar='TEXT', help='restore exact fragment contents from a printed revert command; empty string clears the fragment; incompatible with selection options')
     p.add_argument('--size', type=float, help='Kitty point size, 4–96; default: retain configured size')
     p.add_argument('--style', help='installed face style, e.g. Regular or Medium; requires --font; default: family default')
@@ -635,10 +636,10 @@ def build_parser():
     p.add_argument('--suite', choices=suites, metavar='SUITE', default='all', help=suite_help)
     p.add_argument('--text', help='inspect exact text: codepoints, Unicode names, normalization, combining marks, and covering families; also display it with --render')
     mode = p.add_mutually_exclusive_group()
-    mode.add_argument('--font', help='fontconfig pattern for candidate matching and single-face coverage; reports substitution; analysis only, incompatible with --render')
+    mode.add_argument('--font', help='fontconfig pattern for candidate matching and single-face coverage; reports substitution; analysis only, incompatible with --render').completion = 'fonts'
     mode.add_argument('--render', action='store_true', help='open a fresh diagnostic Kitty using current configuration and capture fallback tracing; cannot save')
     p.add_argument('--json', action='store_true', help='emit one JSON document instead of human-readable text')
-    p.add_argument('--output', help='rendering trace path (requires --render); default: a unique temporary .log file')
+    p.add_argument('--output', help='rendering trace path (requires --render); default: a unique temporary .log file').completion = 'files'
     for child in sub.choices.values():
         child.add_argument('--no-input', action='store_true', default=argparse.SUPPRESS,
                            help='do not open interactive windows or choosers')

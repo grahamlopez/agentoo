@@ -125,8 +125,6 @@ def values_for(action, supplied):
             emit(kind, value, descriptions.get(value, ''))
         return
     kind = getattr(action, 'completion', None)
-    if kind is None:
-        kind = {'font': 'fonts', 'output': 'files'}.get(action.dest)
     if kind in ('files', 'directories', 'users'):
         emit(kind)
     elif kind == 'external_outputs':

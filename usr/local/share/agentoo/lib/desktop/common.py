@@ -5,9 +5,11 @@ import re
 import subprocess
 
 
-def xdg_directory(variable, fallback):
-    value = os.environ.get(variable, '')
-    return Path(value) if value and Path(value).is_absolute() else Path.home() / fallback
+from xdg import xdg_directory
+
+# Keep categories aligned with /etc/xdg/hypr/window-classes.lua.
+# 'all' selects every category; it is not itself an application category.
+WINDOW_GROUPS = ('all', 'kitty', 'browser', 'other')
 
 
 def authored_hypr_paths():
