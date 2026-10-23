@@ -1,0 +1,2 @@
+# pCloud bundles libappindicator3, which needs the GTK 3 dbusmenu library.
+dev-libs/libdbusmenu gtk3

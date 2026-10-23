@@ -73,6 +73,7 @@ than host identities. Avoid giving Git and ebuilds competing ownership of a file
 
 - [GUI installation and session setup](gui-base.md)
 - [Audio setup and diagnostics](audio.md)
+- [Cloud storage installation and setup](cloud-storage.md)
 - [Displays, HiDPI, and laptop lid behavior](displays.md)
 - [Firmware maintenance and diagnostics](firmware.md)
 - [Desktop preferences](desktop.md)

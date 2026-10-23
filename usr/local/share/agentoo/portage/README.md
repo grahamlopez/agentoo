@@ -84,6 +84,67 @@ release manifest, inspect runtime dependencies, and regenerate the Portage
 Manifest. Do not commit downloaded binaries. The download manifest is available
 at <https://proton.me/download/pass-cli/versions.json>.
 
+## Cloud storage clients
+
+User-facing installation, authentication, credential-store selection, updates,
+and removal belong in [the cloud storage guide](../docs/cloud-storage.md).
+
+The overlay supplies two optional first-party binary packages:
+
+- `net-misc/proton-drive-cli-bin`: official standalone executable at
+  `/usr/bin/proton-drive`, keyworded `~amd64` and `~arm64`. Bun is embedded.
+  `USE=pass` supplies password-store without changing the upstream credential
+  backend; libsecret remains a runtime dependency.
+- `net-misc/pcloud-drive-bin`: complete amd64 AppImage at
+  `/opt/pcloud/pCloud.AppImage`, with `/usr/bin/pcloud` and a menu entry/icon.
+  The `appimagekit-pcloud` desktop ID matches upstream so its user integration
+  shadows the system entry rather than adding a second menu item. Keep FUSE 2
+  and the ELF/dlopen dependencies in the recipe. Agentoo's
+  `/etc/portage/package.use/cloud-storage` enables `dev-libs/libdbusmenu[gtk3]`.
+
+Keep both packages opt-in, with testing keywords accepted in
+`/etc/portage/package.accept_keywords/common`. No package set selects them.
+Portage owns system files and updates; phases must not authenticate, launch the
+GUI, configure mounts/services, or modify user homes. Preserve upstream default
+locations, XDG overrides, credentials, folder selection, and autostart behavior.
+Syncthing and rclone remain Gentoo packages.
+
+The pCloud AppImage is deliberately installed intact. Its current vendor
+launcher passes `--no-sandbox` to Electron; this packaging preserves that
+behavior. Its updater checks for write access and cannot replace the root-owned
+AppImage as an ordinary user. Recheck these assumptions on each version bump;
+do not add an updater running as root or compete with upstream user state.
+
+### Cloud packaging verification and updates
+
+For Proton, use the versioned URLs and compare both architectures against the
+publisher's SHA-512 values in the [release index](https://proton.me/download/drive/cli/index.html)
+or [release JSON](https://proton.me/download/drive/cli/version.json). Inspect ELF
+dependencies and CPU requirements again for every release. The project license
+is fetched from an immutable upstream commit and installed with the binary.
+
+For pCloud, the ebuild pins the public-link code for the inspected release. Its
+`getpubzip` endpoint provides a reproducible single-file archive without using
+an expiring CDN link. Compare the enclosed AppImage's SHA-256 against the
+publisher's Linux installation page, check the desktop and embedded application
+versions, then regenerate the Portage Manifest. If the publisher changes or
+removes the linked file, fetching must fail rather than silently accept new
+bytes. Find a new release link through the [Linux release notes](https://www.pcloud.com/release-notes/linux.html);
+do not substitute the rotating latest-download URL. Reinspect runtime libraries,
+the launcher, and the updater on every bump. Keep downloaded artifacts outside Git.
+
+Initial validation on 2026-10-23 checked publisher hashes for both Proton
+architectures and the pCloud AppImage; two independent pCloud ZIP downloads were
+byte-identical. Both ebuilds passed unpack through install in an isolated Portage
+configuration, including staging Proton's arm64 binary on the amd64 build host;
+the latter reports expected missing arm64 system libraries on this host. The
+menu entry passed desktop-file validation, and the amd64 runtime dependencies
+resolved with Agentoo's keyword and USE fragments.
+Proton's amd64 version/help commands passed with an isolated home. This does not
+establish arm64 runtime operation or authenticated transfers. pCloud GUI login,
+sync, FUSE operation, autostart, and update notifications require a user-session
+check on the target desktop; they were not exercised during packaging.
+
 ## User-managed AI clients
 
 `dev-util/codex-cli-deps` and `dev-util/claude-code-deps` supply prerequisites

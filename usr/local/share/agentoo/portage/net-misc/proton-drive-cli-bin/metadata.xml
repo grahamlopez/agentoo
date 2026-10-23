@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <upstream>
+    <remote-id type="github">ProtonDriveApps/sdk</remote-id>
+  </upstream>
+  <use>
+    <flag name="pass">Install password-store for the optional pass/GPG credential backend; select it with PROTON_DRIVE_CREDENTIALS_STORE</flag>
+  </use>
+</pkgmetadata>

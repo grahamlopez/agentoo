@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=pCloud
+Comment=Secure cloud storage and file synchronization service
+Exec=pcloud %U
+Terminal=false
+Type=Application
+Icon=appimagekit-pcloud
+StartupWMClass=pcloud
+Categories=Network;FileTransfer;
+Keywords=cloud;storage;sync;backup;files;
+MimeType=x-scheme-handler/pcloud;
