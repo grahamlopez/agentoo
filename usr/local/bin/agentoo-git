@@ -13,8 +13,8 @@ sys.dont_write_bytecode = True
 SHARE = Path(__file__).resolve().parent.parent / 'share/agentoo'
 sys.path.insert(0, str(SHARE / 'lib'))
 from cli import ArgumentParser
+from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE
 
-GIT_DIR = '/var/lib/agentoo/repository.git'
 HOOKS = '/usr/local/share/agentoo/git-hooks'
 SSH_REMOTE = 'git@github.com:grahamlopez/agentoo.git'
 GUARD_BYPASS = {'status', 'diff', 'log', 'show', 'blame', 'grep', 'ls-files', 'ls-tree',
@@ -35,10 +35,10 @@ def build_parser():
 
 
 def git_command(args):
-    if os.geteuid() != 0 and Path(GIT_DIR).is_dir() and not os.access(GIT_DIR + '/HEAD', os.R_OK):
-        raise RuntimeError(f'cannot read {GIT_DIR}/HEAD; system repository metadata requires root.\n'
+    if os.geteuid() != 0 and SYSTEM_GIT_DIR.is_dir() and not os.access(SYSTEM_GIT_DIR / 'HEAD', os.R_OK):
+        raise RuntimeError(f'cannot read {SYSTEM_GIT_DIR}/HEAD; system repository metadata requires root.\n'
                            'Run this system repository operation with sudo agentoo git ...')
-    command = ['git', '--git-dir=' + GIT_DIR, '--work-tree=/', *args]
+    command = ['git', f'--git-dir={SYSTEM_GIT_DIR}', f'--work-tree={SYSTEM_WORK_TREE}', *args]
     if os.geteuid() == 0 and (not args or args[0] not in GUARD_BYPASS):
         command = [sys.executable, str(SHARE / 'lib/git_transaction.py'), *command]
     return command
@@ -65,7 +65,7 @@ def main():
     else:
         top = subprocess.run(git_command(['rev-parse', '--show-toplevel']), check=True,
                              stdout=subprocess.PIPE, text=True).stdout.strip()
-        if top != '/':
+        if top != str(SYSTEM_WORK_TREE):
             raise RuntimeError('system repository work tree must be /')
         for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
             if not os.access(f'{HOOKS}/{name}', os.X_OK):

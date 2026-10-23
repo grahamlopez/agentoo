@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
+from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE
 
 POLICY = "etc/agentoo/permissions.conf"
 
@@ -91,7 +92,7 @@ def resolve_rule(rules, relative, directory=False):
 
 
 def tracked_files(root):
-    git_dir = root / "var/lib/agentoo/repository.git"
+    git_dir = root / SYSTEM_GIT_DIR.relative_to(SYSTEM_WORK_TREE)
     if git_dir.is_dir():
         command = ["git", f"--git-dir={git_dir}", f"--work-tree={root}", "-C", str(root)]
     elif (root / ".git").exists():

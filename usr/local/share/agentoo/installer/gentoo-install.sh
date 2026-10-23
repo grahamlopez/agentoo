@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
 # Repeatable Gentoo installer — first milestone
+# System repository paths mirror usr/local/share/agentoo/lib/paths.py:
+# SYSTEM_GIT_DIR / SYSTEM_WORK_TREE. Keep shell bootstrap values aligned.
 #
 # Download and run this single file; no local repository checkout is needed:
 #   curl -fL https://raw.githubusercontent.com/grahamlopez/agentoo/main/usr/local/share/agentoo/installer/gentoo-install.sh -o gentoo-install.sh

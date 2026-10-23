@@ -28,6 +28,19 @@ colors = load('term-colors')
 
 
 class ReposTests(unittest.TestCase):
+    def test_system_path_contract(self):
+        # Independent deployment oracle: changing policy must update shell copies too.
+        self.assertEqual(repos.SYSTEM_GIT_DIR, Path('/var/lib/agentoo/repository.git'))
+        self.assertEqual(repos.SYSTEM_WORK_TREE, Path('/'))
+        self.assertEqual(repos.SYSTEM_GIT_DIR.relative_to(repos.SYSTEM_WORK_TREE),
+                         Path('var/lib/agentoo/repository.git'))
+        share = BIN.parent / 'share/agentoo'
+        for path in [*(share / 'git-hooks').iterdir(), share / 'shell/_agentoo',
+                     share / 'installer/gentoo-install.sh']:
+            text = path.read_text()
+            self.assertIn(str(repos.SYSTEM_GIT_DIR), text, str(path))
+            self.assertIn('lib/paths.py', text, str(path))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -59,12 +72,23 @@ class ReposTests(unittest.TestCase):
 
     def invoke(self, *args, system=None, uid=0):
         output, errors = io.StringIO(), io.StringIO()
-        with patch.object(repos, 'SYSTEM_GIT', system or self.root / 'absent.git'), \
+        with patch.object(repos, 'SYSTEM_GIT_DIR', system or self.root / 'absent.git'), \
              patch.object(repos.os, 'geteuid', return_value=uid), \
              patch('sys.argv', ['agentoo-repos', '--json', *args]), \
              contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             code = repos.main()
         return code, json.loads(output.getvalue()), errors.getvalue()
+
+    def test_failed_record_contract_and_status_failure(self):
+        path = self.repository()
+        expected = {'git_dir': str(path / '.git'), 'work_tree': str(path),
+                    'error': 'status failed', 'fetch_error': None}
+        self.assertEqual(repos.failed_record(path / '.git', path, RuntimeError('status failed')), expected)
+        with patch.object(repos, 'status', side_effect=RuntimeError('status failed')), \
+             patch.object(repos, 'git', side_effect=RuntimeError('fetch failed')):
+            code, data, _ = self.invoke('--path=' + str(path), '--fetch')
+        self.assertEqual(code, 1)
+        self.assertEqual(data['repositories'], [{**expected, 'fetch_error': 'fetch failed'}])
 
     def test_sudo_declined_or_cancelled_preserves_home_scan(self):
         local = self.repository()
@@ -83,7 +107,9 @@ class ReposTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(len(data['repositories']), 2)
             self.assertIsNone(next(r for r in data['repositories'] if r['work_tree'] == str(local))['error'])
-            self.assertIn('unavailable', next(r for r in data['repositories'] if r['work_tree'] == '/')['error'])
+            failed = next(r for r in data['repositories'] if r['work_tree'] == '/')
+            self.assertIn('unavailable', failed['error'])
+            self.assertEqual(failed, repos.failed_record(system, Path('/'), failed['error']))
 
     def test_sudo_authorization_modes_and_fixed_scope(self):
         with patch.object(repos.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout=b'ok')) as run:
@@ -91,10 +117,10 @@ class ReposTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0], ['sudo', '-n', '-v'])
             self.assertIsNone(repos.authorize_system(False))
             self.assertEqual(run.call_args.args[0], ['sudo', '-v'])
-            repos.git(repos.SYSTEM_GIT, Path('/'), 'status', privileged=True)
+            repos.git(repos.SYSTEM_GIT_DIR, Path('/'), 'status', privileged=True)
             command = run.call_args.args[0]
             self.assertEqual(command[:4], ['sudo', '-n', '--', 'env'])
-            self.assertIn('--git-dir=' + str(repos.SYSTEM_GIT), command)
+            self.assertIn('--git-dir=' + str(repos.SYSTEM_GIT_DIR), command)
             self.assertIn('--work-tree=/', command)
             with self.assertRaises(ValueError):
                 repos.git(self.root / 'user.git', self.home, 'status', privileged=True)
@@ -179,7 +205,7 @@ class ReposTests(unittest.TestCase):
         clean.update(upstream='origin/main', ahead=0, behind=0)
         dirty = {**clean, 'work_tree': str(self.home / 'longer repo'),
                  'modified': 2, 'ahead': 1, 'behind': 1, 'fetch_error': 'failed'}
-        error = {'work_tree': '/', 'git_dir': str(repos.SYSTEM_GIT), 'error': 'denied'}
+        error = {'work_tree': '/', 'git_dir': str(repos.SYSTEM_GIT_DIR), 'error': 'denied'}
         records = [clean, dirty, error]
         plain = repos.format_table(records)
         colored = repos.format_table(records, color=True)

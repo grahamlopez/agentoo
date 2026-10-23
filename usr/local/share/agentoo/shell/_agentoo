@@ -62,6 +62,7 @@ for record in $records; do
 done
 if (( use_git )); then
     # Query Git directly, bypassing Agentoo's operational wrapper.
+    # Canonical values: usr/local/share/agentoo/lib/paths.py (SYSTEM_GIT_DIR/SYSTEM_WORK_TREE).
     local -x GIT_DIR=/var/lib/agentoo/repository.git GIT_WORK_TREE=/
     local service=git
     words=(git "${words[@]:2}")

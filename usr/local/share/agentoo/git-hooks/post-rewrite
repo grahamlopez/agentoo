@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Canonical paths: usr/local/share/agentoo/lib/paths.py (SYSTEM_GIT_DIR/SYSTEM_WORK_TREE).
 # These hooks belong only to the installed system repository, never a dev clone.
 [[ $(git rev-parse --show-toplevel) == / ]] || exit 0
 [[ $(git rev-parse --absolute-git-dir) == /var/lib/agentoo/repository.git ]] || exit 0

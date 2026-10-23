@@ -66,7 +66,8 @@ class CliTest(unittest.TestCase):
         executable = self.root / 'agentoo-git'
         executable.unlink()
         executable.write_text(ENTRY.with_name('agentoo-git').read_text().replace(
-            '/var/lib/agentoo/repository.git', str(repository)).replace(
+            "from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE",
+            f"from paths import SYSTEM_WORK_TREE\nSYSTEM_GIT_DIR = Path({str(repository)!r})").replace(
             "SHARE = Path(__file__).resolve().parent.parent / 'share/agentoo'",
             f"SHARE = Path({str(COMMANDS.parent)!r})").replace(
             "command = [sys.executable, str(SHARE / 'lib/git_transaction.py'), *command]",

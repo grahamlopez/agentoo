@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/l
 from cli import ArgumentParser
 from xdg import xdg_directory
 
-SYSTEM_GIT = Path('/var/lib/agentoo/repository.git')
+from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE
 PRUNE = {'.git', '.cache', 'node_modules', '.venv', '__pycache__', '.Trash', 'Trash'}
 
 
@@ -56,7 +56,7 @@ def git(git_dir, work_tree, *args, timeout=15, privileged=False, no_input=False)
     if privileged:
         # Sudo authentication happens separately, outside Git's timeout.
         # Only the fixed system pair may cross this boundary.
-        if git_dir != SYSTEM_GIT or work_tree != Path('/'):
+        if git_dir != SYSTEM_GIT_DIR or work_tree != SYSTEM_WORK_TREE:
             raise ValueError('sudo is restricted to the system Agentoo repository')
         command = ['sudo', '-n', '--', 'env', 'GIT_OPTIONAL_LOCKS=0', *noninteractive, *command]
     interactive_fetch = bool(args and args[0] == 'fetch' and not no_input)
@@ -177,6 +177,12 @@ def status(git_dir, work_tree, tracked_only=False, privileged=False):
     return record
 
 
+def failed_record(git_dir, work_tree, error, fetch_error=None):
+    """JSON failure shape: omit success-only fields; absent fetch failure is null."""
+    return {'git_dir': str(git_dir), 'work_tree': str(work_tree),
+            'error': str(error), 'fetch_error': fetch_error}
+
+
 def authorize_system(no_input):
     if not no_input:
         print('agentoo repos: checking the system repository requires root; requesting sudo authorization.', file=sys.stderr)
@@ -208,7 +214,7 @@ def format_table(records, color=False):
         path = record['work_tree']
         if path == home or path.startswith(home + '/'):
             path = '~' + path[len(home):]
-        if record['git_dir'] == str(SYSTEM_GIT) and path == '/':
+        if record['git_dir'] == str(SYSTEM_GIT_DIR) and path == str(SYSTEM_WORK_TREE):
             path = 'system Agentoo (/)'
         if record['error']:
             rows.append([(safe(path), None), ('—', None), ('unavailable', '31'),
@@ -262,15 +268,15 @@ def main():
     if args.path is None:
         # Missing deployment is normal in a checkout. Permission errors are not.
         try:
-            SYSTEM_GIT.stat()
+            SYSTEM_GIT_DIR.stat()
         except FileNotFoundError:
             pass
         except PermissionError:
-            pairs.append((SYSTEM_GIT, Path('/'), True))
+            pairs.append((SYSTEM_GIT_DIR, SYSTEM_WORK_TREE, True))
         except OSError as error:
-            errors.append({'path': str(SYSTEM_GIT), 'error': str(error)})
+            errors.append({'path': str(SYSTEM_GIT_DIR), 'error': str(error)})
         else:
-            pairs.append((SYSTEM_GIT, Path('/'), True))
+            pairs.append((SYSTEM_GIT_DIR, SYSTEM_WORK_TREE, True))
         pairs.extend((g, w, True) for g, w in configured)
     pairs.extend(discover(roots, excludes + args.exclude, errors))
     records, seen = [], set()
@@ -279,12 +285,11 @@ def main():
         if identity in seen:
             continue
         seen.add(identity)
-        privileged = metadata == SYSTEM_GIT and work_tree == Path('/') and os.geteuid() != 0
+        privileged = metadata == SYSTEM_GIT_DIR and work_tree == SYSTEM_WORK_TREE and os.geteuid() != 0
         if privileged:
             error = authorize_system(args.no_input)
             if error:
-                records.append({'git_dir': str(metadata), 'work_tree': str(work_tree),
-                                'error': error, 'fetch_error': None})
+                records.append(failed_record(metadata, work_tree, error))
                 continue
         fetch_error = None
         if args.fetch:
@@ -296,7 +301,7 @@ def main():
         try:
             record = status(metadata, work_tree, tracked_only, privileged=privileged)
         except (OSError, RuntimeError, subprocess.SubprocessError) as error:
-            record = {'git_dir': str(metadata), 'work_tree': str(work_tree), 'error': str(error)}
+            record = failed_record(metadata, work_tree, error)
         record['fetch_error'] = fetch_error
         records.append(record)
     if args.json:
