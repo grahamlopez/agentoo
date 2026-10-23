@@ -17,7 +17,7 @@ class CliTest(unittest.TestCase):
         self.entry = self.root / 'agentoo'
         self.entry.write_text(ENTRY.read_text().replace(
             "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(COMMANDS.parent)!r})"))
-        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors'):
+        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage'):
             (self.root / ('agentoo-' + name)).symlink_to(ENTRY.with_name('agentoo-' + name))
         checkpoint = self.root / 'agentoo-checkpoint'
         if checkpoint.is_symlink():
@@ -40,12 +40,22 @@ class CliTest(unittest.TestCase):
                      ['permissions', 'check', '--help'], ['help', 'permissions'],
                      ['secrets', 'install', '--help'], ['help', 'power'],
                      ['help', 'display', 'backlight'], ['help', 'display'], ['help', 'screenshot'],
-                     ['help', 'repos'], ['help', 'term-colors']]:
+                     ['help', 'repos'], ['help', 'term-colors'], ['help', 'cloud-storage'],
+                     ['help', 'cloud-storage', 'pcloud'], ['cloud-storage', 'pcloud', 'start', '--help']]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn('requesting sudo', result.stderr)
                 self.assertIn('usage:', result.stdout.lower())
+
+    def test_cloud_storage_omitted_arguments_match_contextual_help(self):
+        for path in [('cloud-storage',), ('cloud-storage', 'pcloud')]:
+            with self.subTest(path=path):
+                result = self.run_cli(*path)
+                explicit = self.run_cli(*path, '--help')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, explicit.stdout)
+                self.assertEqual(result.stderr, '')
 
     def test_git_arguments_run_without_sudo(self):
         commands = self.root / 'lib'
@@ -93,7 +103,8 @@ class CliTest(unittest.TestCase):
     def test_completion_usage_matches_actual_help(self):
         paths = [(), ('git',), ('repos',), ('term-colors',), ('permissions',), ('permissions', 'check'),
                  ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
-                 ('secrets',), ('secrets', 'install'), ('checkpoint',),
+                 ('secrets',), ('secrets', 'install'), ('cloud-storage',), ('cloud-storage', 'pcloud'),
+                 *(('cloud-storage', 'pcloud', action) for action in ('start', 'stop', 'status')), ('checkpoint',),
                  ('checkpoint', 'create'), ('checkpoint', 'list'),
                  ('checkpoint', 'inspect'), ('checkpoint', 'restore'),
                  ('power',), ('fonts',), ('fonts', 'status'),

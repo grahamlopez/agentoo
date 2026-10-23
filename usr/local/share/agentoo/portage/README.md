@@ -109,6 +109,16 @@ GUI, configure mounts/services, or modify user homes. Preserve upstream default
 locations, XDG overrides, credentials, folder selection, and autostart behavior.
 Syncthing and rclone remain Gentoo packages.
 
+The repository-owned `agentoo-cloud-storage` command manages pCloud with an
+on-demand transient systemd user service; the ebuild does not install or enable
+a service. Keep that distinction when updating packaging. Recheck the
+AppImage/AppRun/wrapper exec chain and the application's signal handling on each
+version bump: service stop relies on SIGTERM reaching the main process, and
+2.3.1's normal quit path ends with a self-inflicted SIGKILL. The service uses
+`KillMode=mixed`, accepts that exit status, and does not restart automatically.
+Per-service session environment and runtime process ownership belong to the
+command, while credentials, synchronization, and user settings remain upstream.
+
 The pCloud AppImage is deliberately installed intact. Its current vendor
 launcher passes `--no-sandbox` to Electron; this packaging preserves that
 behavior. Its updater checks for write access and cannot replace the root-owned

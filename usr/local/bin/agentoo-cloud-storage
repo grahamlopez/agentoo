@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""Manage cloud storage clients through systemd user services."""
+import os
+from pathlib import Path
+import select
+import signal
+import subprocess
+import sys
+import time
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
+from cli import ArgumentParser
+
+UNIT = 'agentoo-pcloud.service'
+PCLOUD = Path('/usr/bin/pcloud')
+PROC = Path('/proc')
+ACTIVE = {'active', 'activating', 'reloading'}
+SESSION_ENV = (
+    'HOME', 'DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR',
+    'DBUS_SESSION_BUS_ADDRESS', 'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP',
+    'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME',
+    'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE',
+)
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo cloud-storage', description=__doc__,
+        epilog='Run as your desktop user, without sudo. Exit 0: success/running; '
+               '1: operational failure; 2: invalid arguments; 3: stopped (status only).')
+    parser.set_defaults(help_parser=parser)
+    providers = parser.add_subparsers(dest='provider')
+    pcloud = providers.add_parser('pcloud', help='Manage the pCloud desktop client',
+        description='Run pCloud independently of your terminal in a systemd user service.',
+        epilog='Disable pCloud\'s own login autostart when using service management. '
+               'Logs: journalctl --user -u agentoo-pcloud.service. '
+               'Start requires a graphical-session terminal; stop/status also work from a TTY. '
+               'Stop quits promptly and does not wait for pending uploads.')
+    pcloud.set_defaults(help_parser=pcloud)
+    actions = pcloud.add_subparsers(dest='action')
+    actions.add_parser('start', help='Start the user service; leave a running service alone',
+        description='Start pCloud with this terminal\'s display and XDG environment. '
+                    'Refuse to launch a second instance outside the service. '
+                    'No login autostart is enabled.')
+    actions.add_parser('stop', help='Stop the service or an existing manually launched AppImage',
+        description='Send SIGTERM through systemd to the main process. '
+                    'An existing manually launched pCloud AppImage can also be stopped. '
+                    'Wait for uploads to finish first; this command does not drain the upload queue.')
+    actions.add_parser('status', help='Report whether pCloud is running and who manages it')
+    return parser
+
+
+def call(command):
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=45)
+    except FileNotFoundError as error:
+        raise RuntimeError(f'{command[0]} is required') from error
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f'{command[0]} timed out; inspect the user service and journal') from error
+
+
+def failure(result):
+    return result.stderr.strip() or result.stdout.strip() or f'command exited {result.returncode}'
+
+
+def service_state():
+    result = call(['systemctl', '--user', 'show', UNIT,
+                   '--property=LoadState', '--property=ActiveState'])
+    state = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+    if result.returncode and state.get('LoadState') != 'not-found':
+        raise RuntimeError(f'Cannot query the systemd user service: {failure(result)}')
+    if not state.get('LoadState'):
+        raise RuntimeError('Cannot query the systemd user service; check systemctl --user status')
+    return state
+
+
+def is_pcloud_main(pid):
+    """Recognize only this user's normal AppImage main process, never helpers."""
+    try:
+        directory = PROC / str(pid)
+        if directory.stat().st_uid != os.geteuid():
+            return False
+        executable = Path(os.readlink(directory / 'exe').removesuffix(' (deleted)'))
+        if executable.name != 'pcloud.bin' or not executable.parent.name.startswith('.mount_'):
+            return False
+        arguments = (directory / 'cmdline').read_bytes().split(b'\0')
+        return bool(arguments[0]) and not any(
+            arg == b'--type' or arg.startswith(b'--type=') for arg in arguments)
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return False
+
+
+def pcloud_mains():
+    return sorted(int(path.name) for path in PROC.iterdir()
+                  if path.name.isdecimal() and int(path.name) > 1 and is_pcloud_main(int(path.name)))
+
+
+def stop_unmanaged():
+    # Migration from bare pcloud/app autostart. pidfds prevent a PID-reuse race;
+    # repeat identity checks after opening each descriptor before signalling.
+    descriptors = []
+    try:
+        for pid in pcloud_mains():
+            try:
+                descriptor = os.pidfd_open(pid)
+            except ProcessLookupError:
+                continue
+            if not is_pcloud_main(pid):
+                os.close(descriptor)
+                continue
+            descriptors.append(descriptor)
+            try:
+                signal.pidfd_send_signal(descriptor, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        pending = list(descriptors)
+        deadline = time.monotonic() + 30
+        while pending:
+            ready, _, _ = select.select(pending, [], [], max(0, deadline - time.monotonic()))
+            pending = [descriptor for descriptor in pending if descriptor not in ready]
+            if pending and time.monotonic() >= deadline:
+                raise RuntimeError('pCloud has not exited after 30 seconds; inspect it before retrying')
+    finally:
+        for descriptor in descriptors:
+            os.close(descriptor)
+
+
+def start(state):
+    if state.get('ActiveState') in ACTIVE:
+        print('pCloud is already running as a user service.', file=sys.stderr)
+        return 0
+    if state.get('ActiveState') == 'deactivating':
+        raise RuntimeError('The pCloud user service is still stopping; wait for it before starting again')
+    if pcloud_mains():
+        raise RuntimeError('pCloud is running outside the service; run '
+                           'agentoo cloud-storage pcloud stop, then start again')
+    if not PCLOUD.is_file() or not os.access(PCLOUD, os.X_OK):
+        raise RuntimeError('Install net-misc/pcloud-drive-bin first')
+    if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+        raise RuntimeError('Start pCloud from a graphical-session terminal (DISPLAY or WAYLAND_DISPLAY required)')
+    command = [
+        'systemd-run', '--user', '--unit=' + UNIT, '--collect', '--service-type=exec',
+        '--property=KillMode=mixed', '--property=TimeoutStopSec=30s',
+        # The vendor's normal quit handler ultimately kills itself with SIGKILL.
+        '--property=SuccessExitStatus=SIGKILL', '--property=Restart=no',
+        '--working-directory=' + str(Path.home()),
+    ]
+    command.extend(f'--setenv={name}={os.environ[name]}' for name in SESSION_ENV if name in os.environ)
+    command.append(str(PCLOUD))
+    result = call(command)
+    current = service_state()
+    if current.get('ActiveState') not in ACTIVE:
+        detail = failure(result) if result.returncode else 'pCloud exited during startup'
+        raise RuntimeError(f'{detail}; see journalctl --user -u {UNIT}')
+    # A concurrent start may have created the same unit; its running service
+    # satisfies this request without launching another copy.
+    print('pCloud started as a user service.', file=sys.stderr)
+    return 0
+
+
+def stop(state):
+    if state.get('LoadState') != 'not-found':
+        result = call(['systemctl', '--user', 'stop', UNIT])
+        if result.returncode and service_state().get('LoadState') != 'not-found':
+            raise RuntimeError(f'Cannot stop pCloud: {failure(result)}')
+    stop_unmanaged()
+    print('pCloud stopped.', file=sys.stderr)
+    return 0
+
+
+def main():
+    args = build_parser().parse_args()
+    if args.provider is None or args.action is None:
+        args.help_parser.print_help()
+        return 0
+    if os.geteuid() == 0:
+        print('agentoo cloud-storage: run as your desktop user, without sudo.', file=sys.stderr)
+        return 1
+    try:
+        state = service_state()
+        if args.action == 'start':
+            return start(state)
+        if args.action == 'stop':
+            return stop(state)
+        if state.get('ActiveState') in ACTIVE:
+            print('pCloud: running (systemd user service)')
+            return 0
+        if state.get('ActiveState') == 'deactivating':
+            print('pCloud: stopping (systemd user service)')
+            return 0
+        if pcloud_mains():
+            print('pCloud: running (outside the service)')
+            return 0
+        print('pCloud: stopped')
+        return 3
+    except (OSError, RuntimeError) as error:
+        print(f'agentoo cloud-storage: {error}', file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

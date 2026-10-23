@@ -5,7 +5,7 @@ An opinionated Gentoo distribution. See the
 and [development board](usr/local/share/agentoo/kanban/README.md).
 
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
-secrets, display and external monitor controls, screenshots, desktop wallpaper, window transparency
+secrets, cloud storage client startup, display and external monitor controls, screenshots, desktop wallpaper, window transparency
 and blur, [desktop appearance](usr/local/share/agentoo/docs/desktop.md#desktop-appearance),
 power status, and [font diagnostics and selection](usr/local/share/agentoo/docs/fonts.md).
 
@@ -14,6 +14,11 @@ and `agentoo-power` use the same implementation and arguments. Normal commands
 use Python's standard library; the dispatcher only routes to fixed executable
 paths. `agentoo help fonts doctor` shows nested help, and `agentoo --version`
 reports the repository revision when readable.
+
+`agentoo cloud-storage pcloud start|stop|status` manages pCloud through an
+on-demand systemd user service, independent of the launching terminal. See
+[cloud storage setup](usr/local/share/agentoo/docs/cloud-storage.md) for
+authentication, service ownership, and upstream synchronization behavior.
 
 `agentoo repos` checks the deployed system repository and repositories throughout
 your home. Use `agentoo repos --path=.` to scan only the current directory;

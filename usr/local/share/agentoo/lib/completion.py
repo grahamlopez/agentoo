@@ -22,6 +22,7 @@ COMMANDS = {
     'checkpoint': 'Create, list, inspect, and restore system checkpoints',
     'permissions': 'Check or repair managed ownership and permissions',
     'secrets': 'Install secret files from Proton Pass',
+    'cloud-storage': 'Start, stop, and inspect cloud storage clients',
     'display': 'Manage display output, backlights, and external monitor controls',
     'screenshot': 'Capture all displays or a selected region',
     'power': 'Show battery and CPU power status',
