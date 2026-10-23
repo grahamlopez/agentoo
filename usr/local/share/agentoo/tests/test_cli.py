@@ -17,7 +17,7 @@ class CliTest(unittest.TestCase):
         self.entry = self.root / 'agentoo'
         self.entry.write_text(ENTRY.read_text().replace(
             "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(COMMANDS.parent)!r})"))
-        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop'):
+        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors'):
             (self.root / ('agentoo-' + name)).symlink_to(ENTRY.with_name('agentoo-' + name))
         checkpoint = self.root / 'agentoo-checkpoint'
         if checkpoint.is_symlink():
@@ -39,7 +39,8 @@ class CliTest(unittest.TestCase):
                      ['checkpoint', 'restore', '--help'], ['permissions', 'fix', '--help'],
                      ['permissions', 'check', '--help'], ['help', 'permissions'],
                      ['secrets', 'install', '--help'], ['help', 'power'],
-                     ['help', 'display', 'backlight'], ['help', 'display'], ['help', 'screenshot']]:
+                     ['help', 'display', 'backlight'], ['help', 'display'], ['help', 'screenshot'],
+                     ['help', 'repos'], ['help', 'term-colors']]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -90,7 +91,7 @@ class CliTest(unittest.TestCase):
         self.assertFalse(call.exists())
 
     def test_completion_usage_matches_actual_help(self):
-        paths = [(), ('git',), ('permissions',), ('permissions', 'check'),
+        paths = [(), ('git',), ('repos',), ('term-colors',), ('permissions',), ('permissions', 'check'),
                  ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
                  ('secrets',), ('secrets', 'install'), ('checkpoint',),
                  ('checkpoint', 'create'), ('checkpoint', 'list'),

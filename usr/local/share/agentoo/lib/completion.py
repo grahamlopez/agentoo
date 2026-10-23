@@ -17,6 +17,8 @@ sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 COMMANDS = {
     'git': 'Run Git against the Agentoo system repository',
+    'repos': 'Check system and home Git repositories',
+    'term-colors': 'Show visual terminal color tests',
     'checkpoint': 'Create, list, inspect, and restore system checkpoints',
     'permissions': 'Check or repair managed ownership and permissions',
     'secrets': 'Install secret files from Proton Pass',

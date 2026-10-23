@@ -15,6 +15,13 @@ use Python's standard library; the dispatcher only routes to fixed executable
 paths. `agentoo help fonts doctor` shows nested help, and `agentoo --version`
 reports the repository revision when readable.
 
+`agentoo repos` checks the deployed system repository and repositories throughout
+your home. Use `agentoo repos --path=.` to scan only the current directory;
+`--fetch` explicitly refreshes remotes, and `--json` provides machine output.
+`agentoo term-colors` prints visual palette, contrast, grayscale, and truecolor tests.
+See [repository and terminal tools](usr/local/share/agentoo/docs/terminal-tools.md)
+for scope, local exclusions, bare work trees, and output contracts.
+
 The concise command policy lives in
 [`usr/local/share/agentoo/lib/cli.py`](usr/local/share/agentoo/lib/cli.py).
 Command scripts own their parsing, help, privileges, and output. Shared helpers

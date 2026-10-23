@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Summarize Git repositories without changing their work trees."""
+import fnmatch
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import unicodedata
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
+from cli import ArgumentParser
+
+SYSTEM_GIT = Path('/var/lib/agentoo/repository.git')
+PRUNE = {'.git', '.cache', 'node_modules', '.venv', '__pycache__', '.Trash', 'Trash'}
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo repos', description=__doc__, epilog=
+        'Default scope: system Agentoo and your home. --path replaces that scope. '
+        'Exit 0: checked successfully (dirty/ahead is normal); 1: scan/Git/fetch errors; 2: invalid arguments/config. '
+        'Bare work-tree pairs count tracked changes only, avoiding a scan of / or your entire home for untracked files.')
+    parser.add_argument('--path', action='append', metavar='DIR', help='scan this directory instead of the default scope; repeatable').completion = 'directories'
+    parser.add_argument('--exclude', action='append', default=[], metavar='GLOB', help='skip matching directory names or paths; repeatable')
+    parser.add_argument('--config', metavar='FILE', help='JSON configuration (default: $XDG_CONFIG_HOME/agentoo/repos.json)').completion = 'files'
+    parser.add_argument('--fetch', action='store_true', help='fetch each repository’s remotes before checking')
+    parser.add_argument('--json', action='store_true', help='emit JSON repositories and errors')
+    parser.add_argument('--no-input', action='store_true', help='never prompt for sudo or fetch credentials; use existing authorization')
+    return parser
+
+
+def git(git_dir, work_tree, *args, timeout=15, privileged=False, no_input=False):
+    try:
+        if not privileged:
+            with (git_dir / 'HEAD').open('rb') as head:
+                head.read(1)
+    except PermissionError as error:
+        raise RuntimeError(f'cannot read repository metadata at {git_dir}: permission denied') from error
+    env = os.environ.copy()
+    for key in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+                'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'):
+        env.pop(key, None)
+    env['GIT_OPTIONAL_LOCKS'] = '0'
+    noninteractive = ['GIT_TERMINAL_PROMPT=0', 'GCM_INTERACTIVE=never',
+                      'GIT_ASKPASS=/bin/false', 'SSH_ASKPASS=/bin/false',
+                      'SSH_ASKPASS_REQUIRE=never',
+                      'GIT_SSH_COMMAND=ssh -oBatchMode=yes'] if no_input else []
+    for assignment in noninteractive:
+        key, value = assignment.split('=', 1)
+        env[key] = value
+    command = ['git', '--git-dir=' + str(git_dir)]
+    if work_tree is not None:
+        command.append('--work-tree=' + str(work_tree))
+    if privileged:
+        # Sudo authentication happens separately, outside Git's timeout.
+        # Only the fixed system pair may cross this boundary.
+        if git_dir != SYSTEM_GIT or work_tree != Path('/'):
+            raise ValueError('sudo is restricted to the system Agentoo repository')
+        command = ['sudo', '-n', '--', 'env', 'GIT_OPTIONAL_LOCKS=0', *noninteractive, *command]
+    interactive_fetch = bool(args and args[0] == 'fetch' and not no_input)
+    result = subprocess.run([*command, *args], stdout=subprocess.PIPE,
+                            stderr=None if interactive_fetch else subprocess.PIPE,
+                            stdin=subprocess.DEVNULL if no_input else None,
+                            env=env, timeout=timeout)
+    if result.returncode:
+        message = result.stderr.decode(errors='replace').strip() if result.stderr else ''
+        raise RuntimeError(message or f'git exited {result.returncode}' +
+                           ('; see fetch diagnostics above' if interactive_fetch else ''))
+    return result.stdout
+
+
+def load_config(path, explicit=False):
+    try:
+        data = json.loads(path.read_text())
+    except FileNotFoundError:
+        if not explicit:
+            return [], []
+        raise
+    if not isinstance(data, dict) or set(data) - {'exclude', 'repositories'}:
+        raise ValueError('config must be an object with only exclude and repositories keys')
+    excludes, repositories = data.get('exclude', []), data.get('repositories', [])
+    if not isinstance(excludes, list) or not all(isinstance(x, str) for x in excludes):
+        raise ValueError('exclude must be a list of glob strings')
+    if not isinstance(repositories, list):
+        raise ValueError('repositories must be a list of git_dir/work_tree objects')
+    pairs = []
+    for item in repositories:
+        if not isinstance(item, dict) or set(item) != {'git_dir', 'work_tree'} or not all(isinstance(v, str) and v for v in item.values()):
+            raise ValueError('each repository requires nonempty git_dir and work_tree strings')
+        pair = tuple(Path(item[k]).expanduser() for k in ('git_dir', 'work_tree'))
+        if not all(p.is_absolute() for p in pair):
+            raise ValueError('configured repository paths must be absolute (or start with ~)')
+        pairs.append(pair)
+    return excludes, pairs
+
+
+def discover(roots, excludes, errors):
+    """Walk once, including hidden directories; never follow directory symlinks."""
+    seen = set()
+    for root in roots:
+        root = root.expanduser().resolve()
+        if not root.is_dir():
+            errors.append({'path': str(root), 'error': 'scan path is not a directory'})
+            continue
+        pending = [root]
+        while pending:
+            directory = pending.pop()
+            if directory in seen:
+                continue
+            seen.add(directory)
+            try:
+                with os.scandir(directory) as entries:
+                    entries = {e.name: e for e in entries}
+                if '.git' in entries:
+                    marker = directory / '.git'
+                    if marker.is_file():
+                        line = marker.read_text().strip()
+                        if not line.startswith('gitdir: '):
+                            raise ValueError('invalid .git file')
+                        metadata = (directory / line[8:]).resolve()
+                    else:
+                        metadata = marker
+                    yield metadata, directory, False
+                # Bare repositories with core.worktree are common for dotfiles.
+                if {'HEAD', 'objects', 'config'} <= entries.keys():
+                    work_tree = git(directory, None, 'config', '--default', '', '--get',
+                                    'core.worktree').decode(errors='surrogateescape').strip()
+                    if work_tree:
+                        yield directory, (directory / work_tree).resolve(), True
+                    # A pure bare repository has no working files to check.
+                    continue
+                for name, entry in entries.items():
+                    if name in PRUNE or not entry.is_dir(follow_symlinks=False):
+                        continue
+                    path = directory / name
+                    if any(fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(str(path), pattern)
+                           or fnmatch.fnmatch(str(path.relative_to(root)), pattern) for pattern in excludes):
+                        continue
+                    pending.append(path)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+                errors.append({'path': str(directory), 'error': str(error)})
+
+
+def status(git_dir, work_tree, tracked_only=False, privileged=False):
+    raw = git(git_dir, work_tree, 'status', '--porcelain=v2', '--branch', '-z',
+              '--untracked-files=no' if tracked_only else '--untracked-files=normal', privileged=privileged)
+    record = {'git_dir': str(git_dir), 'work_tree': str(work_tree), 'branch': None,
+              'oid': None, 'upstream': None, 'ahead': None, 'behind': None,
+              'staged': 0, 'modified': 0, 'untracked': None if tracked_only else 0,
+              'unmerged': 0, 'tracked_only': tracked_only, 'error': None, 'fetch_error': None}
+    entries = iter(raw.split(b'\0'))
+    for entry in entries:
+        if entry.startswith(b'# '):
+            key, _, value = entry[2:].partition(b' ')
+            value = value.decode(errors='replace')
+            if key == b'branch.head':
+                record['branch'] = value
+            elif key == b'branch.oid':
+                record['oid'] = value
+            elif key == b'branch.upstream':
+                record['upstream'] = value
+            elif key == b'branch.ab':
+                ahead, behind = value.split()
+                record.update(ahead=int(ahead[1:]), behind=int(behind[1:]))
+        elif entry[:1] in (b'1', b'2'):
+            xy = entry.split(b' ', 2)[1]
+            record['staged'] += xy[:1] != b'.'
+            record['modified'] += xy[1:] != b'.'
+            if entry.startswith(b'2 '):
+                next(entries)  # Original rename path is a separate NUL record.
+        elif entry.startswith(b'u '):
+            record['unmerged'] += 1
+        elif entry.startswith(b'? '):
+            record['untracked'] += 1
+    return record
+
+
+def authorize_system(no_input):
+    if not no_input:
+        print('agentoo repos: checking the system repository requires root; requesting sudo authorization.', file=sys.stderr)
+    try:
+        result = subprocess.run(['sudo', *(['-n'] if no_input else []), '-v'],
+                                stdout=subprocess.DEVNULL)
+    except KeyboardInterrupt:
+        return 'sudo authentication cancelled; system check unavailable'
+    except OSError as error:
+        return f'sudo authorization unavailable: {error}'
+    if result.returncode:
+        return 'sudo authorization declined or unavailable; system check unavailable'
+    return None
+
+
+def display_width(text):
+    return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in text)
+
+
+def format_table(records, color=False):
+    """Pad plain text before adding escapes, keeping colored columns aligned."""
+    if not records:
+        return 'No repositories found.'
+    def safe(text):
+        return json.dumps(str(text), ensure_ascii=False)[1:-1]
+    rows = [[(label, None) for label in ('REPOSITORY', 'BRANCH', 'WORKTREE', 'UPSTREAM', 'NOTES')]]
+    home = str(Path.home())
+    for record in records:
+        path = record['work_tree']
+        if path == home or path.startswith(home + '/'):
+            path = '~' + path[len(home):]
+        if record['git_dir'] == str(SYSTEM_GIT) and path == '/':
+            path = 'system Agentoo (/)'
+        if record['error']:
+            rows.append([(safe(path), None), ('—', None), ('unavailable', '31'),
+                         ('—', None), ('check failed', '31')])
+            continue
+        branch = record['branch']
+        detached = branch == '(detached)'
+        if detached:
+            branch = 'detached ' + (record['oid'] or '')[:10]
+        counts = ', '.join(f'{record[k]} {k}' for k in ('staged', 'modified', 'untracked', 'unmerged') if record[k]) or 'clean'
+        changed = counts != 'clean'
+        if record['upstream'] is None:
+            sync, sync_color = 'no upstream', '33'
+        elif record['ahead'] is None:
+            sync, sync_color = 'unavailable', '31'
+        else:
+            ahead, behind = record['ahead'], record['behind']
+            sync = f'↑{ahead} ↓{behind}'
+            sync_color = '31' if ahead and behind else '33' if behind else '36' if ahead else None
+        notes = []
+        if record['tracked_only']:
+            notes.append('tracked only')
+        if record['fetch_error']:
+            notes.append('fetch failed')
+        rows.append([(safe(path), None), (safe(branch), '33' if detached else None),
+                     (counts, '31' if record['unmerged'] else '33' if changed else None),
+                     (sync, sync_color), (', '.join(notes), '31' if record['fetch_error'] else None)])
+    widths = [max(display_width(row[i][0]) for row in rows) for i in range(len(rows[0]))]
+    lines = []
+    for row in rows:
+        cells = []
+        for (text, code), width in zip(row, widths):
+            padding = ' ' * (width - display_width(text))
+            cells.append((f'\033[{code}m{text}\033[0m' if color and code else text) + padding)
+        lines.append('  '.join(cells).rstrip())
+    return '\n'.join(lines)
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    config_home = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config')
+    config_path = Path(args.config).expanduser() if args.config else config_home / 'agentoo/repos.json'
+    try:
+        excludes, configured = load_config(config_path, bool(args.config))
+    except (OSError, ValueError) as error:
+        parser.error(f'{config_path}: {error}')
+    errors = []
+    roots = [Path(p) for p in args.path] if args.path is not None else [Path.home()]
+    pairs = []
+    if args.path is None:
+        # Missing deployment is normal in a checkout. Permission errors are not.
+        try:
+            SYSTEM_GIT.stat()
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pairs.append((SYSTEM_GIT, Path('/'), True))
+        except OSError as error:
+            errors.append({'path': str(SYSTEM_GIT), 'error': str(error)})
+        else:
+            pairs.append((SYSTEM_GIT, Path('/'), True))
+        pairs.extend((g, w, True) for g, w in configured)
+    pairs.extend(discover(roots, excludes + args.exclude, errors))
+    records, seen = [], set()
+    for metadata, work_tree, tracked_only in sorted(pairs, key=lambda p: (str(p[1]), str(p[0]))):
+        identity = (metadata.resolve(), work_tree.resolve())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        privileged = metadata == SYSTEM_GIT and work_tree == Path('/') and os.geteuid() != 0
+        if privileged:
+            error = authorize_system(args.no_input)
+            if error:
+                records.append({'git_dir': str(metadata), 'work_tree': str(work_tree),
+                                'error': error, 'fetch_error': None})
+                continue
+        fetch_error = None
+        if args.fetch:
+            try:
+                git(metadata, work_tree, 'fetch', '--all', '--quiet',
+                    timeout=60 if args.no_input else None, privileged=privileged, no_input=args.no_input)
+            except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+                fetch_error = str(error)
+        try:
+            record = status(metadata, work_tree, tracked_only, privileged=privileged)
+        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+            record = {'git_dir': str(metadata), 'work_tree': str(work_tree), 'error': str(error)}
+        record['fetch_error'] = fetch_error
+        records.append(record)
+    if args.json:
+        print(json.dumps({'repositories': records, 'errors': errors}, ensure_ascii=True))
+    else:
+        color = sys.stdout.isatty() and os.environ.get('TERM') != 'dumb' and 'NO_COLOR' not in os.environ
+        print(format_table(records, color))
+    for error in errors:
+        print(f"agentoo repos: {error['path']!r}: {error['error']}", file=sys.stderr)
+    for record in records:
+        for key in ('error', 'fetch_error'):
+            if record.get(key):
+                print(f"agentoo repos: {record['git_dir']!r}: {key}: {record[key]}", file=sys.stderr)
+    return int(bool(errors or any(r.get('error') or r.get('fetch_error') for r in records)))
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Show visual terminal color tests; inspect the output yourself."""
+import os
+from pathlib import Path
+import shutil
+import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
+from cli import ArgumentParser
+
+RESET = '\033[0m'
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo term-colors', description=__doc__, epilog=
+        'Compare the same output directly, inside tmux, and over SSH. '
+        'ANSI colors reflect your palette; RGB gradients should be smooth. '
+        'This is a visual sample, not automatic capability detection. '
+        'Exit 0: printed; 2: output requires --force or invalid arguments.')
+    parser.add_argument('--force', action='store_true', help='emit color escapes even without a TTY, with TERM=dumb, or with NO_COLOR set')
+    return parser
+
+
+def indexed_rgb(index):
+    """Standard xterm values; the first 16 slots are theme-defined."""
+    if index < 16:
+        return None
+    if index >= 232:
+        return (8 + 10 * (index - 232),) * 3
+    offset = index - 16
+    levels = (0, 95, 135, 175, 215, 255)
+    return levels[offset // 36], levels[offset // 6 % 6], levels[offset % 6]
+
+
+def hex_color(rgb):
+    return '#' + ''.join(f'{value:02x}' for value in rgb)
+
+
+def swatch_foreground(index):
+    rgb = indexed_rgb(index)
+    if rgb is None:
+        # Actual ANSI values belong to the terminal theme. Use conventional
+        # ANSI colors only to estimate contrast, never as claimed hex values.
+        if index in (7, 8):
+            rgb = (192 if index == 7 else 128,) * 3
+        else:
+            rgb = tuple((255 if index >= 8 else 128) if index % 8 & bit else 0
+                        for bit in (1, 2, 4))
+    def linear(value):
+        value /= 255
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+    luminance = sum(weight * linear(value) for weight, value in zip((0.2126, 0.7152, 0.0722), rgb))
+    # Select the greater contrast ratio against true black or true white.
+    return '0;0;0' if (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) else '255;255;255'
+
+
+def chart(width):
+    width = max(1, width)
+    lines = ['Terminal color visual tests', 'Inspect readability, distinct colors, and smooth gradients.', '',
+             'ANSI palette: normal / bold (terminal default background)']
+    names = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+    for bright in (False, True):
+        for i, name in enumerate(names):
+            code = (90 if bright else 30) + i
+            label = ('bright ' if bright else '') + name
+            lines.append(f'\033[{code}m{label}: Normal{RESET}  \033[1;{code}mBold{RESET}')
+    lines.extend(['', 'ANSI foreground/background pairs (0–7; normal / bold)'])
+    # Small batches retain readable text even on narrow terminals.
+    columns = max(1, min(8, width // 9))
+    for bg in range(8):
+        for start in range(0, 8, columns):
+            row = ''
+            for fg in range(start, min(8, start + columns)):
+                row += (f'\033[{30 + fg};{40 + bg}m {fg}/{bg} '
+                        f'\033[1mAa {RESET}')
+            lines.append(row)
+    lines.extend(['', 'Indexed colors: slot above hex (contrast-selected text)',
+                  '0–15: theme-defined; 16–255: standard xterm RGB values.',
+                  'Contrast for theme-defined slots is estimated.',
+                  'Custom palettes may redefine indexed colors.'])
+    columns = max(1, min(16, width // 9))
+    for start in range(0, 256, columns):
+        indices = range(start, min(start + columns, 256))
+        for hex_row in (False, True):
+            cells = []
+            for n in indices:
+                label = (hex_color(indexed_rgb(n)) if n >= 16 else 'theme') if hex_row else str(n)
+                cells.append(f'\033[0;38;2;{swatch_foreground(n)};48;5;{n}m {label:^7} {RESET}')
+            lines.append(''.join(cells))
+    lines.extend(['', 'Grayscale 232–255'])
+    for start in range(232, 256, columns):
+        lines.append(''.join(f'\033[48;5;{n}m        {RESET}'
+                             for n in range(start, min(start + columns, 256))))
+    lines.extend(['', '24-bit RGB gradients (red, green, blue, gray, spectrum)'])
+    endpoints = [('Red', '#000000', '#ff0000'), ('Green', '#000000', '#00ff00'),
+                 ('Blue', '#000000', '#0000ff'), ('Gray', '#000000', '#ffffff'),
+                 ('Spectrum', '#ff0000', '#ff0000')]
+    steps = max(2, min(80, width))
+    for kind in range(5):
+        name, start, end = endpoints[kind]
+        lines.append(f'{name}: {start} → {end}')
+        row = ''
+        for i in range(steps):
+            value = round(255 * i / (steps - 1))
+            if kind < 3:
+                rgb = tuple(value if channel == kind else 0 for channel in range(3))
+            elif kind == 3:
+                rgb = (value,) * 3
+            else:
+                # Six linear segments around the RGB color wheel.
+                position = i * 6 / (steps - 1)
+                segment = min(5, int(position))
+                fraction = round(255 * (position - segment))
+                rgb = ((255, fraction, 0), (255 - fraction, 255, 0),
+                       (0, 255, fraction), (0, 255 - fraction, 255),
+                       (fraction, 0, 255), (255, 0, 255 - fraction))[segment]
+            row += f'\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m '
+        lines.append(row + RESET)
+    lines.extend(['', 'Same color: hex → decimal RGB → truecolor swatch'])
+    for rgb in ((255, 128, 0), (95, 135, 215), (128, 128, 128)):
+        r, g, b = rgb
+        lines.append(f'{hex_color(rgb)} → RGB({r}, {g}, {b}) '
+                     f'\033[48;2;{r};{g};{b}m    {RESET}')
+    lines.extend(['', RESET + 'Default foreground/background restored.'])
+    return '\n'.join(lines) + '\n'
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    if not args.force and (not sys.stdout.isatty() or os.environ.get('TERM') == 'dumb' or 'NO_COLOR' in os.environ):
+        parser.error('color samples require a color-enabled terminal; use --force to emit escapes explicitly')
+    try:
+        sys.stdout.write(chart(shutil.get_terminal_size().columns))
+        sys.stdout.flush()
+    finally:
+        sys.stdout.write(RESET)
+        sys.stdout.flush()
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        sys.stdout = open(os.devnull, 'w')
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)

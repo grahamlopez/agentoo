@@ -77,6 +77,7 @@ than host identities. Avoid giving Git and ebuilds competing ownership of a file
 - [Firmware maintenance and diagnostics](firmware.md)
 - [Desktop preferences](desktop.md)
 - [Font diagnostics and selection](fonts.md)
+- [Repository status and terminal color tests](terminal-tools.md)
 
 Run the repository checks from a checkout:
 
