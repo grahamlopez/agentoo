@@ -218,10 +218,26 @@ require_chroot_mounts() {
   done
 }
 
+# /dev is recursively bound from the live host. Enable execution only on the
+# target's shm mount, retaining the host's noexec policy and the shared tmpfs.
+prepare_target_ram_builds() {
+  local root=$1 options
+  (( RAM_BUILDS )) || return 0
+  [[ $MODE != dry-run ]] || return 0
+  [[ $(findmnt -n -o FSTYPE --mountpoint "$root/dev/shm") == tmpfs ]] \
+    || die 'target RAM builds require /dev/shm mounted as tmpfs; use --no-ram-builds to disable'
+  options=$(findmnt -n -o OPTIONS --mountpoint "$root/dev/shm")
+  if [[ ,$options, == *,noexec,* ]]; then
+    log 'Enabling execution on target RAM build storage'
+    run_privileged mount -o remount,bind,exec,nosuid,nodev "$root/dev/shm"
+  fi
+}
+
 # Run one target phase with a clean environment and invocation-owned helper.
 run_chroot_phase() {
   local phase=$1 helper
   shift
+  prepare_target_ram_builds "$MOUNT_ROOT"
   helper=/run/$PROGRAM.$phase.$$
   run_privileged install -m 700 "$0" "$MOUNT_ROOT$helper"
   run_privileged /bin/bash -c '
@@ -251,6 +267,7 @@ target_emerge() {
   local root=$1 build_dir=/dev/shm
   shift
   (( RAM_BUILDS )) || build_dir=/var/tmp
+  prepare_target_ram_builds "$root"
   chroot "$root" /usr/bin/env PORTAGE_TMPDIR=$build_dir /usr/bin/emerge "$@"
 }
 
@@ -2415,6 +2432,14 @@ configure_wifi() (
   done
 )
 
+initialize_target_identity() {
+  local root=$1 hostname=$2
+  # firstboot normalizes --root=/ away, so --setup-machine-id cannot be used
+  # there. The dedicated initializer supports chroots and preserves valid IDs.
+  chroot "$root" /usr/bin/systemd-firstboot --hostname="$hostname"
+  chroot "$root" /usr/bin/systemd-machine-id-setup
+}
+
 firstboot_offline() {
   (( EUID == 0 )) || die 'offline first-boot setup requires root'
   local root=$MOUNT_ROOT root_uuid esp_uuid hostname=$TARGET_HOSTNAME command unit
@@ -2494,9 +2519,9 @@ EOF
   local exclude=$root/var/lib/agentoo/repository.git/info/exclude
   grep -Fxq '/etc/wpa_supplicant/wpa_supplicant-*.conf' "$exclude" ||
     printf '\n/etc/wpa_supplicant/wpa_supplicant-*.conf\n' >>"$exclude"
-  # Fresh identity is random, not inherited from the shared host /run or D-Bus.
-  # firstboot preserves already initialized values; never use --reset/--force.
-  chroot "$root" /usr/bin/systemd-firstboot --root=/ --hostname="$hostname" --setup-machine-id
+  # Preserve initialized target identity; never use --reset/--force.
+  # machine-id-setup skips the live host's /run/machine-id when chrooted.
+  initialize_target_identity "$root" "$hostname"
   # Some stage3 shadow files already have a locked entry. passwd deliberately
   # initializes it; firstboot may regard an existing entry as already configured.
   if ! awk -F: '$1 == "root" { if ($2 == "" || $2 ~ /^[!*]/) exit 1; found=1 } END { if (!found) exit 1 }' "$root/etc/shadow"; then
@@ -2563,10 +2588,11 @@ uses --target-host; generic/qemu preserves an existing hostname or prompts.
 An existing root password is preserved; a missing or locked password prompts
 for a new Gentoo root login password, including with --yes.
 
-Use the target's systemd-firstboot and systemctl through chroot with --root=/
-for offline configuration; the live host does not need systemd tools or a running
-systemd manager. Initialize identity, then apply Gentoo's enable-only presets
-before explicit offline service selection. UTC
+Use the target's tools through chroot: systemd-firstboot sets the hostname,
+systemd-machine-id-setup initializes machine identity, and systemctl --root=/
+configures offline services. The live host does not need systemd tools or a
+running systemd manager. Apply Gentoo's enable-only presets before explicit
+offline service selection. UTC
 is written to the target adjtime file; the host hardware clock is untouched.
 No live systemctl, timedatectl, hostnamectl, or daemon-reload is used.
 

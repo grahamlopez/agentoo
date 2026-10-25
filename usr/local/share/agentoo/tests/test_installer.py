@@ -102,6 +102,62 @@ resolve_cpu_flags
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('CPU detection failed', result.stderr)
 
+    def test_ram_build_noexec_is_cleared_only_on_target_mount(self):
+        result = self.run_installer(harness='''
+findmnt() {
+  [[ ${*: -1} == /mnt/gentoo/dev/shm ]] || return 99
+  case $3 in
+    FSTYPE) echo tmpfs ;;
+    OPTIONS) echo rw,nosuid,nodev,noexec,relatime ;;
+  esac
+}
+run_privileged() { printf 'operation:%s\\n' "$@"; }
+prepare_target_ram_builds /mnt/gentoo
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        operations = [line for line in result.stdout.splitlines()
+                      if line.startswith('operation:')]
+        self.assertEqual(operations, ['operation:mount', 'operation:-o',
+            'operation:remount,bind,exec,nosuid,nodev', 'operation:/mnt/gentoo/dev/shm'])
+
+    def test_ram_build_preparation_skips_executable_mount_and_disabled_modes(self):
+        for mode, ram in [('apply', 1), ('apply', 0), ('dry-run', 1)]:
+            with self.subTest(mode=mode, ram=ram):
+                result = self.run_installer(mode, str(ram), harness='''
+MODE=$1 RAM_BUILDS=$2
+findmnt() {
+  (( RAM_BUILDS )) && [[ $MODE == apply ]] || return 99
+  case $3 in FSTYPE) echo tmpfs ;; OPTIONS) echo rw,nosuid,nodev ;; esac
+}
+run_privileged() { echo 'unexpected remount' >&2; return 99; }
+prepare_target_ram_builds /mnt/gentoo
+''')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, '')
+
+    def test_target_emerge_prepares_ram_storage_before_package_operation(self):
+        result = self.run_installer(harness='''
+prepare_target_ram_builds() { printf 'prepare:%s\\n' "$1"; }
+chroot() { printf 'chroot:%s\\n' "$@"; }
+target_emerge /mnt/gentoo --pretend example/package
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            'prepare:/mnt/gentoo', 'chroot:/mnt/gentoo', 'chroot:/usr/bin/env',
+            'chroot:PORTAGE_TMPDIR=/dev/shm', 'chroot:/usr/bin/emerge',
+            'chroot:--pretend', 'chroot:example/package'])
+
+    def test_identity_initialization_uses_chroot_supported_commands(self):
+        result = self.run_installer(harness='''
+chroot() { printf 'argument:%s\\n' "$@"; }
+initialize_target_identity /mnt/gentoo flattop
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            'argument:/mnt/gentoo', 'argument:/usr/bin/systemd-firstboot',
+            'argument:--hostname=flattop', 'argument:/mnt/gentoo',
+            'argument:/usr/bin/systemd-machine-id-setup'])
+
     def test_package_policy_survives_child_reentry(self):
         harness = '''
  system_update_chroot() {

@@ -258,12 +258,17 @@ for inheritance, reset, conflict handling, and validation.
 ## Installer policy and updates
 
 Physical installation runs on the destination hardware. The live environment may
-use OpenRC: offline service masks, presets, enablement, and firstboot identity
-setup use the target stage3's systemd tools through chroot with `--root=/`.
+use OpenRC: offline service masks, presets, and enablement use the target
+stage3's `systemctl --root=/` through chroot. Hostname setup uses the target's
+`systemd-firstboot`; machine identity uses `systemd-machine-id-setup` in the
+chroot, preserving an existing valid target ID.
 Systemd is required on the installed target, not on the live host. The fixed encrypted
 Btrfs layout is `@` for root and `@home` for home; QEMU/NBD is a separately
 supported host-backed installation path. Installer package transactions use
-host-visible `/dev/shm` by default; `--no-ram-builds` selects `/var/tmp` for an invocation,
+host-visible `/dev/shm` by default. Before target package operations, the installer
+clears `noexec` on the target's inherited shm mount using a bind remount with
+`exec,nosuid,nodev`; the live host's mount policy is preserved.
+`--no-ram-builds` selects `/var/tmp` for an invocation,
 including its child chroot phases. The installer and 002 report RAM/tmpfs capacity
 without changing build policy or enforcing a capacity threshold. QEMU's booted guest uses normal disk-backed
 build storage.
