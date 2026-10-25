@@ -1608,6 +1608,19 @@ pending_config_updates() {
   done
 }
 
+resolve_cpu_flags() {
+  local flags=$TARGET_CPU_FLAGS
+  if [[ -z $flags ]]; then
+    flags=$(cpuid2cpuflags) || die 'CPU detection failed; run cpuid2cpuflags in the target chroot for details'
+    # Releases emit either a USE_EXPAND label or a complete package.use line.
+    flags=${flags#\*/\* }
+    [[ $flags == 'CPU_FLAGS_X86: '* ]] || die "CPU detection returned unexpected output: $flags"
+    flags=${flags#CPU_FLAGS_X86: }
+  fi
+  [[ $flags =~ ^[a-z0-9_]+([[:blank:]][a-z0-9_]+)*$ ]] || die 'invalid CPU flag list'
+  printf '%s\n' "$flags"
+}
+
 system_update_chroot() {
   local flags pending archive_dir
   (( EUID == 0 )) || die 'the internal system update must run as root'
@@ -1635,13 +1648,7 @@ system_update_chroot() {
   eselect news read
   install_emerge --oneshot --update "${PACKAGE_OPTIONS[@]}" sys-apps/portage
 
-  flags=$TARGET_CPU_FLAGS
-  if [[ -z $flags ]]; then
-    flags=$(cpuid2cpuflags)
-    [[ $flags == 'CPU_FLAGS_X86: '* ]] || die 'CPU detection did not return CPU_FLAGS_X86'
-    flags=${flags#CPU_FLAGS_X86: }
-  fi
-  [[ $flags =~ ^[a-z0-9_]+([[:blank:]][a-z0-9_]+)*$ ]] || die 'invalid CPU flag list'
+  flags=$(resolve_cpu_flags)
   install -d /etc/portage/package.use
   printf '*/* cpu_flags_x86: %s\n' "$flags" >/etc/portage/package.use/00cpu-flags
   printf 'Target CPU flags: %s\n' "$flags"

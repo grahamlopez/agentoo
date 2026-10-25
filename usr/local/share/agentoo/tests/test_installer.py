@@ -61,6 +61,47 @@ apply_optional_systemd_policy
                 value for unit in ['example.service', 'example.socket']
                 for value in [directory, '/usr/bin/systemctl', '--root=/', 'mask', unit]])
 
+    def test_cpu_detection_accepts_both_output_formats(self):
+        for output in ['CPU_FLAGS_X86: aes avx2 sse2',
+                       '*/* CPU_FLAGS_X86: aes avx2 sse2']:
+            with self.subTest(output=output):
+                result = self.run_installer(output, harness='''
+detected=$1
+cpuid2cpuflags() { printf '%s\\n' "$detected"; }
+resolve_cpu_flags
+''')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, 'aes avx2 sse2\n')
+
+    def test_cpu_detection_rejects_wrong_architecture_and_malformed_flags(self):
+        for output in ['CPU_FLAGS_ARM: neon', '*/* CPU_FLAGS_X86: ',
+                       '*/* CPU_FLAGS_X86: sse2; echo bad',
+                       'CPU_FLAGS_X86: sse2\nextra output']:
+            with self.subTest(output=output):
+                result = self.run_installer(output, harness='''
+detected=$1
+cpuid2cpuflags() { printf '%s\\n' "$detected"; }
+resolve_cpu_flags
+''')
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_explicit_cpu_flags_skip_detection(self):
+        result = self.run_installer(harness='''
+TARGET_CPU_FLAGS='aes sse2'
+cpuid2cpuflags() { echo 'must not detect' >&2; return 99; }
+resolve_cpu_flags
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'aes sse2\n')
+
+    def test_cpu_detection_command_failure_is_reported(self):
+        result = self.run_installer(harness='''
+cpuid2cpuflags() { return 1; }
+resolve_cpu_flags
+''')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('CPU detection failed', result.stderr)
+
     def test_package_policy_survives_child_reentry(self):
         harness = '''
  system_update_chroot() {
