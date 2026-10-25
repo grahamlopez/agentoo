@@ -17,6 +17,42 @@ case ${1:-} in
   *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
 esac
 
+# Report configured radios independently of the interfaces discovered this boot,
+# so an old name cannot disappear silently from verification. No automatic rename.
+report_wifi_configuration() {
+  local config_dir=${1:-/etc/wpa_supplicant} net_dir=${2:-/sys/class/net}
+  local config interface state
+  for config in "$config_dir"/wpa_supplicant-*.conf; do
+    [[ -s $config && -f $config && ! -L $config ]] || continue
+    interface=${config##*/wpa_supplicant-}
+    interface=${interface%.conf}
+    if [[ ! -d $net_dir/$interface/phy80211 ]]; then
+      printf '\nWARNING: Wi-Fi configuration names an absent wireless interface: %s\n' "$interface"
+      printf 'Inspect current names: ip -brief link; ls /sys/class/net/*/phy80211\n'
+      printf 'If this is the same adapter under a new name, inspect the configuration, then as root:\n'
+      printf '  systemctl disable --now %q\n' "wpa_supplicant@$interface.service"
+      printf '  mv -i -- %q /etc/wpa_supplicant/wpa_supplicant-NEW_INTERFACE.conf\n' "$config"
+      printf '  systemctl enable --now wpa_supplicant@NEW_INTERFACE.service\n'
+      printf 'Replace NEW_INTERFACE with the verified wireless interface; do not overwrite another configuration.\n'
+      continue
+    fi
+    if command -v wpa_cli >/dev/null; then
+      state=$(wpa_cli -i "$interface" status 2>/dev/null | awk -F= '$1 == "wpa_state" {print $2}') || state=
+      printf '\nWi-Fi authentication on %s: %s\n' "$interface" "${state:-status unavailable}"
+      [[ $state != COMPLETED ]] || continue
+    else
+      printf '\nWi-Fi authentication on %s: wpa_cli unavailable.\n' "$interface"
+    fi
+    printf 'Inspect authentication and service logs as root:\n'
+    printf '  wpa_cli -i %q status\n' "$interface"
+    printf '  systemctl status --no-pager %q\n' "wpa_supplicant@$interface.service"
+    printf '  journalctl -b -u %q --no-pager -n 50\n' "wpa_supplicant@$interface.service"
+    printf 'If intentionally configured but disabled, enable it with:\n'
+    printf '  systemctl enable --now %q\n' "wpa_supplicant@$interface.service"
+    printf 'Review credentials locally; do not paste passwords or full supplicant configuration into reports.\n'
+  done
+}
+
 run_diagnostics() {
 local failures=0 device interface
 check() {
@@ -44,9 +80,10 @@ for device in /sys/class/net/*; do
         printf '\nWi-Fi on %s is not configured for startup; skipping authentication check.\n' "$interface"
         continue
     fi
-    check "Wi-Fi authentication on $interface" systemctl is-active "wpa_supplicant@$interface.service"
+    check "Wi-Fi service on $interface" systemctl is-active "wpa_supplicant@$interface.service"
     show "Wi-Fi service diagnostics on $interface" systemctl status --no-pager "wpa_supplicant@$interface.service"
 done
+report_wifi_configuration
 check 'DNS resolution' timeout 15 getent hosts gentoo.org
 if command -v curl >/dev/null; then
     check 'HTTPS connectivity' curl --head --fail --max-time 20 https://www.gentoo.org/
@@ -60,6 +97,16 @@ show 'Journal boot history (packaged logging defaults)' journalctl --list-boots 
 check 'Scrub timer enabled' systemctl is-enabled gentoo-btrfs-scrub.timer
 check 'Scrub timer active' systemctl is-active gentoo-btrfs-scrub.timer
 show 'Scrub schedule' systemctl list-timers gentoo-btrfs-scrub.timer --no-pager
+printf '\n==> Hardware inventory (informational; does not gate checkpoints)\n'
+show 'PCI devices and bound drivers' lspci -nnk
+show 'ALSA sound cards' cat /proc/asound/cards
+show 'Bluetooth controllers' ls /sys/class/bluetooth
+show 'Display backlight controllers' ls /sys/class/backlight
+show 'Available sleep modes' cat /sys/power/mem_sleep
+show 'Recent kernel firmware and microcode messages' journalctl -k -b --no-pager -n 40 --grep 'firmware|microcode|sof[-_]'
+printf '\nManual hardware checks: displays/scaling, brightness keys, speakers/headphones, microphone, Bluetooth pairing, and suspend/resume.\n'
+printf 'For laptop dock tests: close the lid on external power, change monitor input, then unplug the dock/power and verify suspend; reopen and verify the panel.\n'
+printf 'Device detection does not prove these functions work; retain any warnings for follow-up.\n'
 if (( failures == 0 )); then
     if (( verify_only )); then
         printf '\nDiagnostic commands passed; synchronized time is not required in verify-only mode.\n'

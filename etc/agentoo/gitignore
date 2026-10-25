@@ -20,3 +20,6 @@ __pycache__/
 .config/agentoo/github-token
 .pi/agent/auth.json
 /etc/wpa_supplicant/wpa_supplicant-*.conf
+
+# Created locally by user setup after Graham exists.
+/etc/systemd/system/getty@tty1.service.d/autologin.conf

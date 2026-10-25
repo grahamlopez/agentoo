@@ -1,4 +1,4 @@
-# Thinktop's shared GUI base plus Intel hardware video acceleration.
+# Shared GUI base plus Intel hardware video acceleration.
 @gui-base
 media-libs/libva-intel-media-driver
 media-video/libva-utils

@@ -1,0 +1,13 @@
+# Framework Laptop (13th Gen Intel Core), Intel Core i7-1360P, 16 logical CPUs.
+# Inventory: kernel-inventory-flattop-20261024T135738Z.tar.gz (2026-10-24).
+COMMON_FLAGS="-march=raptorlake -O2 -pipe"
+CFLAGS="${COMMON_FLAGS}"
+CXXFLAGS="${COMMON_FLAGS}"
+FCFLAGS="${COMMON_FLAGS}"
+FFLAGS="${COMMON_FLAGS}"
+RUSTFLAGS="${RUSTFLAGS} -C target-cpu=raptorlake"
+
+# Match Thinktop's operator-selected build policy.
+PORTAGE_TMPDIR="/dev/shm"
+MAKEOPTS="-j12"
+VIDEO_CARDS="intel"

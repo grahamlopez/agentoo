@@ -17,7 +17,7 @@ document that limitation and choose an explicit configuration ownership model.
 User dotfiles must be real tracked files or local overrides, never deployed
 copies or symlinks. See `/usr/local/share/agentoo/docs/README.md` for the configuration philosophy.
 
-The supported initial host names are `generic`, `qemu`, `thinktop`, and `startop`.
+The supported initial host names are `generic`, `qemu`, `thinktop`, `startop`, and `flattop`.
 Startop matches Thinktop's shared-memory build directory and twelve-job build
 limit, while retaining universal CPU flags until its hardware is identified.
 The installer prints
@@ -34,6 +34,37 @@ Kernel firmware requirements use shell assignment fragments under
 then `90-${GENTOO_TARGET_HOST}` when present. `SOF_FIRMWARE` must be `yes` or
 `no`; the common default is `no`, and `thinktop` enables it for its audio DSP.
 These files describe the target hardware, independent of the installation host.
+
+## Flattop hardware baseline
+
+Flattop is a Framework Laptop (13th Gen Intel Core), board FRANMCCP06 A6,
+with an Intel Core i7-1360P (12 cores, 16 logical CPUs), Intel Raptor Lake-P
+integrated graphics, AX211 Wi-Fi, Intel USB Bluetooth, and WD NVMe storage.
+This baseline comes from `kernel-inventory-flattop-20261024T135738Z.tar.gz`,
+collected on 2026-10-24 while running `6.12.21-gentoo-lopez64`.
+
+The host Portage fragment selects Intel graphics, GCC `-march=raptorlake`,
+Rust `-C target-cpu=raptorlake`, and Thinktop's operator-selected build policy:
+`PORTAGE_TMPDIR="/dev/shm"` and `MAKEOPTS="-j12"`. The inventory does not report
+RAM capacity. Installer transactions also default to RAM-backed builds;
+`--no-ram-builds` selects disk-backed storage for an installer invocation.
+
+The captured boot used i915, iwlwifi, btusb, nvme, and snd_hda_intel, with an
+IDT 92HD95 audio codec. Keep broad linux-firmware coverage and the common
+`SOF_FIRMWARE=no` policy; a DSP-detected log line alone does not establish that
+SOF was used. Recheck audio and firmware requirements with the installed
+distribution kernel before considering a reduced firmware list.
+
+UEFI is evidenced by mounted efivarfs and EFI devices. System Secure Boot status
+was not collected (the Bluetooth controller's secure-boot message is unrelated).
+No host-specific EFI registration workaround is established. The previous
+kernel config is evidence, not an Agentoo kernel configuration to install.
+
+Before installation, confirm Secure Boot status, RAM capacity, the disk to erase,
+and normal peripherals. Validate display, Wi-Fi, Bluetooth, speakers/headphones,
+microphone, touchpad, and suspend/resume on the new kernel. The inventory reports
+s2idle and deep sleep availability but does not exercise either. Display scaling,
+fingerprint setup, and other desktop preferences remain unconfigured.
 
 ## Installed firmware selection
 
@@ -64,7 +95,14 @@ in [card 018](../../usr/local/share/agentoo/kanban/Completed/018-host-firmware-s
 after boot. It is tracked in agentoo; the installer sets its permissions to
 `0700`. Run it as root on the booted target, with package operations and
 configuration automation idle. Use `--verify-only` for diagnostics without
-cleanup, checkpoint preflight, or a checkpoint prompt. Diagnostics report time and journal history using packaged logging defaults; checkpoint preflight additionally requires synchronized time.
+cleanup, checkpoint preflight, or a checkpoint prompt. Wi-Fi reporting checks
+configured names against present radios and reports supplicant authentication
+state, with inspection and manual interface-rename guidance when needed.
+Informational hardware reports cover PCI drivers, sound cards, Bluetooth,
+backlights, sleep modes, and recent firmware messages; manual functional tests
+remain necessary and these reports do not gate checkpoint creation. Diagnostics
+report time and journal history using packaged logging defaults; checkpoint
+preflight additionally requires synchronized time.
 
 After required verification succeeds, a short plan asks whether to remove
 cached distfiles and binary packages and capture the fresh-install checkpoint. Declining leaves
@@ -89,7 +127,12 @@ primary group and supplementary `wheel,portage,video`, and prompts for an accoun
 password when none is usable and an optional SSH public key. Reruns preserve a
 usable password and resume the optional Git identity choice after interruption. Conflicting identities stop setup; existing
 home contents and supplementary groups are preserved. A fresh login is required
-for supplementary group changes to take effect. No skeleton dotfiles are copied.
+for supplementary group changes to take effect. After account setup succeeds,
+002 creates the local native tty1 autologin drop-in and reloads systemd without
+restarting tty1. Fresh installations use normal password login until then;
+autologin starts on tty1's next start or reboot. The drop-in is excluded from
+Git; reruns preserve matching policy and stop on conflicting custom content.
+No skeleton dotfiles are copied.
 After installing packages, setup reapplies Agentoo's file permission policy so
 shared Git configuration remains readable when configuring Graham's identity.
 Setup separately offers a Git identity for Agentoo commits as root, stored in
@@ -218,7 +261,8 @@ Physical installation runs on the destination hardware. The fixed encrypted
 Btrfs layout is `@` for root and `@home` for home; QEMU/NBD is a separately
 supported host-backed installation path. Installer package transactions use
 host-visible `/dev/shm` by default; `--no-ram-builds` selects `/var/tmp` for an invocation,
-including its child chroot phases. QEMU's booted guest uses normal disk-backed
+including its child chroot phases. The installer and 002 report RAM/tmpfs capacity
+without changing build policy or enforcing a capacity threshold. QEMU's booted guest uses normal disk-backed
 build storage.
 
 Handoff verifies the installation and prints cleanup/boot guidance. It leaves

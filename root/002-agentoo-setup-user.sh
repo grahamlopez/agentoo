@@ -19,6 +19,28 @@ home=/home/graham
 uid=1000
 gid=1000
 policy=/etc/sudoers.d/90-agentoo-graham
+# Native getty configuration is local setup state: checkout must not activate
+# autologin before its account exists. No custom login program is involved.
+configure_autologin() (
+  local directory=${1:-/etc/systemd/system/getty@tty1.service.d} temporary
+  getent passwd graham >/dev/null || die 'Create Graham before configuring autologin.'
+  [[ ! -L $directory && ( ! -e $directory || -d $directory ) ]] || die 'Unsafe getty drop-in directory.'
+  install -d -m 0755 "$directory"
+  temporary=$(mktemp "$directory/.autologin.XXXXXX")
+  trap 'rm -f -- "$temporary"' EXIT
+  cat >"$temporary" <<'AUTOLOGIN'
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --autologin graham --noreset --noclear - ${TERM}
+AUTOLOGIN
+  if [[ -e $directory/autologin.conf || -L $directory/autologin.conf ]]; then
+    [[ -f $directory/autologin.conf && ! -L $directory/autologin.conf ]] &&
+      cmp -s "$temporary" "$directory/autologin.conf" || die 'Existing tty1 autologin configuration differs; review it before rerunning setup.'
+  fi
+  chmod 0644 "$temporary"
+  mv -f -- "$temporary" "$directory/autologin.conf"
+)
+
 validate_identity() {
   local record actual_uid actual_gid actual_home shell
   record=$(getent passwd "$account" || true)
@@ -43,12 +65,15 @@ validate_identity() {
 }
 validate_identity
 printf '\n┌─ User setup ─────────────────────────────────────┐\n'
-printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage, video\n│ Shell         Zsh\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup; interrupted runs resume\n│ Packages      Zsh, sudo, OpenSSH, Git, video group\n└──────────────────────────────────────────────────┘\n'
+printf '│ Account       graham · UID/GID 1000:1000\n│ Home          /home/graham · no skeleton dotfiles\n│ Groups        graham (primary), wheel, portage, video\n│ Shell         Zsh\n│ tty1          Autologin after account setup (next start/reboot)\n│ Console       Account password (prompted below)\n│ Sudo          Account password required\n│ SSH           Optional public key; key-only login for Graham\n│ Git identity  Optional one-time setup; interrupted runs resume\n│ Packages      Zsh, sudo, OpenSSH, Git, video group\n└──────────────────────────────────────────────────┘\n'
 read -r -p 'Proceed with user setup? [y/N] ' answer
 [[ $answer == y || $answer == Y || $answer == yes ]] || { echo 'User setup declined; no account or package changes made.'; exit 0; }
 printf '\nPaste one SSH public key (empty to skip). Label: agentoo:graham:ssh-login\n'
 read -r -p 'SSH public key: ' public_key
 packages=(app-shells/zsh app-admin/sudo net-misc/openssh dev-vcs/git acct-group/video)
+printf '\nBuild storage selected by Portage: %s\n' "$(portageq envvar PORTAGE_TMPDIR)"
+if command -v free >/dev/null; then free -h; fi
+df -h /dev/shm
 # Show Portage's dependency/build plan and obtain its own confirmation.
 emerge --ask --noreplace "${packages[@]}"
 # Package/configuration tools can rewrite shared files with root-only modes.
@@ -178,5 +203,9 @@ if [[ -n $public_key ]]; then
 fi
 visudo -c
 sudo -l -U "$account"
+configure_autologin
+systemctl daemon-reload
+printf '\nGraham autologin is configured for tty1 on its next start or reboot.\n'
+printf 'The current tty1 session has not been restarted; tty2 retains password login.\n'
 printf '\n┌─ User setup complete ─────────────────────────────┐\n│ Console login  Account password\n│ Sudo           Account password required\n│ SSH login      %s\n└──────────────────────────────────────────────────┘\n' "$ssh_status"
 printf '\nTest a new Graham login, then run: sudo -k; sudo -i\nKeep your root console open until that succeeds.\nSupplementary group changes require a fresh login to take effect.\n'

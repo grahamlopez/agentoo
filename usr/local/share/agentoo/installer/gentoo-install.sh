@@ -107,7 +107,7 @@ the distribution kernel for direct EFI boot, then configures first boot.
 
 Required:
   --disk DEVICE              Whole block device to erase, for example /dev/nvme0n1
-  --target-host NAME         Configuration target: generic, qemu, thinktop, or startop.
+  --target-host NAME         Configuration target: generic, qemu, thinktop, startop, or flattop.
 
 Options:
   --dry-run                  Print plans and perform no changes.
@@ -435,8 +435,8 @@ parse_args() {
 validate_arguments() {
   local -a errors=()
   local option value normalized
-  [[ -n $TARGET_HOST ]] || errors+=("--target-host NAME is required; choose generic, qemu, thinktop, or startop.")
-  [[ -z $TARGET_HOST ]] || valid_target_host "$TARGET_HOST" || errors+=("--target-host '$TARGET_HOST' is unknown; choose generic, qemu, thinktop, or startop. Use --hostname for a custom machine name.")
+  [[ -n $TARGET_HOST ]] || errors+=("--target-host NAME is required; choose generic, qemu, thinktop, startop, or flattop.")
+  [[ -z $TARGET_HOST ]] || valid_target_host "$TARGET_HOST" || errors+=("--target-host '$TARGET_HOST' is unknown; choose generic, qemu, thinktop, startop, or flattop. Use --hostname for a custom machine name.")
   case $TARGET_MICROCODE in
     auto|intel|amd|none) ;;
     *) errors+=("--microcode must be auto, intel, amd, or none.") ;;
@@ -1243,7 +1243,7 @@ EOF
 
 valid_target_host() {
   case $1 in
-    generic|qemu|thinktop|startop) return 0 ;;
+    generic|qemu|thinktop|startop|flattop) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -2712,7 +2712,7 @@ main() {
     BINARY_INSTALL_OPTIONS=(--no-install-binpkgs)
   fi
   if (( INTERNAL_PORTAGE_CHROOT || INTERNAL_UPDATE_CHROOT || INTERNAL_KERNEL_CHROOT || INTERNAL_FIRSTBOOT_OFFLINE )); then
-    valid_target_host "$TARGET_HOST" || die '--target-host must explicitly select generic, qemu, thinktop, or startop'
+    valid_target_host "$TARGET_HOST" || die '--target-host must explicitly select generic, qemu, thinktop, startop, or flattop'
   else
     validate_arguments
   fi
@@ -2738,6 +2738,13 @@ main() {
   if (( INTERNAL_PORTAGE_CHROOT )); then
     portage_foundation_chroot
     return
+  fi
+  if (( RAM_BUILDS )); then
+    log 'RAM build capacity (informational; build policy is unchanged)'
+    if command -v free >/dev/null; then free -h; fi
+    df -h /dev/shm
+    printf 'Builds share this tmpfs with the live environment; available space can change.\n'
+    printf 'Use --no-ram-builds for disk-backed installer builds if needed.\n'
   fi
   if (( INSTALL_BINPKGS )); then
     log 'Package policy: prefer signed binaries with matching USE flags; otherwise build from source'

@@ -15,8 +15,15 @@ Networking remains dhcpcd and wpa_supplicant.
 
 ## Automatic login and console recovery
 
-`/etc/systemd/system/getty@tty1.service.d/autologin.conf` adds graham autologin
-to the packaged getty command. `/etc/zsh/zprofile` launches Hyprland only for
+After creating Graham, `/root/002-agentoo-setup-user.sh` writes the local native
+`/etc/systemd/system/getty@tty1.service.d/autologin.conf` drop-in and reloads
+systemd. Checkout alone leaves the packaged password-login command in effect.
+Setup does not restart tty1; autologin begins on its next start or reboot.
+The drop-in is local setup state, excluded from Git, and reruns accept matching
+content but reject conflicting custom configuration. Existing installations
+moving from the formerly tracked drop-in should rerun 002 to establish it locally.
+
+`/etc/zsh/zprofile` launches Hyprland only for
 graham (UID 1000), in an interactive login shell on tty1, with no existing
 Wayland or X display. It calls the launcher without `exec`: when it returns,
 including after a startup failure, a shell remains available. There is no retry
@@ -107,16 +114,20 @@ After the plan is satisfactory:
 emerge --ask --verbose @gui-base
 ```
 
-### Thinktop video acceleration
+### Intel video acceleration
 
-On thinktop, install `@gui-base-thinktop` instead of `@gui-base`. This set
-includes the shared base plus Intel's VA-API media driver and `vainfo`:
+There is no compatibility package set for the former `@gui-base-thinktop` name;
+replace the old set name in `/var/lib/portage/world_sets` with `gui-base-intel`
+if present, preserving the entry syntax.
+
+On the Intel graphics laptops, install `@gui-base-intel` instead of `@gui-base`.
+This set includes the shared base plus Intel's VA-API media driver and `vainfo`:
 
 ```sh
-emerge --ask --verbose @gui-base-thinktop
+emerge --ask --verbose @gui-base-intel
 ```
 
-If `@gui-base` is already recorded in world_sets, installing the thinktop set
+If `@gui-base` is already recorded in world_sets, installing the Intel set
 also records its host additions; the shared base remains included either way.
 Keep `VIDEO_CARDS="intel"`. Intel video decoding uses the separate media
 driver, rather than Mesa's `vaapi` feature. Identify the Intel render node via

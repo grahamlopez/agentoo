@@ -36,7 +36,7 @@ class InstallerTest(unittest.TestCase):
 
     def test_supported_targets_validate(self):
         # Disk validation still fails; no supported target should be rejected.
-        for target in ['generic', 'qemu', 'thinktop', 'startop']:
+        for target in ['generic', 'qemu', 'thinktop', 'startop', 'flattop']:
             result = self.run_installer('--target-host', target, '--dry-run',
                                         '--phase', 'handoff')
             self.assertIn('--disk is required', result.stderr)
