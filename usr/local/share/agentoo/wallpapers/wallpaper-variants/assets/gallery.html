@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wallpaper review</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#131318;color:#eee}
+body{max-width:1600px;margin:auto;padding:28px}header{position:sticky;top:0;background:#131318ee;backdrop-filter:blur(12px);padding:12px 0;z-index:1}
+h1{margin:0 0 8px}h2{overflow-wrap:anywhere}p{color:#c5c3cc}a{color:#c4a9ff}button,select,textarea{font:inherit;color:inherit;background:#25242e;border:1px solid #55515e;border-radius:6px;padding:9px}
+nav{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:20px}
+section{margin:38px 0 60px}article{background:#1e1d25;padding:16px;border:1px solid #35323f;border-radius:12px}article img{width:100%;height:300px;object-fit:contain;background:#09090c;margin-top:12px}
+.original{max-width:420px;max-height:220px;object-fit:contain}.generated{font-size:13px}textarea{width:100%;box-sizing:border-box;min-height:80px}.variant select{width:100%}[hidden]{display:none!important}#feedback{margin-top:16px;min-height:160px}
+</style>
+<header><h1>Wallpaper review</h1><p><!-- SUMMARY --></p>
+<nav><label>Master <select id="master" onchange="filter()"><option value="">All masters</option><!-- MASTERS --></select></label>
+<label>Target <select id="target" onchange="filter()"><option value="">All targets</option><!-- TARGETS --></select></label>
+<button onclick="feedback()">Collect feedback</button><a href="manifest.json">Manifest &amp; prompts</a></nav></header>
+<p>Click an image for its full-resolution PNG. Revision menus preview history; tell your agent which version to keep. Feedback fields remain only in this page until you copy them.</p>
+<p>Generated source dimensions are shown separately from final dimensions. Enlarged exports do not imply native-resolution generated detail.</p>
+<textarea id="feedback" hidden readonly aria-label="Collected feedback"></textarea>
+<main><!-- CARDS --></main>
+<script>
+function filter(){
+  const master=document.getElementById('master'),target=document.getElementById('target');
+  for(const section of document.querySelectorAll('section')){
+    section.hidden=!!master.value&&section.dataset.master!==master.value;
+    for(const card of section.querySelectorAll('article'))card.hidden=!!target.value&&card.dataset.target!==target.value;
+  }
+}
+function preview(select){
+  const box=select.closest('.variant'),record=JSON.parse(box.dataset.revisions)[select.value];
+  remember(box);
+  box.dataset.current=select.value;
+  box.querySelector('textarea').value=box.feedback[select.value]||'';
+  box.querySelector('img').src=record.preview;
+  box.querySelector('.full').href=record.final;
+  box.querySelector('.generated').textContent='Generated source: '+record.generated;
+  box.querySelector('.note').textContent=record.note;
+}
+function remember(box){
+  box.feedback=box.feedback||{};
+  box.feedback[box.dataset.current]=box.querySelector('textarea').value.trim();
+}
+function feedback(){
+  const notes=[];
+  for(const box of document.querySelectorAll('.variant')){
+    remember(box);
+    for(const [revision,note] of Object.entries(box.feedback)){
+      if(note)notes.push(box.dataset.id+' — v'+revision.padStart(3,'0')+': '+note);
+    }
+  }
+  const output=document.getElementById('feedback');output.hidden=false;
+  output.value=notes.length?notes.join('\n\n'):'Enter feedback beneath an image, then collect it here.';
+  output.focus();output.select();
+}
+</script>
+</html>
