@@ -1368,13 +1368,14 @@ checkout_configuration() {
 # Target-only masks precede package hooks that can create snapshot boundaries.
 # Stage3 tar extraction creates directories, not Btrfs subvolume objects.
 # Checkout supplies tmpfiles overrides; never defer this policy until first boot.
+# Use the stage3 tools with an explicit offline root; the live host may use OpenRC.
 apply_optional_systemd_policy() {
   local policy=$MOUNT_ROOT/etc/agentoo/masked-units.conf unit
   [[ -f $policy && ! -L $policy ]] || die 'checkout lacks optional systemd policy'
   while IFS= read -r unit || [[ -n $unit ]]; do
     [[ -z $unit || $unit == \#* ]] && continue
     [[ $unit =~ ^[a-zA-Z0-9][a-zA-Z0-9@_.-]*\.(service|socket)$ ]] || die "invalid masked unit: $unit"
-    run_privileged systemctl --root="$MOUNT_ROOT" mask "$unit"
+    run_privileged chroot "$MOUNT_ROOT" /usr/bin/systemctl --root=/ mask "$unit"
   done < "$policy"
 }
 
@@ -2414,7 +2415,6 @@ firstboot_offline() {
     || die 'first-boot-foundation requires the configured Gentoo target'
   grep -Fxq "GENTOO_TARGET_HOST=\"$TARGET_HOST\"" "$root/etc/agentoo/target-host" \
     || die 'target-host differs from the installed configuration'
-  for command in systemd-firstboot systemctl; do require_command "$command"; done
   [[ -x $root/usr/lib/systemd/systemd-timesyncd ]] || die 'target systemd lacks timesyncd'
   [[ -s $root/etc/kernel/cmdline ]] || die 'run kernel-foundation first'
   if [[ -z $hostname && $TARGET_HOST != generic && $TARGET_HOST != qemu ]]; then hostname=$TARGET_HOST; fi
@@ -2489,7 +2489,7 @@ EOF
     printf '\n/etc/wpa_supplicant/wpa_supplicant-*.conf\n' >>"$exclude"
   # Fresh identity is random, not inherited from the shared host /run or D-Bus.
   # firstboot preserves already initialized values; never use --reset/--force.
-  systemd-firstboot --root="$root" --hostname="$hostname" --setup-machine-id
+  chroot "$root" /usr/bin/systemd-firstboot --root=/ --hostname="$hostname" --setup-machine-id
   # Some stage3 shadow files already have a locked entry. passwd deliberately
   # initializes it; firstboot may regard an existing entry as already configured.
   if ! awk -F: '$1 == "root" { if ($2 == "" || $2 ~ /^[!*]/) exit 1; found=1 } END { if (!found) exit 1 }' "$root/etc/shadow"; then
@@ -2508,10 +2508,10 @@ EOF
     || die 'distribution kernel, initramfs or modules are missing'
   # The bootstrap resolver is a regular copy, not a link to the host's resolver.
   [[ -f $root/etc/resolv.conf && ! -L $root/etc/resolv.conf ]] || die 'target resolv.conf must be a regular file for dhcpcd'
-  systemctl --root="$root" preset-all --preset-mode=enable-only
+  chroot "$root" /usr/bin/systemctl --root=/ preset-all --preset-mode=enable-only
   for unit in NetworkManager.service systemd-networkd.service systemd-networkd.socket systemd-networkd-wait-online.service systemd-resolved.service wpa_supplicant.service iwd.service syslog-ng.service rsyslog.service syslog.service sysklogd.service metalog.service chronyd.service ntpd.service; do
     if [[ -e $root/usr/lib/systemd/system/$unit || -e $root/etc/systemd/system/$unit ]]; then
-      systemctl --root="$root" disable "$unit"
+      chroot "$root" /usr/bin/systemctl --root=/ disable "$unit"
     fi
   done
   local config interface
@@ -2520,14 +2520,14 @@ EOF
       [[ -s $config && ! -L $config ]] || continue
       interface=${config##*/wpa_supplicant-}
       interface=${interface%.conf}
-      systemctl --root="$root" enable "wpa_supplicant@$interface.service"
-      systemctl --root="$root" is-enabled "wpa_supplicant@$interface.service" >/dev/null \
+      chroot "$root" /usr/bin/systemctl --root=/ enable "wpa_supplicant@$interface.service"
+      chroot "$root" /usr/bin/systemctl --root=/ is-enabled "wpa_supplicant@$interface.service" >/dev/null \
         || die "Wi-Fi service not enabled: $interface"
     done
   fi
-  systemctl --root="$root" enable dhcpcd.service systemd-timesyncd.service gentoo-btrfs-scrub.timer
+  chroot "$root" /usr/bin/systemctl --root=/ enable dhcpcd.service systemd-timesyncd.service gentoo-btrfs-scrub.timer
   for unit in dhcpcd.service systemd-timesyncd.service gentoo-btrfs-scrub.timer; do
-    systemctl --root="$root" is-enabled "$unit" >/dev/null || die "service not enabled: $unit"
+    chroot "$root" /usr/bin/systemctl --root=/ is-enabled "$unit" >/dev/null || die "service not enabled: $unit"
   done
   chroot "$root" findmnt --verify --tab-file /etc/fstab
   awk -F: '$1 == "root" { if ($2 == "" || $2 ~ /^[!*]/) exit 1; found=1 } END { if (!found) exit 1 }' "$root/etc/shadow" \
@@ -2556,8 +2556,10 @@ uses --target-host; generic/qemu preserves an existing hostname or prompts.
 An existing root password is preserved; a missing or locked password prompts
 for a new Gentoo root login password, including with --yes.
 
-Configure identity and credentials with systemd-firstboot --root, then apply
-Gentoo's enable-only presets before explicit offline service selection. UTC
+Use the target's systemd-firstboot and systemctl through chroot with --root=/
+for offline configuration; the live host does not need systemd tools or a running
+systemd manager. Initialize identity, then apply Gentoo's enable-only presets
+before explicit offline service selection. UTC
 is written to the target adjtime file; the host hardware clock is untouched.
 No live systemctl, timedatectl, hostnamectl, or daemon-reload is used.
 

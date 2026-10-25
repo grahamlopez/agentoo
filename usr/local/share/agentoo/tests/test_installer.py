@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
 INSTALLER = Path(__file__).resolve().parents[1] / 'installer/gentoo-install.sh'
@@ -41,6 +42,24 @@ class InstallerTest(unittest.TestCase):
                                         '--phase', 'handoff')
             self.assertIn('--disk is required', result.stderr)
             self.assertNotIn('--target-host', result.stderr)
+
+    def test_offline_masks_use_target_tools_without_host_systemctl(self):
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / 'etc/agentoo/masked-units.conf'
+            policy.parent.mkdir(parents=True)
+            policy.write_text('# Offline target policy\nexample.service\nexample.socket\n')
+            result = self.run_installer(directory, harness='''
+MOUNT_ROOT=$1
+systemctl() { echo 'host systemctl must not run' >&2; return 99; }
+run_privileged() { "$@"; }
+chroot() { printf '%s\\n' "$*"; }
+apply_optional_systemd_policy
+''')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            # Global IFS joins the captured argv with newlines.
+            self.assertEqual(result.stdout.splitlines(), [
+                value for unit in ['example.service', 'example.socket']
+                for value in [directory, '/usr/bin/systemctl', '--root=/', 'mask', unit]])
 
     def test_package_policy_survives_child_reentry(self):
         harness = '''

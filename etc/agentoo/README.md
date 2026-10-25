@@ -257,7 +257,10 @@ for inheritance, reset, conflict handling, and validation.
 
 ## Installer policy and updates
 
-Physical installation runs on the destination hardware. The fixed encrypted
+Physical installation runs on the destination hardware. The live environment may
+use OpenRC: offline service masks, presets, enablement, and firstboot identity
+setup use the target stage3's systemd tools through chroot with `--root=/`.
+Systemd is required on the installed target, not on the live host. The fixed encrypted
 Btrfs layout is `@` for root and `@home` for home; QEMU/NBD is a separately
 supported host-backed installation path. Installer package transactions use
 host-visible `/dev/shm` by default; `--no-ram-builds` selects `/var/tmp` for an invocation,
