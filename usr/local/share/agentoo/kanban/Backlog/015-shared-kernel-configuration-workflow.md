@@ -1,7 +1,7 @@
 # Develop the shared kernel configuration workflow
 
 Created: 2026-10-14
-Status: Open
+Status: Backlog
 
 ## Objective and configuration model
 
@@ -28,6 +28,147 @@ Do not commit to a directory layout or command interface before exercising the
 operations. Keep credentials and generated artifacts out of Git. Record host
 embedding inputs separately from shared configuration; settle their storage
 format while exercising the build procedure.
+
+## Proposed first increment: rebuild an existing configured kernel
+
+Recorded: 2026-10-25. Deferred proposal, not an approved implementation contract.
+The operator wants to start with carrying an already-configured custom kernel
+forward when Portage supplies a newer source version. Keep the broader workflow
+below as later work; it is not a prerequisite for this increment. Recording this
+outline does not authorize implementation, builds, installation or firmware changes.
+
+The operator's original sketch uses `configure`, `build` and `install`, a build
+label, `/usr/src/linux` as the default source, an optional genkernel/custom
+initramfs choice, and `/boot/EFI/Gentoo` as the default installation destination.
+It requests config backups and differences, release naming without `-gentoo`,
+and optional EFI registration that puts the candidate first while preserving
+other entries and their relative order. The manual starting procedure is in
+[distribution-config build notes](../../docs/kernel-baseline-build.md).
+
+The interface and steps below are suggestions from the subsequent review, not
+settled choices. In particular, explicit config/build selection, migration
+interaction, source-preserving release overrides and module rejection need to
+be confirmed through the actual procedure.
+
+### Provisional interface
+
+```text
+agentoo kernel configure <build_label>
+    --config FILE
+    --source-location DIR       default: /usr/src/linux
+    --build-dir DIR             default: ~/local/agentoo-build/kernel/<version>-<label>
+    --accept-defaults
+    --no-input
+
+agentoo kernel build
+    --build-dir DIR
+    -j, --jobs N                default: available CPU count
+    --[no-]genkernel             default: enabled
+    --initramfs FILE             requires --no-genkernel
+    --no-input
+
+agentoo kernel install
+    --build-dir DIR
+    --dest DIR                  default: /boot/EFI/Gentoo
+    --[no-]efi-add-entry         default: disabled
+    --no-input
+```
+
+`--[no-]` denotes paired positive/negative options. The proposal requires
+`--config` for configure and `--build-dir` for build/install rather than selecting
+an implicit latest build. Record the resolved source path, label, configuration
+inputs, effective build flags and completed artifact identity in the workspace;
+the metadata format is undecided.
+
+### Configure: carry the existing configuration forward
+
+1. Validate label, input config, source and destination before effects. Resolve
+   the source symlink to its concrete versioned tree.
+2. Create a separate build directory, preserve the input config and back up an
+   existing destination `.config` before replacement. Start from the supplied
+   complete config rather than generating `defconfig` first.
+3. Initially require `CONFIG_MODULES=n` with no `=m` selections; reject rather
+   than silently convert a module-enabled input. This is a proposed limitation,
+   not a universal host requirement: [bequiet](026-bequiet-kernel-v0.3-followups.md)
+   has an operator-managed module exception for NVIDIA.
+4. Preserve embedded command line, firmware choices and other existing settings.
+   Display `/proc/cmdline` alongside the embedded command line for reference;
+   do not automatically replace target boot inputs with the running host's inputs.
+5. Set `CONFIG_LOCALVERSION="-<build_label>"`. Investigate passing `EXTRAVERSION=`
+   consistently to make instead of editing Portage's source Makefile. Verify the
+   complete resulting release through `make kernelrelease`, including any other
+   local-version contributions.
+6. List new symbols and use `oldconfig` for explicit choices. Proposed
+   `--accept-defaults` selects `olddefconfig`; `--no-input` fails if choices
+   remain without that explicit acceptance. Report removed/changed settings too.
+7. Show differences against the supplied config and any previous destination
+   config, recheck firm requirements, and save the resolved configuration.
+
+### Build: produce the self-contained EFI kernel
+
+1. Validate recorded source/config identity, tools and embedding inputs. Detect
+   missing or changed sources before reuse. Define the identity checks during
+   implementation rather than assuming a versioned path alone is sufficient.
+2. Record effective flags, including explicitly supplied `KCFLAGS`; do not replay
+   historical `-march=native` automatically. Use portable flags for shared targets.
+3. In genkernel mode, clear the old embedded initramfs path for the preliminary
+   build, build that kernel, then generate a fresh uncompressed initramfs in the
+   workspace. Retain the prior config and inputs for failure recovery.
+4. Follow the module-free manual genkernel policy: LUKS support, no ramdisk
+   modules, no firmware installation, no boot mounting and no bootloader changes.
+5. In custom mode, require `--no-genkernel --initramfs FILE` and copy the supplied
+   archive into the workspace. Validate its suitability for the target; selecting
+   a file does not establish successful root unlock or boot.
+6. Set `CONFIG_INITRAMFS_SOURCE` to the workspace archive, resolve the config,
+   review unexpected changes and build the final kernel. No `modules_install`
+   step is needed for this initial module-free scope.
+7. Verify release metadata, EFI-stub support, embedded-initramfs configuration
+   and module-free state. Record final config/image hashes and return the image
+   path. Static checks do not establish successful boot or functional acceptance.
+
+### Install: copy the artifact and optionally register it
+
+1. Validate the completed build and recorded image identity before escalation.
+2. Inspect the destination mount and EFI System Partition. The proposal permits
+   mounting `/boot` through its existing mount configuration when necessary;
+   confirm mount handling and destination validation during implementation.
+3. Install `kernel-<release>.efi`, preserving any existing different image and
+   keeping the known-working distribution/custom fallback available.
+4. Derive disk, partition and firmware loader path from the actual ESP.
+5. With registration disabled, print the exact `efibootmgr` registration command.
+6. With `--efi-add-entry`, create or reuse the matching entry, put it first while
+   preserving every other entry's relative order, and print `efibootmgr -u`.
+   Define duplicate matching and partial-failure reporting before implementation.
+
+### Deferred work and open decisions
+
+- Shared-config generation and menuconfig capture remain in this card's broader
+  scope. Dist-config conversion and kernel reduction are outside this increment.
+- The original sketch's `--[no-]allow-modules` conflicts with its requirement to
+  remove all module-valued symbols regardless of that option. Resolve that
+  meaning before adding module support; do not imply bequiet is supported by the
+  proposed module-free implementation.
+- Defer the sketched `--dual-boot-sign`. Signing with a trusted private key and
+  retaining Microsoft trust for dual boot are separate operations. Settle explicit
+  signing inputs/tool integration before offering a signing interface.
+- Confirm config replacement/backup behavior, migration review, workspace layout,
+  genkernel privilege requirements, artifact replacement and ESP handling through
+  manual use. Do not introduce automatic source adoption or rebooting.
+- Follow the established [CLI policy](../../lib/cli.py): standalone
+  `agentoo-kernel`, one parser for execution/help/completion, safe help, no implicit
+  option abbreviations, validation before effects/escalation, results on stdout,
+  operational output on stderr and noninteractive authorization for `--no-input`.
+  Add help/completion and focused verification with any eventual implementation.
+
+### Related work
+
+- [Shared v0.3 follow-ups](027-shared-kernel-v0.3-followups.md) and its linked host
+  cards own runtime validation and host findings; this card owns workflow tooling.
+- [Initramfs keyboard policy](020-initramfs-keyboard-policy.md) remains separate:
+  regenerating the existing genkernel image does not itself fix keyboard policy.
+- [Distribution-kernel EFI registration](008-automatic-efi-registration.md)
+  explicitly excludes this custom-kernel installation path. Share findings where
+  useful without expanding that card's scope.
 
 ## Generation and build state
 
