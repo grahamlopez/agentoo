@@ -128,3 +128,90 @@ genkernel \
     --initramfs-filename="initramfs-6.18.54-${build_label}.cpio" \
     --luks \
     initramfs
+
+
+# Signing images for Secure Boot
+
+
+## 1. Install tools and generate keys:
+
+```
+# Enable these USE flags persistently:
+# needed for bundling dist kernel with external initramfs
+echo 'sys-apps/systemd boot kernel-install ukify' |
+  sudo tee /etc/portage/package.use/secureboot
+
+sudo emerge --ask --changed-use sys-apps/systemd app-crypt/sbctl
+sudo sbctl create-keys
+sudo sbctl status
+```
+
+Back up /var/lib/sbctl securely offline before proceeding; it contains private signing keys. Also preserve your current firmware keys/settings and, if Windows uses BitLocker, have its recovery key available.
+
+## 2. Create separate signed images, preserving the existing boot files:
+
+```
+sudo mount -o remount,rw /boot
+
+sudo cp /boot/EFI/Gentoo/kernel-6.18.57-agentoo-v0.3.efi \
+  /boot/EFI/Gentoo/agentoo-v0.3-signed.efi
+
+sudo sbctl sign --save /boot/EFI/Gentoo/agentoo-v0.3-signed.efi
+
+sudo /usr/lib/systemd/ukify build \
+  --linux=/boot/EFI/Gentoo/kernel-6.18.57-gentoo-dist-bin.efi \
+  --initrd=/boot/EFI/Gentoo/initramfs-6.18.57-gentoo-dist-bin.img \
+  --cmdline=@/etc/kernel/cmdline \
+  --os-release=@/etc/os-release \
+  --uname=6.18.57-gentoo-dist-bin \
+  --output=/boot/EFI/Gentoo/gentoo-dist-signed.efi
+
+sudo sbctl sign --save /boot/EFI/Gentoo/gentoo-dist-signed.efi
+
+sudo sbverify --cert /var/lib/sbctl/keys/db/db.pem \
+  /boot/EFI/Gentoo/agentoo-v0.3-signed.efi
+sudo sbverify --cert /var/lib/sbctl/keys/db/db.pem \
+  /boot/EFI/Gentoo/gentoo-dist-signed.efi
+```
+
+## 3. Register both images without changing BootOrder:
+
+```
+sudo efibootmgr --create-only --disk /dev/nvme1n1 --part 1 \
+  --label 'agentoo v0.3 signed' \
+  --loader '\EFI\Gentoo\agentoo-v0.3-signed.efi'
+
+sudo efibootmgr --create-only --disk /dev/nvme1n1 --part 1 \
+  --label 'Gentoo distribution signed UKI' \
+  --loader '\EFI\Gentoo\gentoo-dist-signed.efi'
+
+sudo efibootmgr
+sync
+sudo mount -o remount,ro /boot
+```
+
+Use the firmware boot menu to test each new entry while Secure Boot is still disabled, including unlocking the encrypted root filesystem.
+
+## 4. Enter firmware setup, switch Secure Boot into Setup Mode using its custom-key controls, and leave Secure Boot disabled for the enrollment boot. Disabling Secure Boot alone does not enter Setup Mode.
+
+Back in Linux:
+
+```
+sudo sbctl status                  # Confirm Setup Mode is enabled
+sudo sbctl enroll-keys --microsoft --firmware-builtin
+sudo sbctl status
+```
+
+Including Microsoft and firmware-provided certificates retains trust needed by Windows and firmware option ROMs. If enrollment reports a safety error, investigate it rather than bypassing it. sbctl documentation (https://github.com/Foxboron/sbctl/blob/master/docs/sbctl.8.txt)
+
+## 5. Enable Secure Boot in firmware without restoring factory keys, then test both signed entries again:
+
+```
+sudo sbctl status                  # Expect Secure Boot enabled
+uname -r                           # Confirm the selected kernel
+cat /sys/kernel/security/lockdown  # Inspect kernel lockdown separately
+```
+
+Once both work, make the signed v0.3 entry the normal first boot choice.
+
+For future updates: sign each new custom image; rebuild and sign the fallback UKI whenever its kernel, initramfs, or command line changes. Your current installkernel configuration does neither automatically. sbctl sign-all can re-sign registered files, but does not rebuild the fallback UKI.
