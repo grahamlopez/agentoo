@@ -54,23 +54,24 @@ be confirmed through the actual procedure.
 
 ```text
 agentoo kernel configure <build_label>
-    --config FILE
+    --config FILE               default: take from running kernel
     --source-location DIR       default: /usr/src/linux
-    --build-dir DIR             default: ~/local/agentoo-build/kernel/<version>-<label>
-    --accept-defaults
+    --build-dir DIR             default: /dev/shm/<derived-kernel-version>
+    --[no-]accept-defaults      default: no
     --no-input
 
 agentoo kernel build
-    --build-dir DIR
+    --build-dir DIR             default: /dev/shm/<derived-kernel-version>
     -j, --jobs N                default: available CPU count
-    --[no-]genkernel             default: enabled
-    --initramfs FILE             requires --no-genkernel
+    --[no-]genkernel            default: enabled
+    --initramfs FILE            requires --no-genkernel
     --no-input
 
 agentoo kernel install
-    --build-dir DIR
+    --build-dir DIR             default: /dev/shm/<derived-kernel-version>
     --dest DIR                  default: /boot/EFI/Gentoo
-    --[no-]efi-add-entry         default: disabled
+    --[no-]efi-add-entry        default: disabled
+    --[no-]secureboot-sign      default: no
     --no-input
 ```
 
@@ -79,6 +80,118 @@ agentoo kernel install
 an implicit latest build. Record the resolved source path, label, configuration
 inputs, effective build flags and completed artifact identity in the workspace;
 the metadata format is undecided.
+
+### another provisional interface and proposed behavior
+
+```
+agentoo kernel config --label agentoo-v0.4 --config ../path/to/.config --sources /usr/src/linux
+```
+
+- remove EXTRAVERSION from /usr/src/linux/Makefile
+- build_label="agentoo-baseline"
+- kernel_src=/usr/src/linux
+- kernel_version_number=[deduced from upstream version]
+- kernel_build=[build_dir]/kernel/${kernel_version_number}-${build_label}"
+- genkernel_build=[build_dir]/genkernel/${kernel_version_number}-${build_label}"
+- export KCFLAGS="-march=native -O2 -pipe"
+- mkdir -p "${kernel_build}"
+- mkdir -p "${genkernel_build}"/{cache,tmp,output,modules}
+
+- require build directory to be empty. error/exit with useful message
+- print derived configuration
+
+```
+old config:       /path/to/old/config / 'running /proc/config.gz'
+kernel sources:   /path/to/kernel/sources
+build directory:  /path/to/build/directory
+kernel version:   ${kernel_version_number}-${build_label}
+
+proceed [Y/n]?
+```
+
+- make oldconfig
+- update built-in cmdline with new upstream version and label
+
+- print configured summary
+
+```
+changes from old config:
+- SYMBOL_1=[y/n/m]
+- SYMBOL_2=[y/n/m]
+
+save copy of config? [y/N] (if 'y', ask for destination path to save '6.18.57-agentoo-v0.4_config')
+```
+
+
+```
+agentoo kernel build
+```
+
+- construct build environment and settings from flags and defaults
+- warn if build directory doesn't look correctly prepared and matches with supplied options/defaults. print message with finding details that produced warning
+- print build configuration
+
+```
+KCFLAGS="-march-native -O2 -pipe"
+kernel config:    /path/to/config
+kernel sources:   /path/to/kernel/sources
+build directory:  /path/to/build/directory
+kernel version:   6.18.57-agentoo-v0.4
+
+proceed [Y/n]?
+```
+
+- initial build without initramfs
+    - source/scripts/config --file .config --set-str INITRAMFS_SOURCE ""
+    - make -jN
+    - sudo make modules_install INSTALL_MOD_STRIP=1
+    - make -C "${kernel_build}" INSTALL_MOD_PATH="${genkernel_build}/modules" INSTALL_MOD_STRIP=1 modules_install
+- genkernel \
+    --kerneldir=/usr/src/linux-6.18.54-gentoo \
+    --kernel-outputdir="${kernel_build}" \
+    --cachedir="${genkernel_build}/cache" \
+    --tmpdir="${genkernel_build}/tmp" \
+    --logfile="${genkernel_build}/genkernel.log" \
+    --install \
+    --bootdir="${genkernel_build}/output" \
+    --no-ramdisk-modules \
+    --no-mountboot \
+    --no-bootloader \
+    --no-firmware-install \
+    --no-compress-initramfs \
+    --initramfs-filename="initramfs-6.18.54-${build_label}.cpio" \
+    --luks \
+    initramfs
+- rebuild with initramfs
+    - source/scripts/config --file .config --set-str INITRAMFS_SOURCE "${genkernel_build}/output/initramfs-6.18.54-${build_label}.cpio"
+    - make olddefconfig
+    - make -jN
+
+```
+agentoo kernel install
+```
+
+- construct build environment and settings from flags and defaults
+- warn if build directory doesn't look correctly prepared and matches with supplied options/defaults. print message with finding details that produced warning
+
+- print install proposal
+
+```
+kernel image:             /path/to/bzImage
+install destination:      /boot/EFI/Gentoo/kernel-${kernel_version}
+secureboot sign:          yes/no
+create efi entry:         yes/no
+```
+
+- sudo mount /boot if needed
+- sudo cp arch/x86/boot/bzImage "/boot/EFI/Gentoo/kernel-6.18.54-${build_label}.efi"
+  
+- kernel_esp=$(findmnt -rn -o SOURCE --mountpoint /boot)
+- kernel_esp_disk="/dev/$(lsblk -dnro PKNAME "${kernel_esp}")"
+- kernel_esp_part=$(lsblk -dnro PARTN "${kernel_esp}")
+- lsblk -o PATH,TYPE,FSTYPE,PARTUUID,MOUNTPOINTS "${kernel_esp_disk}"
+  
+- sudo efibootmgr --create --disk "${kernel_esp_disk}" --part "${kernel_esp_part}" --label "${build_label}-6.18.54" --loader "\\EFI\\Gentoo\\kernel-6.18.54-${build_label}.efi"
 
 ### Configure: carry the existing configuration forward
 
