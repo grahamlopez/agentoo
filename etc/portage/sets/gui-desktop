@@ -17,3 +17,6 @@ app-shells/fzf
 media-fonts/unifont
 media-fonts/noto-emoji
 media-fonts/symbols-nerd-font
+# User programs
+app-misc/keyd
+www-client/firefox-bin
