@@ -1,4 +1,8 @@
 -- Shared defaults for Hyprland 0.56.2. No host-specific workarounds.
+-- Adwaita is an XCursor theme; Hyprland falls back to XCursor for it.
+hl.env("XCURSOR_THEME", "Adwaita")
+hl.env("XCURSOR_SIZE", "24")
+
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 
 -- Restore on startup and after monitor geometry changes; ordinary reloads
@@ -33,6 +37,9 @@ hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"))
 -- Capture text once per session; configuration reloads do not start watchers.
 hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
+    hl.exec_cmd("hyprctl setcursor Adwaita 24")
+    hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-theme 'Adwaita'")
+    hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-size 24")
 end)
 hl.bind("CTRL + 0", function()
     for _, window in ipairs(hl.get_windows()) do

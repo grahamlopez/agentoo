@@ -1,6 +1,8 @@
 # Minimal Hyprland base
 
-The base selects Hyprland from hyproverlay, Kitty, PipeWire, and WirePlumber.
+The base selects Hyprland from hyproverlay, Adwaita icons and cursors, Kitty,
+PipeWire, and WirePlumber. The shared Hyprland configuration uses Adwaita
+cursors at size 24, including the GTK cursor preference.
 Hyprland and its listed overlay dependencies accept testing release updates
 without exact version pins. Unkeyworded live ebuilds and package masks remain
 excluded by the normal Portage policy. Preview updates after syncing; new
