@@ -42,12 +42,18 @@ def build_parser():
     actions.add_parser('clear', help='Forget the image and stop the managed wallpaper',
                        description='Forget the selected image and stop the managed wallpaper.')
     transparency = commands.add_parser('transparency', help='Show or change window transparency',
-        description='Without an action, show current transparency settings.',
+        description='Without an action, show current transparency settings.\n'
+                    '--window selects the category to show, set, or clear.\n'
+                    'It may appear before or after the action.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='Kitty uses background-only transparency; other windows fade text too.\n'
                'Floating windows, dialogs, fullscreen windows and the Kitty dropdown are included.\n'
                'Panels, menus and notifications are excluded.\n'
-               'Kitty processes started before integration was installed need a restart.')
+               'Kitty processes started before integration was installed need a restart.\n\n'
+               'Examples:\n'
+               '  agentoo desktop transparency --window kitty\n'
+               '  agentoo desktop transparency set --window kitty --focused 5\n'
+               '  agentoo desktop transparency clear --window kitty')
     window_option(transparency)
     actions = transparency.add_subparsers(dest='action')
     setter = actions.add_parser('set', help='Apply and remember transparency settings',

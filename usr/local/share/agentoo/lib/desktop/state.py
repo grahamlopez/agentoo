@@ -60,9 +60,12 @@ def file_option(parser, *, required=False):
 
 
 def window_option(parser, *, child=False):
+    help_text = 'Window category (default: all). other excludes Kitty and browsers.'
+    if child:
+        help_text += ' --window may also be supplied before the action.'
     parser.add_argument('--window', choices=WINDOW_GROUPS,
                         default=argparse.SUPPRESS if child else 'all',
-                        help='Window category; other excludes kitty and browsers (default: all)')
+                        help=help_text)
 
 
 def imported(path, command=None):

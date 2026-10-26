@@ -40,9 +40,16 @@ def integer(value, name):
 
 def add_parser(commands):
     feature = commands.add_parser('blur', help='Show or change window background blur',
-        description='Without an action, show current blur settings. Blur is off by default.',
-        epilog='Blur does not change transparency. Applications must have transparent content and permit compositor blur. '
-               'Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur')
+        description='Without an action, show current blur settings. Blur is off by default.\n'
+                    '--window selects the category to show, set, or clear.\n'
+                    'It may appear before or after the action.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Blur does not change transparency. Applications must have transparent content and permit compositor blur.\n'
+               'Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur\n\n'
+               'Examples:\n'
+               '  agentoo desktop blur --window kitty\n'
+               '  agentoo desktop blur set --window kitty --focused on\n'
+               '  agentoo desktop blur clear --window kitty')
     from desktop.state import file_option, window_option
     window_option(feature)
     feature.add_argument('--diagnose', action='store_true',
