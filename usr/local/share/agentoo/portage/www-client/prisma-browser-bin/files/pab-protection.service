@@ -1,0 +1,26 @@
+[Unit]
+Description=Prisma Access Browser Protection Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@PYTHON@ /opt/paloaltonetworks/pab/linux_protector.py
+Restart=always
+RestartSec=10
+User=root
+Group=root
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/pab /var/log/pab
+RuntimeDirectory=pab
+RuntimeDirectoryMode=755
+LogsDirectory=pab
+LogsDirectoryMode=700
+Environment=PYTHONUNBUFFERED=1
+Environment=BPF_CLANG_PATH=/usr/bin/clang
+
+[Install]
+WantedBy=multi-user.target

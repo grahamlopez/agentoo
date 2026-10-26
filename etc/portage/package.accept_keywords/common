@@ -19,6 +19,9 @@ media-fonts/liberation-mono-nerd::agentoo ~amd64 ~arm64
 # Optional ChatGPT desktop binary; not selected by a package set.
 app-misc/chatgpt-desktop-bin::agentoo ~amd64
 
+# Optional enterprise browser; not selected by a package set.
+www-client/prisma-browser-bin::agentoo ~amd64
+
 # Optional first-party cloud clients; configuration remains user-managed.
 net-misc/proton-drive-cli-bin::agentoo ~amd64 ~arm64
 net-misc/pcloud-drive-bin::agentoo ~amd64

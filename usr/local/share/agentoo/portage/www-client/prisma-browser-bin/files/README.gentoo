@@ -1,0 +1,45 @@
+Prisma Browser on Gentoo
+=======================
+This is an unofficial repackaging of Palo Alto Networks' amd64 Debian binary.
+Gentoo is not an upstream-supported platform. An organization account and
+applicable license/policy are needed for managed use.
+
+Launch prisma-access-browser as your regular desktop user. For native Wayland,
+try --ozone-platform=wayland. Verify chrome://sandbox. Never disable sandboxing.
+Portage owns upgrades; Debian/APT repository and cron integration is omitted.
+User profiles are preserved on removal.
+
+Protection (optional USE=protection)
+-----------------------------------
+This installs the upstream Python/eBPF components and a systemd unit, but does
+not enable or start it. Policies requiring protection can prevent browser launch
+until it is working. Enable with:
+    systemctl enable --now pab-protection
+Inspect:
+    journalctl -u pab-protection
+
+BCC needs build headers for the running kernel, BPF syscall/JIT/events, kprobes,
+tracepoints and the kernel functions used by the vendor filters. For the LSM
+filter, CONFIG_BPF_LSM=y and bpf in /sys/kernel/security/lsm are needed. Upstream
+also implements a kprobe fallback. Loading successfully and satisfying your
+organization's policy must be verified on the actual running kernel.
+
+No boot parameters, GRUB files, AppArmor policy, default browser preferences,
+or service activation are changed by this ebuild. The service needs host access
+to BPF and the browser processes; do not isolate its network namespace because
+its browser handshake uses an abstract Unix socket.
+
+Device trust
+------------
+The upstream optional chrome-management-service setup is not enabled here.
+It requires a chromemgmt group, setgid service binary, and a group-writable
+/etc/pab/policies/enrollment/DeviceTrustSigningKey. Do not assume device-trust
+policies work until enrollment is integrated and tested with your administrator.
+
+Validation status
+-----------------
+Packaging and library checks do not establish that enterprise sign-in, device
+trust, DRM, screen sharing, or protection work. These need desktop and tenant
+validation. The protection service is optional to avoid pulling BCC/LLVM into
+installations whose policies do not require it; disabling the flag does not
+bypass a policy enforced by the browser.

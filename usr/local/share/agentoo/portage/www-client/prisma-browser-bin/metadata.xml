@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <use>
+    <flag name="protection">Install the optional BCC/eBPF protection service and its Python dependencies (requires systemd)</flag>
+  </use>
+</pkgmetadata>
