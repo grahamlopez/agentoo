@@ -75,3 +75,31 @@ structure and Caps Lock -> Control entry were verified. Archive size is about
 13 MiB uncompressed. The user subsequently ran the full disposable storage smoke test successfully
 on the host: LUKS2 unlock without udev, mapping-node creation, discards and
 read-only Btrfs `@` mounting passed. Boot acceptance remains pending.
+
+## Direct mapper fstab experiment
+
+The first boot reached real-root systemd, but `/home` timed out waiting for its
+filesystem UUID. This branch tests direct mapper paths without the runtime udev
+handoff rule. The initramfs already opens the container as `root`, so the existing
+EFI image can be reused. Change the source of both Btrfs entries in the live
+`/etc/fstab` from the filesystem UUID to `/dev/mapper/root`, preserving all mount
+options. Keep `/boot` on its existing FAT UUID:
+
+```fstab
+/dev/mapper/root / btrfs noatime,compress=zstd:1,subvol=@ 0 0
+/dev/mapper/root /home btrfs noatime,compress=zstd:1,subvol=@home 0 0
+UUID=ECE7-96EF /boot vfat fmask=0133,dmask=0022 0 2
+```
+
+Back up the live fstab before applying the change; restore that backup to revert.
+The live fstab is installer-generated and is not tracked in this repository, so
+a Git deployment alone does not apply this experiment. No installer defaults or
+historical kernel configurations are changed.
+
+The installed systemd fstab generator was tested against both versions in a
+private mount namespace. The generated `home.mount` changes its source from the
+UUID path to `/dev/mapper/root` and its block-device ordering target accordingly.
+This confirms configuration generation, not device readiness. A full boot with
+no handoff rule must still verify that systemd accepts the mapper device and
+mounts `/home`. After boot, check `findmnt /` and `findmnt /home`,
+`systemctl status home.mount`, and `systemctl --failed`.
