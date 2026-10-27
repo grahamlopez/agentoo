@@ -42,6 +42,18 @@ config = (out / '.config').read_text()
 label = re.search(r'^CONFIG_LOCALVERSION="(.*)"$', config, re.M)[1]
 release = '6.18.57' + label
 if 'kernelrelease' in a: print(release)
+elif 'modules_install' in a:
+    prefix = pathlib.Path(next(x.split('=', 1)[1] for x in a if x.startswith('INSTALL_MOD_PATH=')))
+    modules = prefix / 'lib/modules' / release
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / 'modules.builtin').write_text('built-in metadata')
+    (modules / 'modules.builtin.modinfo').write_text('built-in modinfo')
+    (modules / 'build').symlink_to(out)
+    (modules / 'source').symlink_to(pathlib.Path(a[a.index('-C') + 1]))
+    if 'CONFIG_MODULES=y' in config:
+        (modules / 'modules.order').write_text('kernel/drivers/example.ko')
+        (modules / 'kernel/drivers').mkdir(parents=True)
+        (modules / 'kernel/drivers/example.ko').write_text('compiled module')
 elif any(x.startswith('-j') for x in a):
     (out / 'arch/x86/boot').mkdir(parents=True, exist_ok=True)
     (out / 'arch/x86/boot/bzImage').write_text(config)
@@ -65,6 +77,14 @@ if a[0] == '-n': a = a[1:]
 if a[0] == '--': a = a[1:]
 os.execvp(a[0], a)
 ''')
+        self.tool('depmod', '''
+import json, os, sys
+with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['depmod', *sys.argv[1:]]) + '\\n')
+sys.exit(1 if os.environ.get('FAIL_DEPMOD') else 0)
+''')
+        modules_root = patch.object(kernel, 'MODULES_ROOT', self.root / 'system-modules')
+        modules_root.start()
+        self.addCleanup(modules_root.stop)
         self.tool('minimal-initramfs', '''
 import json, os, pathlib, sys
 with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['minimal-initramfs', *sys.argv[1:]]) + '\\n')
@@ -165,7 +185,7 @@ p.write_text(text)
         calls = self.calls()
         self.assertFalse(any('genkernel' in call for call in calls if call[0] == 'sudo'))
         installs = [call for call in calls if call[0] == 'make' and 'modules_install' in call]
-        self.assertEqual(len(installs), 4)
+        self.assertEqual(len(installs), 2)
         self.assertEqual(sum(any(x.startswith('INSTALL_MOD_PATH=') for x in call) for call in installs), 2)
         self.assertTrue(all('--no-ramdisk-modules' in call for call in calls if call[0] == 'genkernel'))
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_CMDLINE'], '"root=UUID=test ro"')
@@ -178,6 +198,8 @@ p.write_text(text)
         self.invoke('build', '--label', 'test', '--yes')
         archive = self.work / 'initramfs/6.18.57-test/initramfs.cpio'
         self.assertEqual(archive.read_text(), 'fresh minimal archive')
+        data = kernel.load(self.work, 'test', completed=True)
+        (kernel.staged_modules(self.work, data) / 'stale.ko').write_text('obsolete')
         archive.write_text('stale')
         self.invoke('build', '--label', 'test', '--no-genkernel', '--yes')
         self.assertEqual(archive.read_text(), 'fresh minimal archive')
@@ -185,6 +207,7 @@ p.write_text(text)
         output, _ = kernel.paths(self.work, data)
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_INITRAMFS_SOURCE'], json.dumps(str(archive)))
         self.assertFalse(any(call[0] == 'genkernel' for call in self.calls()))
+        self.assertFalse((kernel.staged_modules(self.work, data) / 'stale.ko').exists())
         self.assertEqual(len([call for call in self.calls() if call[0] == 'minimal-initramfs']), 2)
 
     def test_minimal_builder_rejects_module_kernel_before_compilation(self):
@@ -202,11 +225,71 @@ p.write_text(text)
         archive.write_text('custom input')
         self.invoke('build', '--label', 'test', '--initramfs', str(archive), '--yes')
         self.assertFalse(any(call[0] in ('genkernel', 'minimal-initramfs') for call in self.calls()))
-        self.assertEqual(len([call for call in self.calls() if call[0] == 'make' and 'modules_install' in call]), 2)
+        self.assertEqual(len([call for call in self.calls() if call[0] == 'make' and 'modules_install' in call]), 1)
         data = kernel.load(self.work, 'test', completed=True)
         output, gen = kernel.paths(self.work, data)
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_MODULES'], 'y')
         self.assertEqual((gen / 'output/initramfs-6.18.57-test.cpio').read_text(), 'custom input')
+
+    def test_module_build_stays_unprivileged_and_install_uses_staged_tree(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+        self.prepare()
+        start = len(self.calls())
+        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+        self.assertFalse(any(call[0] == 'sudo' for call in self.calls()[start:]))
+        self.assertFalse(kernel.MODULES_ROOT.exists())
+        genkernel_calls = [call for call in self.calls()[start:] if call[0] == 'genkernel']
+        self.assertEqual(len(genkernel_calls), 1)
+        self.assertIn('--ramdisk-modules', genkernel_calls[0])
+        data = kernel.load(self.work, 'test', completed=True)
+        modules = kernel.staged_modules(self.work, data)
+        self.assertEqual((modules / 'kernel/drivers/example.ko').read_text(), 'compiled module')
+        self.assertIn('--kernel-modules-prefix=' + str(modules.parents[2]), genkernel_calls[0])
+        # Installation uses the completed artifacts, not make or the sources.
+        import shutil
+        shutil.rmtree(self.sources)
+        start = len(self.calls())
+        destination = self.root / 'esp/EFI/Gentoo'
+        device = dict(pkname='/dev/test', partn=1, partuuid='test')
+        with patch.object(kernel, 'esp_details', return_value=(device, 'loader')):
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        installed = kernel.MODULES_ROOT / data['release']
+        self.assertEqual((installed / 'kernel/drivers/example.ko').read_text(), 'compiled module')
+        self.assertEqual((installed / 'modules.builtin').read_bytes(), (modules / 'modules.builtin').read_bytes())
+        self.assertEqual(os.readlink(installed / 'build'), os.readlink(modules / 'build'))
+        calls = self.calls()[start:]
+        self.assertFalse(any(call[0] == 'make' for call in calls))
+        self.assertIn(['depmod', '-a', data['release']], calls)
+        self.assertLess(next(i for i, call in enumerate(calls) if call[0] == 'depmod'),
+                        next(i for i, call in enumerate(calls) if call[0] == 'sudo' and 'mv' in call))
+
+    def test_install_rejects_changed_or_missing_staged_modules(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        data = kernel.load(self.work, 'test', completed=True)
+        modules = kernel.staged_modules(self.work, data)
+        (modules / 'modules.builtin').write_text('changed')
+        with self.assertRaisesRegex(RuntimeError, 'staged modules changed'):
+            kernel.load(self.work, 'test', completed=True)
+        (modules / 'modules.builtin').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'missing modules.builtin'):
+            kernel.load(self.work, 'test', completed=True)
+
+    def test_depmod_failure_leaves_efi_image_unchanged(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        destination = self.root / 'esp/EFI/Gentoo'
+        destination.mkdir(parents=True)
+        image = destination / 'kernel-6.18.57-test.efi'
+        image.write_text('working image')
+        args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
+        device = dict(pkname='/dev/test', partn=1, partuuid='test')
+        with patch.object(kernel, 'esp_details', return_value=(device, 'loader')), \
+                patch.dict(os.environ, FAIL_DEPMOD='1'), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'depmod.*exited 1'):
+                kernel.install(args)
+        self.assertEqual(image.read_text(), 'working image')
+        self.assertFalse(list(destination.glob('*.bak')))
 
     def test_install_backs_up_existing_image_and_prints_registration(self):
         self.prepare()

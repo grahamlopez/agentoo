@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/l
 from cli import ArgumentParser
 
 WORKSPACES = Path('/dev/shm')
+MODULES_ROOT = Path('/lib/modules')
 METADATA = 'agentoo-kernel.json'
 DEFAULT_FLAGS = '-march=native -O2 -pipe'
 INITRAMFS_BUILDER = Path(__file__).resolve().parent.parent / 'share/agentoo/initramfs/build'
@@ -33,8 +34,8 @@ def build_parser():
     sub = parser.add_subparsers(dest='operation')
     descriptions = {
         'config': 'Carry a running or supplied config to new kernel sources',
-        'build': 'Build the kernel, install modules and embed a fresh initramfs',
-        'install': 'Copy the EFI image and optionally register it with firmware',
+        'build': 'Build the kernel, stage modules and embed a fresh initramfs',
+        'install': 'Install staged modules and the EFI image; optionally register firmware',
     }
     for name, description in descriptions.items():
         child = sub.add_parser(name, help=description, description=description)
@@ -157,13 +158,34 @@ def paths(work, data):
     return work / 'kernel' / data['release'], work / 'genkernel' / data['release']
 
 
+def staged_modules(work, data):
+    _, gen = paths(work, data)
+    return gen / 'modules/lib/modules' / data['release']
+
+
+def module_manifest(directory):
+    for name in ('modules.builtin', 'modules.builtin.modinfo'):
+        if not (directory / name).is_file():
+            raise RuntimeError(f'{directory}: missing {name}; run build again')
+    manifest = {}
+    for path in sorted(directory.rglob('*')):
+        relative = str(path.relative_to(directory))
+        if path.is_symlink():
+            manifest[relative] = {'symlink': os.readlink(path)}
+        elif path.is_file():
+            manifest[relative] = {'sha256': digest(path), 'mode': path.stat().st_mode & 0o777}
+        elif not path.is_dir():
+            raise RuntimeError(f'unexpected staged module file type: {path}')
+    return manifest
+
+
 def save(work, data):
     temporary = work / (METADATA + '.tmp')
     temporary.write_text(json.dumps(data, indent=2) + '\n')
     temporary.replace(work / METADATA)
 
 
-def make(work, data, *arguments, capture=False, root=False):
+def make(work, data, *arguments, capture=False, root=False, umask=-1):
     output, _ = paths(work, data)
     # Explicitly neutralize inherited LOCALVERSION, output and cross-build overrides.
     env = os.environ.copy()
@@ -173,7 +195,7 @@ def make(work, data, *arguments, capture=False, root=False):
     command = ['make', '--no-print-directory', '-C', data['sources'], f'O={output}', 'LOCALVERSION=']
     if root:
         command += [f'KCFLAGS={data["kcflags"]}']
-    return run([*command, *arguments], capture=capture, root=root, env=env)
+    return run([*command, *arguments], capture=capture, root=root, env=env, umask=umask)
 
 
 def edit_config(work, data, *arguments):
@@ -217,7 +239,7 @@ def load(work, label, completed=False):
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', data.get('release', '')):
         raise RuntimeError(f'{work}: invalid recorded kernel release')
     sources = Path(data['sources'])
-    if not sources.is_absolute() or digest(sources / 'Makefile') != data['source_makefile_sha256']:
+    if not sources.is_absolute() or (not completed and digest(sources / 'Makefile') != data['source_makefile_sha256']):
         raise RuntimeError(f'{work}: source Makefile changed or source path is invalid; prepare a new workspace')
     output, _ = paths(work, data)
     if not (output / '.config').is_file():
@@ -226,6 +248,8 @@ def load(work, label, completed=False):
         image = output / 'arch/x86/boot/bzImage'
         if not data.get('built') or digest(image) != data.get('image_sha256') or digest(output / '.config') != data.get('config_sha256'):
             raise RuntimeError(f'{work}: image/config changed or build incomplete; run build again')
+        if module_manifest(staged_modules(work, data)) != data.get('modules_manifest'):
+            raise RuntimeError(f'{work}: staged modules changed or were not recorded; run build again')
     return data
 
 
@@ -345,7 +369,7 @@ def build(args):
         raise RuntimeError('minimal initramfs requires built-in drivers (CONFIG_MODULES=n); use --genkernel or --initramfs')
     validate_inputs(work, data)
     notice(f'KCFLAGS:          {data["kcflags"]}\nKernel config:    {output}/.config\nKernel sources:   {data["sources"]}\nBuild directory:  {work}\nKernel version:   {data["release"]}')
-    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or ("fresh genkernel image (LUKS)" if args.genkernel else "fresh minimal image (thinktop LUKS/Btrfs)")}\nModules:          install to system and workspace (also with CONFIG_MODULES=n)')
+    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or ("fresh genkernel image (LUKS)" if args.genkernel else "fresh minimal image (thinktop LUKS/Btrfs)")}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
     confirm('Proceed', args.yes)
     data['built'] = False
     save(work, data)
@@ -353,8 +377,15 @@ def build(args):
     make(work, data, 'olddefconfig')
     values = check_config(work, data)
     make(work, data, f'-j{args.jobs}')
-    make(work, data, 'modules_install', 'INSTALL_MOD_STRIP=1', root=True)
-    make(work, data, 'modules_install', f'INSTALL_MOD_PATH={gen / "modules"}', 'INSTALL_MOD_STRIP=1')
+    # Remove stale modules when rebuilding with a different driver selection.
+    if (gen / 'modules').exists():
+        shutil.rmtree(gen / 'modules')
+    make(work, data, 'modules_install', f'INSTALL_MOD_PATH={gen / "modules"}', 'INSTALL_MOD_STRIP=1', umask=0o022)
+    if values.get('CONFIG_MODULES') != 'y':
+        # Kernel omits this list with no modules; depmod still needs it for indexing.
+        order = staged_modules(work, data) / 'modules.order'
+        order.write_bytes(b'')
+        order.chmod(0o644)
     if custom:
         shutil.copyfile(custom, archive)
     elif not args.genkernel:
@@ -383,7 +414,8 @@ def build(args):
     image = output / 'arch/x86/boot/bzImage'
     if (output / 'include/config/kernel.release').read_text().strip() != data['release']:
         raise RuntimeError('compiled kernel release differs from the planned release')
-    data.update(built=True, image_sha256=digest(image), config_sha256=digest(output / '.config'))
+    data.update(built=True, image_sha256=digest(image), config_sha256=digest(output / '.config'),
+                modules_manifest=module_manifest(staged_modules(work, data)))
     save(work, data)
     notice('Build complete. Boot and functional validation remain operator steps.')
     print(image)
@@ -441,12 +473,14 @@ def register_entry(command, device, loader):
 
 
 def install(args):
-    require_tools('findmnt', 'lsblk', 'install', 'cp', 'mv', *(['efibootmgr'] if args.efi_add_entry else []))
+    require_tools('findmnt', 'lsblk', 'install', 'cp', 'mv', 'depmod', *(['efibootmgr'] if args.efi_add_entry else []))
     work, data = select_workspace(args)
     output, _ = paths(work, data)
     image = output / 'arch/x86/boot/bzImage'
+    modules = staged_modules(work, data)
+    modules_destination = MODULES_ROOT / data['release']
     destination = Path(args.dest).expanduser().resolve() / f'kernel-{data["release"]}.efi'
-    notice(f'Build directory:  {work}\nKernel image:     {image}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
+    notice(f'Build directory:  {work}\nKernel image:     {image}\nStaged modules:   {modules}\nInstall modules:  {modules_destination}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
     mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
     if mount_boot:
         notice('Mount /boot using its existing mount configuration.')
@@ -454,10 +488,15 @@ def install(args):
     if mount_boot:
         run(['mount', '/boot'], root=True)
     device, loader = esp_details(destination)
+    backup = None
     if destination.exists():
         backup = destination.with_name(destination.name + f'.{time.time_ns()}.bak')
         notice(f'Overwrite: {destination}\nBackup:    {backup}')
         confirm('Back up the existing image and overwrite it', args.yes, default=False)
+    run(['install', '-d', '-m', '0755', '--', modules_destination], root=True)
+    run(['cp', '-a', '--no-preserve=ownership', '--', str(modules) + '/.', modules_destination], root=True)
+    run(['depmod', '-a', data['release']], root=True)
+    if backup:
         run(['cp', '--preserve=mode', '--', destination, backup], root=True)
     staging = destination.with_name('.' + destination.name + f'.{os.getpid()}.tmp')
     run(['install', '-D', '-m', '0644', '--', image, staging], root=True)
