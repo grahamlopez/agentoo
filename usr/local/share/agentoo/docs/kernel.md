@@ -34,7 +34,7 @@ can enable modules for NVIDIA; external-module building is still separate work.
 Config reads it and inspects the mounted root through findmnt, lsblk and sysfs.
 The supported layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed
 by a GPT partition. Filesystem/LUKS/partition UUIDs and the actual mapping name
-are recorded together. The command line must contain matching `root=UUID=...`,
+are recorded together. The local command line must contain matching `root=UUID=...`,
 `rootfstype=btrfs`, `rootflags=subvol=@`, and either matching `crypt_root=UUID=...`
 or the installer's `rd.luks.uuid=luks-...` plus `rd.luks.name=...=...`. If both
 styles appear, both must match. Stale, duplicate or conflicting identifiers fail
@@ -42,13 +42,28 @@ with an explanation; correct the local file and retry. There is no automatic
 rewrite of this file, fstab or storage. Block-device and dm sysfs access are
 required; a restricted container is not a substitute for running on the host.
 
+The starting config's command line supplies boot policy: console, logging,
+`ro`, `root_trim=yes` and other non-storage arguments are retained in order.
+Only root filesystem, encrypted-root and mapping/subvolume arguments are
+specialized using the validated local identity. The baseline's encrypted-root
+argument style is retained: `crypt_root` stays `crypt_root`, and dracut arguments
+are updated only if the baseline explicitly includes them. The local distribution
+kernel's `rd.luks.*` arguments are not imported into the custom kernel.
+Missing root/layout arguments are supplied; when no encrypted-root style is
+specified, config adds `crypt_root`. An empty baseline gets those storage arguments
+and `ro`, without importing local boot policy. Old baseline UUIDs are replaced.
+Unsupported initramfs policy fails explicitly rather
+than being silently carried into an incompatible build.
+
 The minimal initramfs uses the recorded PARTUUID and mapping name, US/Caps-to-Control
 keymap, passphrase unlock, discards, `@` and `/sbin/init`. It accepts either boot
 identifier style because its storage selection comes from those recorded inputs.
 Alternative roots/layouts, token/key-file unlock, hibernation, nonstandard init,
 or conflicting discard policy require separately scoped initramfs support.
-Genkernel requires the matching `crypt_root=UUID=...` argument; dracut's
-`rd.luks.*` arguments alone are insufficient for that generator. Custom archives
+Genkernel requires the matching `crypt_root=UUID=...` argument in the generated
+command line. Use a baseline with that argument when choosing genkernel.
+Previously configured workspaces retain their recorded command lines; reconfigure
+from the desired baseline in a fresh workspace to adopt this behavior. Custom archives
 remain explicit operator inputs and their internal storage policy is not inspected.
 
 Config saves the original baseline, host fragment snapshot and provenance hashes,
@@ -89,7 +104,7 @@ After showing the plan and confirming, config:
 3. Sets `CONFIG_LOCALVERSION="-<label>"`, disables automatic SCM release suffixes,
    and enables EFI-stub, initramfs and `/proc/config.gz` support. It replaces
    embedded firmware and command-line settings with the selected host inputs,
-   clears the old initramfs path and otherwise preserves existing module choices
+   replaces the old initramfs path with a workspace-owned empty directory and otherwise preserves existing module choices
    unless the host fragment explicitly overrides them.
 4. Lists new Kconfig options and runs interactive `oldconfig`.
    `--accept-defaults` chooses `olddefconfig` instead.
@@ -121,7 +136,8 @@ in the environment to override them at config or build time. Builds target the
 machine running the command; a shared driver config does not make these binaries
 portable to other CPUs. Jobs default to the CPUs available to the process.
 
-Build clears the old embedded-initramfs setting, resolves the config and compiles
+Build replaces the embedded-initramfs input with a workspace-owned empty directory,
+resolves the config and compiles
 the initial kernel and any selected in-tree modules. It then runs
 `modules_install INSTALL_MOD_STRIP=1` only into the workspace, under
 `genkernel/<release>/modules/lib/modules/<release>/`. Old staged modules are
@@ -129,6 +145,15 @@ removed on rebuild so disabled drivers do not linger. This stage runs even with
 `CONFIG_MODULES=n`, which stages built-in-module metadata. **Build does not write
 to the system's `/lib/modules` or request sudo.** Genkernel uses this staged tree
 when assembling a module-enabled initramfs.
+
+Keeping a nonempty source path preserves Kconfig's dependent initramfs owner IDs,
+compression choice and built-in ACPI override setting during configuration and
+the initial build. The placeholder directory must remain empty. The final pass
+replaces it with the newly generated or explicitly supplied archive; an old
+archive is never reused implicitly.
+Reconfigure from the original baseline in a fresh workspace if an earlier run
+cleared `INITRAMFS_SOURCE` to an empty string: that run may already have dropped
+the dependent settings, and the new placeholder cannot recover their old values.
 
 By default (`--no-genkernel`), build runs the minimal initramfs builder in
 `<workspace>/initramfs/<release>/`. It extracts the cached

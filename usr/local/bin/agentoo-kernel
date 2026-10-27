@@ -128,8 +128,12 @@ def digest(path):
 
 
 def read_config(path):
+    return parse_config(path.read_text())
+
+
+def parse_config(text):
     values = {}
-    for line in path.read_text().splitlines():
+    for line in text.splitlines():
         match = re.fullmatch(r'(CONFIG_\w+)=(.*)', line)
         disabled = re.fullmatch(r'# (CONFIG_\w+) is not set', line)
         if match:
@@ -141,9 +145,28 @@ def read_config(path):
 
 def show_diff(before, after):
     notice('Changes from starting config:')
-    changes = [f'  {key}: {before.get(key, "<absent>")} -> {after.get(key, "<absent>")}'
-               for key in sorted(before.keys() | after.keys()) if before.get(key) != after.get(key)]
+    changes = []
+    for key in sorted(before.keys() | after.keys()):
+        if before.get(key) == after.get(key):
+            continue
+        old, new = before.get(key, '<absent>'), after.get(key, '<absent>')
+        if key in ('CONFIG_CMDLINE', 'CONFIG_EXTRA_FIRMWARE'):
+            changes.append(f'  {key}:\n    before: {old}\n    after:  {new}')
+        else:
+            changes.append(f'  {key}: {old} -> {new}')
     notice('\n'.join(changes) if changes else '  none')
+
+
+def empty_initramfs(work):
+    # Keep INITRAMFS_SOURCE nonempty so Kconfig retains its dependent policy.
+    # Kernel's directory input is valid even before a real archive is generated.
+    directory = work / 'empty-initramfs'
+    if directory.is_symlink():
+        raise RuntimeError(f'{directory}: placeholder must be a real empty directory')
+    directory.mkdir(exist_ok=True)
+    if any(directory.iterdir()):
+        raise RuntimeError(f'{directory}: placeholder must remain empty')
+    return directory
 
 
 def version(sources):
@@ -310,6 +333,9 @@ def configure(args):
         raise RuntimeError('oldconfig needs a terminal; use --accept-defaults to accept new defaults')
     host, profile, profile_text, host_values = kernel_host.read_profile(args.host)
     identity = kernel_host.resolve_identity(run)
+    identity['local_cmdline'] = identity['cmdline']
+    identity['cmdline'] = kernel_host.specialize_cmdline(
+        json.loads(parse_config(text).get('CONFIG_CMDLINE', '""')), identity)
     expected = kernel_host.expectations(host_values, identity)
     notice(f'Host profile:     {host} ({profile})\nKernel command line: {identity["cmdline"]}\n'
            f'Encrypted root:   PARTUUID={identity["partuuid"]} -> {identity["mapper"]}\n'
@@ -348,7 +374,8 @@ def configure(args):
         notice(f'Original source Makefile saved to {backup}')
     edit_config(work, data, '--set-str', 'LOCALVERSION', '-' + args.label,
                 '--disable', 'LOCALVERSION_AUTO', '--enable', 'EFI_STUB', '--enable', 'BLK_DEV_INITRD',
-                '--enable', 'IKCONFIG', '--enable', 'IKCONFIG_PROC', '--set-str', 'INITRAMFS_SOURCE', '')
+                '--enable', 'IKCONFIG', '--enable', 'IKCONFIG_PROC',
+                '--set-str', 'INITRAMFS_SOURCE', str(empty_initramfs(work)))
     notice('New Kconfig options:')
     make(work, data, 'listnewconfig')
     make(work, data, 'olddefconfig' if args.accept_defaults else 'oldconfig')
@@ -387,7 +414,7 @@ def build(args):
     if custom == archive:
         raise RuntimeError('custom initramfs must be outside the generated output path')
     if args.genkernel and not any(token.startswith('crypt_root=') for token in shlex.split(data['identity']['cmdline'])):
-        raise RuntimeError('genkernel requires crypt_root=UUID=... in /etc/kernel/cmdline; review the local arguments and prepare a fresh config workspace')
+        raise RuntimeError('genkernel requires crypt_root=UUID=... in the recorded CONFIG_CMDLINE; select a compatible baseline and prepare a fresh config workspace')
     values = check_config(work, data)
     if not custom and not args.genkernel and values.get('CONFIG_MODULES') == 'y':
         raise RuntimeError('minimal initramfs requires built-in drivers (CONFIG_MODULES=n); use --genkernel or --initramfs')
@@ -398,7 +425,7 @@ def build(args):
     confirm('Proceed', args.yes)
     data['built'] = False
     save(work, data)
-    edit_config(work, data, '--set-str', 'INITRAMFS_SOURCE', '')
+    edit_config(work, data, '--set-str', 'INITRAMFS_SOURCE', str(empty_initramfs(work)))
     make(work, data, 'olddefconfig')
     values = check_config(work, data)
     make(work, data, f'-j{args.jobs}')

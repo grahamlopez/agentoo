@@ -130,6 +130,44 @@ def expectations(values, identity):
             'CONFIG_CMDLINE': json.dumps(identity['cmdline'])}
 
 
+def specialize_cmdline(baseline, identity):
+    """Retain baseline boot policy while replacing installation-specific inputs."""
+    replacements = {
+        'root': 'UUID=' + identity['root_uuid'],
+        'rootfstype': 'btrfs',
+        'rootflags': 'subvol=' + identity['subvolume'],
+        'crypt_root': 'UUID=' + identity['luks_uuid'],
+        'rd.luks.uuid': 'luks-' + identity['luks_uuid'],
+        'rd.luks.name': identity['luks_uuid'] + '=' + identity['mapper'],
+    }
+    # Keep quoted policy arguments intact rather than stripping their quotes.
+    source = baseline if baseline.strip() else 'ro'
+    token_pattern = r'(?:[^\s"]|"[^"]*")+'
+    if not re.fullmatch(r'\s*(?:' + token_pattern + r'\s*)*', source):
+        raise RuntimeError('starting CONFIG_CMDLINE contains unmatched quotes')
+    result, replaced = [], set()
+    for token in re.findall(token_pattern, source):
+        key = token.split('=', 1)[0]
+        if key in replacements:
+            if key not in replaced:
+                result.append(key + '=' + replacements[key])
+                replaced.add(key)
+        else:
+            if token.startswith(('initrd=', 'resume=', 'cryptkey=')) or (
+                    token.startswith('rd.luks.') and key not in replacements) or (
+                    token.startswith('root_trim=') and token != 'root_trim=yes') or (
+                    token.startswith('init=') and token != 'init=/sbin/init'):
+                raise RuntimeError(f'starting CONFIG_CMDLINE has unsupported initramfs policy: {token}')
+            result.append(token)
+    required = ['root', 'rootfstype', 'rootflags']
+    if replaced.intersection(('rd.luks.uuid', 'rd.luks.name')):
+        required.extend(('rd.luks.uuid', 'rd.luks.name'))
+    elif 'crypt_root' not in replaced:
+        required.append('crypt_root')
+    result.extend(key + '=' + replacements[key] for key in required if key not in replaced)
+    return ' '.join(result)
+
+
 def check_expected(actual, expected):
     differences = [f'{key}: wanted {value}, got {actual.get(key, "<absent>")}'
                    for key, value in expected.items() if actual.get(key, 'n') != value]
