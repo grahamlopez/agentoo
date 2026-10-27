@@ -125,6 +125,10 @@ These commands require a connected monitor with EDID manufacturer/product
 ```sh
 agentoo display external layout               # Read the mapped layout name
 agentoo display external layout off
+agentoo display external layout 100           # Alias for off
+agentoo display external layout off --input thunderbolt
+agentoo display external layout 100 --input hdmi1
+agentoo display external layout off --input active_kvm
 agentoo display external layout 50-50
 agentoo display external layout 25-75
 agentoo display external layout 75-25
@@ -153,8 +157,64 @@ the connection settles. They never repeat the write automatically. Successful
 readback prints the mapped name and raw value; failure reports that the command
 was sent but the resulting state could not be confirmed. `sub-input` requires
 a mapped active PiP/PbP layout and changes only the secondary input. It can
-show the same source as the main input; it is not a swap operation. The mapped
-secondary inputs are currently limited to HDMI1 and Thunderbolt.
+show the same source as the main input; it is not a swap operation. Named secondary inputs support Thunderbolt, HDMI1, HDMI2, DP1, and DP2.
+
+`layout 100` is a synonym for `layout off`; readback prints the canonical name
+`off`. Without `--input`, these commands only disable PiP/PbP and leave source
+selection to the monitor, which can return to its main input rather than the
+host currently using the keyboard and mouse. With `--input thunderbolt` or
+`--input hdmi1`, the command first disables PiP/PbP and confirms settled readback,
+then selects and confirms the requested main video input. `--input active_kvm`
+reads the current USB/KVM target **before any writes** and selects its mapped
+video input (Thunderbolt or HDMI1); an unknown target fails without changing
+the monitor. This means the KVM target, not necessarily the host running the
+command. USB assignments are not rewritten.
+
+Every layout write captures the original USB/KVM target before changing the
+video configuration. After layout and requested input readback succeeds, it
+checks the target again and restores it if the monitor moved it. A successful
+command prints `kvm NAME (preserved)`. Unknown initial targets or failed initial
+reads stop before video writes. Restoring a changed target uses the same
+single-cycle action and settled verification as `kvm`; it is never retried.
+This is limited to an active Thunderbolt/HDMI1 two-window configuration. If the
+target changes when disabling PbP or using another input pair, restoration is
+unsupported and the command reports that video changes completed but KVM
+preservation failed. Video-step failures stop immediately; KVM preservation is
+then unconfirmed. Peripherals may briefly move to the other host while video
+inputs are changing. Preservation is covered by mocked tests; the combined
+layout/KVM restoration still requires physical confirmation.
+
+`active_kvm` is accepted only with `off` or `100`. Each write is sent once; only
+readback is retried. Failure confirming layout off stops before input selection;
+failure during input selection reports that layout off was already confirmed.
+DDC may become unreachable during these transitions, so a failure can leave
+PiP/PbP off with the desired input unconfirmed. The off/100 transition was physically verified on both KVM targets, including
+explicit Thunderbolt selection. ddcutil may report discarding cached sleep
+adjustment data because EDID changed; this is informational when readback
+succeeds. Combined active-layout/input selection still needs physical testing.
+
+`left` aliases `input`, and `right` aliases `sub-input`. Names are case-insensitive:
+`thunderbolt`, `hdmi1`, `hdmi2`, `dp1`, and `dp2`. Named inputs require the Dell
+model check; generic numeric `input` values remain available for other monitors.
+Numeric secondary values are explicit raw VCP E8 values, not VCP 60 input IDs.
+For PbP, main is left and secondary is right; in PiP these mean main and inset.
+
+```sh
+agentoo display external left thunderbolt
+agentoo display external right hdmi1
+agentoo display external layout 33-67 --left thunderbolt --right hdmi1
+agentoo display external layout 67-33 --input hdmi1 --sub-input thunderbolt
+```
+
+Layout options `--left`/`--input` and `--right`/`--sub-input` are synonyms.
+Either or both may be supplied with an active layout; omitted inputs are left
+unchanged by the command. Off/100 rejects a secondary option. All options and
+secondary mappings are validated before writes. The sequence is layout,
+main input (if requested), then secondary input (if requested), with settled
+readback between steps. A failure stops the sequence without rollback or
+repeating writes. Intermediate source duplication can occur, as changing the
+main input does not swap the secondary. KVM mappings remain limited to the
+previously verified Thunderbolt/HDMI1 pair.
 
 `pip-position next` requires small or large PiP. It advances clockwise through
 top left, top right, bottom right, bottom left. The current position is not
@@ -180,6 +240,9 @@ speaker flag. Unchanged/clamped levels send no write.
 Audio Switch Auto/Manual is not yet a named control. OSD changes affected F5,
 but sending the observed Auto value directly did not change it, so F5 cannot
 be treated as a simple scalar setting.
+
+`kvm` is a synonym for `usb`, including all arguments and options (for example,
+`agentoo display external kvm next`).
 
 `usb` reads the active target. `usb thunderbolt` / `usb hdmi1` select a target
 using its existing OSD USB assignment; they do not rewrite assignments.
@@ -282,6 +345,19 @@ the same source twice. A test with overlapping user/agent commands demonstrated
 that explicitly; coordinate live experiments with one writer. E8's high bits
 are not generally decoded, so named secondary selection is limited to these
 observed values on this model.
+
+Secondary OSD selections and E8 readback supplied by the user on 2026-10-26:
+
+| Secondary input | VCP E8 |
+| --- | --- |
+| HDMI1 | `0x6731` |
+| HDMI2 | `0x6732` |
+| DP1 | `0x672F` |
+| DP2 | `0x6733` |
+
+These observations enable the three additional named secondary setters. Their
+command-to-OSD verification is pending; HDMI1 and Thunderbolt setters were
+already physically verified. This does not expand the USB/KVM target mappings.
 
 Capabilities advertise main input values `19 0F 13 11 12`. An independent
 [U5226KW implementation](https://github.com/coralnode/delldispctl) labels these

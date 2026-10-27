@@ -13,6 +13,123 @@ EXTERNAL = DISPLAY.display_external
 
 
 class ExternalDisplay(unittest.TestCase):
+    def test_layout_preserves_kvm_after_video_reassignment(self):
+        parser = DISPLAY.build_parser()
+        for original, after, main, secondary in [
+                (0x0100, 0x0400, 'hdmi1', 'thunderbolt'),
+                (0x0400, 0x0100, 'thunderbolt', 'hdmi1'),
+                (0x0100, 0x0100, 'hdmi1', 'thunderbolt')]:
+            args = parser.parse_args(['external', 'layout', '33-67', '--left', main, '--right', secondary])
+            events = []
+            readings = iter([original, after, 0x2D, EXTERNAL.DELL_MAIN_INPUTS[main],
+                             EXTERNAL.DELL_SECONDARY_INPUTS[secondary]])
+            def read(command, code, **kwargs):
+                events.append(('read', code))
+                return next(readings)
+            with self.subTest(original=original, after=after), \
+                    patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                    patch.object(EXTERNAL, 'read_feature', side_effect=read), \
+                    patch.object(EXTERNAL, 'write_switch', side_effect=lambda c, k, v: events.append(('write', k, v))), \
+                    patch.object(EXTERNAL, 'wait_for_feature', side_effect=lambda c, k, v, **kw: events.append(('wait', k, v))), \
+                    patch('sys.stdout', new_callable=io.StringIO) as output:
+                EXTERNAL.run_dell(args, ['ddcutil'], 13)
+            expected = [('read', 'E7'), ('write', 'E9', 0x2D), ('wait', 'E9', 0x2D),
+                        ('write', '60', EXTERNAL.DELL_MAIN_INPUTS[main]),
+                        ('wait', '60', EXTERNAL.DELL_MAIN_INPUTS[main]),
+                        ('write', 'E8', EXTERNAL.DELL_SECONDARY_INPUTS[secondary]),
+                        ('wait', 'E8', EXTERNAL.DELL_SECONDARY_INPUTS[secondary]), ('read', 'E7')]
+            if original != after:
+                expected += [('read', 'E9'), ('read', '60'), ('read', 'E8'),
+                             ('write', 'E7', EXTERNAL.DELL_USB_SWITCH), ('wait', 'E7', original)]
+            self.assertEqual(events, expected)
+            self.assertIn('preserved', output.getvalue())
+
+    def test_layout_kvm_restore_failure_reports_completed_video_without_retry(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', '33-67'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_feature', side_effect=[0x0100, 0x0400, 0x2D, 0x11, 0x6739]), \
+                patch.object(EXTERNAL, 'write_switch') as write, \
+                patch.object(EXTERNAL, 'wait_for_feature', side_effect=[None, RuntimeError('readback failed')]):
+            with self.assertRaisesRegex(RuntimeError, 'video inputs confirmed, but KVM target thunderbolt could not be preserved'):
+                EXTERNAL.run_dell(args, ['ddcutil'], 13)
+        self.assertEqual([call.args[1] for call in write.call_args_list], ['E9', 'E7'])
+
+    def test_layout_kvm_restore_rejects_unsupported_pair(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', '33-67', '--left', 'dp1'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_feature', side_effect=[0x0100, 0x0400, 0x2D, 0x0F, 0x6731]), \
+                patch.object(EXTERNAL, 'write_switch') as write, \
+                patch.object(EXTERNAL, 'wait_for_feature'):
+            with self.assertRaisesRegex(RuntimeError, 'could not be preserved.*requires a mapped'):
+                EXTERNAL.run_dell(args, ['ddcutil'], 13)
+        self.assertEqual([call.args[1] for call in write.call_args_list], ['E9', '60'])
+
+    def test_input_aliases_and_case(self):
+        parser = DISPLAY.build_parser()
+        for command, canonical in [('left', 'input'), ('right', 'sub-input'), ('kvm', 'usb')]:
+            args = parser.parse_args(['external', command])
+            self.assertEqual(args.external_action, canonical)
+        for name, expected in EXTERNAL.DELL_MAIN_INPUTS.items():
+            args = parser.parse_args(['external', 'left', name.upper(), '--bus', '13'])
+            with patch.object(EXTERNAL.shutil, 'which', return_value='ddcutil'), \
+                    patch.object(EXTERNAL, 'require_dell_u5226kw') as require, \
+                    patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
+                EXTERNAL.run(args, parser)
+            require.assert_called_once_with(13)
+            self.assertIn(str(expected), run.call_args.args[0])
+
+    def test_combined_layout_inputs_and_partial_failure(self):
+        parser = DISPLAY.build_parser()
+        for left, right in [('--left', '--right'), ('--input', '--sub-input')]:
+            for failure in (None, '60', 'E8'):
+                args = parser.parse_args(['external', 'layout', '33-67', left, 'DP1', right, 'HDMI1'])
+                def wait(command, code, value):
+                    if code == failure:
+                        raise RuntimeError('unconfirmed')
+                with self.subTest(left=left, failure=failure), \
+                        patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_kvm_target', return_value='hdmi1'), \
+                patch.object(EXTERNAL, 'select_dell_usb'), \
+                        patch.object(EXTERNAL, 'write_switch') as write, \
+                        patch.object(EXTERNAL, 'wait_for_feature', side_effect=wait), patch('sys.stdout'):
+                    if failure:
+                        with self.assertRaisesRegex(RuntimeError, 'confirmed.*not confirmed'):
+                            EXTERNAL.run_dell(args, ['ddcutil'], 13)
+                    else:
+                        EXTERNAL.run_dell(args, ['ddcutil'], 13)
+                    expected = [('E9', 0x2D), ('60', 0x0F)]
+                    if failure != '60':
+                        expected.append(('E8', 0x6731))
+                    self.assertEqual([call.args[1:] for call in write.call_args_list], expected)
+
+    def test_observed_secondary_mappings(self):
+        parser = DISPLAY.build_parser()
+        for name, value in [('HDMI1', 0x6731), ('HDMI2', 0x6732),
+                            ('DP1', 0x672F), ('DP2', 0x6733), ('Thunderbolt', 0x6739)]:
+            args = parser.parse_args(['external', 'right', name])
+            with self.subTest(name=name), patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                    patch.object(EXTERNAL, 'read_feature', return_value=0x2D), \
+                    patch.object(EXTERNAL, 'write_switch') as write, \
+                    patch.object(EXTERNAL, 'wait_for_feature') as wait, patch('sys.stdout'):
+                EXTERNAL.run_dell(args, ['ddcutil'], 13)
+            write.assert_called_once_with(['ddcutil'], 'E8', value)
+            wait.assert_called_once_with(['ddcutil'], 'E8', value)
+
+    def test_off_right_fails_before_writes(self):
+        parser = DISPLAY.build_parser()
+        args = parser.parse_args(['external', 'layout', '100', '--right', 'hdmi1'])
+        with patch('sys.stderr'), self.assertRaises(SystemExit):
+            EXTERNAL.run(args, parser)
+
+    def test_numeric_secondary_is_explicit_raw_value(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'right', '0x6731'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_feature', return_value=0x2D), \
+                patch.object(EXTERNAL, 'write_switch') as write, \
+                patch.object(EXTERNAL, 'wait_for_feature'), patch('sys.stdout'):
+            EXTERNAL.run_dell(args, ['ddcutil'], 13)
+        write.assert_called_once_with(['ddcutil'], 'E8', 0x6731)
+
     def command(self, *tokens, status=0):
         parser = DISPLAY.build_parser()
         args = parser.parse_args(['external', *tokens])
@@ -153,6 +270,8 @@ class ExternalDisplay(unittest.TestCase):
     def test_named_layout_waits_for_readback_without_rewriting(self):
         args = DISPLAY.build_parser().parse_args(['external', 'layout', '33-67', '--bus', '13'])
         with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_kvm_target', return_value='hdmi1'), \
+                patch.object(EXTERNAL, 'select_dell_usb'), \
                 patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
                 patch.object(EXTERNAL.time, 'sleep'), patch('sys.stdout', new_callable=io.StringIO) as output, \
                 patch.object(EXTERNAL.subprocess, 'run', side_effect=[
@@ -165,9 +284,82 @@ class ExternalDisplay(unittest.TestCase):
             self.assertEqual(writes, [['ddcutil', '--bus', '13', 'setvcp', 'E9', '45', '--permit-unknown-feature', '--noverify']])
             self.assertIn('33-67 (0x2D)', output.getvalue())
 
+    def test_fullscreen_input_sequence(self):
+        for alias, target, resolved in [('off', 'thunderbolt', 'thunderbolt'),
+                                        ('100', 'hdmi1', 'hdmi1'),
+                                        ('100', 'active_kvm', 'hdmi1')]:
+            with self.subTest(alias=alias, target=target):
+                args = DISPLAY.build_parser().parse_args(
+                    ['external', 'layout', alias, '--input', target, '--bus', '13'])
+                events = []
+                def read(*args, **kwargs):
+                    events.append(('read', args[1]))
+                    return 0x0400
+                with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_kvm_target', return_value='hdmi1'), \
+                patch.object(EXTERNAL, 'select_dell_usb'), \
+                        patch.object(EXTERNAL, 'read_feature', side_effect=read), \
+                        patch.object(EXTERNAL, 'write_switch', side_effect=lambda c, k, v: events.append(('write', k, v))), \
+                        patch.object(EXTERNAL, 'wait_for_feature', side_effect=lambda c, k, v: events.append(('wait', k, v))), \
+                        patch('sys.stdout', new_callable=io.StringIO) as output:
+                    EXTERNAL.run_dell(args, ['ddcutil'], 13)
+                expected = []
+                expected += [('write', 'E9', 0), ('wait', 'E9', 0),
+                             ('write', '60', EXTERNAL.DELL_MAIN_INPUTS[resolved]),
+                             ('wait', '60', EXTERNAL.DELL_MAIN_INPUTS[resolved])]
+                self.assertEqual(events, expected)
+                self.assertIn('off (0x00)', output.getvalue())
+                self.assertIn(f'input {resolved}', output.getvalue())
+
+    def test_fullscreen_alias_without_input(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', '100'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_kvm_target', return_value='hdmi1'), \
+                patch.object(EXTERNAL, 'select_dell_usb'), \
+                patch.object(EXTERNAL, 'write_switch') as write, \
+                patch.object(EXTERNAL, 'wait_for_feature'), patch('sys.stdout'):
+            EXTERNAL.run_dell(args, ['ddcutil'], 13)
+        write.assert_called_once_with(['ddcutil'], 'E9', 0)
+
+    def test_fullscreen_rejects_invalid_input_usage_before_ddc(self):
+        for value in ([], ['33-67']):
+            parser = DISPLAY.build_parser()
+            args = parser.parse_args(['external', 'layout', *value, '--input', 'active_kvm'])
+            with patch.object(EXTERNAL, 'select_bus') as select, patch('sys.stderr'), self.assertRaises(SystemExit) as error:
+                EXTERNAL.run(args, parser)
+            self.assertEqual(error.exception.code, 2)
+            select.assert_not_called()
+
+    def test_fullscreen_unknown_kvm_sends_no_writes(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', 'off', '--input', 'active_kvm'])
+        with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_feature', return_value=0x9900), \
+                patch.object(EXTERNAL, 'write_switch') as write:
+            with self.assertRaisesRegex(RuntimeError, 'Unmapped active USB target'):
+                EXTERNAL.run_dell(args, ['ddcutil'], 13)
+        write.assert_not_called()
+
+    def test_fullscreen_partial_failure_never_retries_or_continues(self):
+        args = DISPLAY.build_parser().parse_args(['external', 'layout', 'off', '--input', 'hdmi1'])
+        for failure in ('E9', '60'):
+            def wait(command, code, value):
+                if code == failure:
+                    raise RuntimeError('readback unavailable')
+            with self.subTest(failure=failure), patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_kvm_target', return_value='hdmi1'), \
+                patch.object(EXTERNAL, 'select_dell_usb'), \
+                    patch.object(EXTERNAL, 'write_switch') as write, \
+                    patch.object(EXTERNAL, 'wait_for_feature', side_effect=wait):
+                with self.assertRaisesRegex(RuntimeError, 'Layout off confirmed' if failure == '60' else 'readback unavailable'):
+                    EXTERNAL.run_dell(args, ['ddcutil'], 13)
+                self.assertEqual([call.args[1] for call in write.call_args_list],
+                                 ['E9'] if failure == 'E9' else ['E9', '60'])
+
     def test_readback_failure_never_repeats_write(self):
         args = DISPLAY.build_parser().parse_args(['external', 'layout', 'off', '--bus', '13'])
         with patch.object(EXTERNAL, 'require_dell_u5226kw'), \
+                patch.object(EXTERNAL, 'read_kvm_target', return_value='hdmi1'), \
+                patch.object(EXTERNAL, 'select_dell_usb'), \
                 patch.object(EXTERNAL.shutil, 'which', return_value='/usr/bin/ddcutil'), \
                 patch.object(EXTERNAL.time, 'sleep'), \
                 patch.object(EXTERNAL, 'write_switch') as write, \
@@ -317,7 +509,7 @@ class ExternalDisplay(unittest.TestCase):
         for tokens in [('brightness', '101'), ('brightness', '-1'), ('volume', 'toggle'),
                        ('mute', 'toggle'), ('get', 'XYZ'), ('get', '--helpful'),
                        ('set', 'E9', '65536'), ('set', 'E9', '-1'),
-                       ('set', 'E9', '--bus'), ('input', 'Thunderbolt'),
+                       ('set', 'E9', '--bus'), ('input', 'unknown'),
                        ('capabilities', '--bus', '-1'),
                        ('capabilities', '--bus', '16', '--output', 'card0-DP-4')]:
             with self.subTest(tokens=tokens), patch.object(EXTERNAL.subprocess, 'run') as run, \

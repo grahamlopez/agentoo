@@ -20,8 +20,10 @@ DELL_LAYOUTS = {
 DDC_TIMEOUT = 5
 DELL_PIP_CYCLE = 0x02
 DELL_USB_SWITCH = 0xFF00
-DELL_MAIN_INPUTS = {'thunderbolt': 0x19, 'hdmi1': 0x11}
-DELL_SECONDARY_INPUTS = {'thunderbolt': 0x6739, 'hdmi1': 0x6731}
+DELL_MAIN_INPUTS = {'thunderbolt': 0x19, 'hdmi1': 0x11, 'hdmi2': 0x12, 'dp1': 0x0F, 'dp2': 0x13}
+DELL_KVM_INPUTS = {'thunderbolt', 'hdmi1'}
+DELL_SECONDARY_INPUTS = {'thunderbolt': 0x6739, 'hdmi1': 0x6731, 'hdmi2': 0x6732,
+                         'dp1': 0x672F, 'dp2': 0x6733}
 DELL_AUDIO_SOURCES = {'window1': 0xF1, 'window2': 0xF2}
 DELL_USB_TARGETS = {'thunderbolt': 1, 'hdmi1': 4}
 # VCP 8D names the mute state: 1=mute on, 2=mute off. The Dell OSD
@@ -52,6 +54,23 @@ def vcp_value(value):
     if not 0 <= number <= 65535:
         raise ValueError('expected a value in 0..65535')
     return str(number)
+
+def input_value(value):
+    name = value.lower()
+    return name if name in DELL_MAIN_INPUTS else vcp_value(value)
+
+
+def secondary_value(value):
+    if value in DELL_MAIN_INPUTS:
+        if value not in DELL_SECONDARY_INPUTS:
+            raise RuntimeError(f'Secondary input {value} has no verified mapping; no write sent')
+        return DELL_SECONDARY_INPUTS[value]
+    return int(value)
+
+
+def main_value(value):
+    return DELL_MAIN_INPUTS[value] if value in DELL_MAIN_INPUTS else int(value)
+
 
 def level(value):
     if value in ('up', 'down'):
@@ -92,7 +111,8 @@ def configure_parser(parser):
         ('speakers', 'Read or enable/disable Dell U5226KW speakers'),
         ('usb', 'Read or switch the Dell U5226KW shared USB target'),
     ):
-        child = sub.add_parser(name, help=description)
+        child = sub.add_parser(name, help=description, aliases={'usb': ['kvm'], 'input': ['left'], 'sub-input': ['right']}.get(name, []))
+        child.set_defaults(external_action=name)
         selector = child.add_mutually_exclusive_group()
         selector.add_argument('--output', metavar='CONNECTOR',
                              help='DRM connector name, for example card0-DP-4').completion = 'external_outputs'
@@ -108,13 +128,18 @@ def configure_parser(parser):
         elif name == 'speakers':
             child.add_argument('value', nargs='?', choices=('on', 'off'), help='Omit to read; corresponds to Speaker in the Dell OSD')
         elif name == 'layout':
-            child.add_argument('value', nargs='?', choices=tuple(DELL_LAYOUTS), help='Omit to read the layout')
-            child.epilog = 'Dell U5226KW only. Writes once without immediate verification, then checks settled readback.'
+            child.add_argument('value', nargs='?', choices=(*DELL_LAYOUTS, '100'), help='Omit to read; 100 is an alias for off')
+            child.add_argument('--input', '--left', dest='layout_input',
+                               type=argument_type(lambda v: 'active_kvm' if v.lower() == 'active_kvm' else input_value(v)),
+                               help='Main/left source; active_kvm is available with off/100')
+            child.add_argument('--sub-input', '--right', dest='layout_secondary', type=argument_type(input_value),
+                               help='Secondary/right source (PiP: inset); requires an active layout')
+            child.epilog = 'Dell U5226KW only. Sends each write once, then checks settled readback before continuing.'
         elif name == 'pip-position':
             child.add_argument('value', choices=('next',), help='Cycle top left → top right → bottom right → bottom left')
             child.epilog = 'Requires small or large PiP. Current position is not readable; an absolute position cannot be selected.'
         elif name == 'sub-input':
-            child.add_argument('value', nargs='?', choices=tuple(DELL_SECONDARY_INPUTS), help='Omit to read; changes only the secondary input')
+            child.add_argument('value', nargs='?', type=argument_type(input_value), help='Name or numeric VCP value; omit to read the secondary input')
             child.epilog = 'Dell U5226KW only, in a mapped active PiP/PbP layout. Main input is unchanged; this is not a swap.'
         elif name in ('brightness', 'volume'):
 
@@ -126,8 +151,8 @@ def configure_parser(parser):
         elif name == 'mute':
             child.add_argument('value', nargs='?', choices=('on', 'off'), help='Omit to read')
         elif name == 'input':
-            child.add_argument('value', nargs='?', type=argument_type(vcp_value), metavar='VALUE',
-                               help='Monitor input value, decimal or 0x hex; omit to read')
+            child.add_argument('value', nargs='?', type=argument_type(input_value), metavar='VALUE',
+                               help='Dell input name or numeric VCP value; omit to read')
         elif name in ('get', 'set'):
             child.add_argument('code', type=argument_type(feature_code), help='Hexadecimal VCP code, e.g. 10 or E9')
             if name == 'set':
@@ -258,14 +283,42 @@ def run_dell(args, command, bus):
     require_dell_u5226kw(bus)
     action = args.external_action
     if action == 'layout':
+        target = getattr(args, 'layout_input', None)
+        original_kvm = read_kvm_target(command) if args.value is not None else None
+        if target == 'active_kvm':
+            target = original_kvm
+        secondary = getattr(args, 'layout_secondary', None)
+        secondary_raw = secondary_value(secondary) if secondary is not None else None
         if args.value is not None:
-            expected = DELL_LAYOUTS[args.value]
+            expected = DELL_LAYOUTS['off' if args.value == '100' else args.value]
             write_switch(command, 'E9', expected)
             wait_for_feature(command, 'E9', expected)
+            if target is not None:
+                try:
+                    write_switch(command, '60', main_value(target))
+                    wait_for_feature(command, '60', main_value(target))
+                except RuntimeError as error:
+                    raise RuntimeError(f'Layout {args.value if args.value != "100" else "off"} confirmed, but input {target} was not confirmed: {error}') from None
+            if secondary_raw is not None:
+                try:
+                    write_switch(command, 'E8', secondary_raw)
+                    wait_for_feature(command, 'E8', secondary_raw)
+                except RuntimeError as error:
+                    raise RuntimeError(f'Layout {args.value} and requested main input confirmed, but secondary input {secondary} was not confirmed: {error}') from None
+            try:
+                select_dell_usb(command, original_kvm)
+            except RuntimeError as error:
+                raise RuntimeError(f'Layout and requested video inputs confirmed, but KVM target {original_kvm} could not be preserved: {error}') from None
         else:
             expected = read_feature(command, 'E9')
         name = next((name for name, value in DELL_LAYOUTS.items() if value == expected), 'unknown')
         print(f'{name} (0x{expected:02X})')
+        if target is not None:
+            print(f'input {target} (0x{main_value(target):02X})')
+        if secondary_raw is not None:
+            print(f'sub-input {secondary} (0x{secondary_raw:04X})')
+        if original_kvm is not None:
+            print(f'kvm {original_kvm} (preserved)')
     elif action == 'pip-position':
         if read_feature(command, 'E9') not in (DELL_LAYOUTS['pip-small'], DELL_LAYOUTS['pip-large']):
             raise RuntimeError('Position cycling requires pip-small or pip-large')
@@ -275,10 +328,10 @@ def run_dell(args, command, bus):
         return run_dell_usb(args, command)
     elif action == 'sub-input':
         if args.value is not None:
+            expected = secondary_value(args.value)
             layout = read_feature(command, 'E9')
             if layout == 0 or layout not in DELL_LAYOUTS.values():
                 raise RuntimeError('Secondary input selection requires a mapped active PiP/PbP layout')
-            expected = DELL_SECONDARY_INPUTS[args.value]
             write_switch(command, 'E8', expected)
             wait_for_feature(command, 'E8', expected)
         else:
@@ -299,30 +352,43 @@ def run_dell(args, command, bus):
     return 0
 
 
-def run_dell_usb(args, command):
+def read_kvm_target(command):
+    active = read_feature(command, 'E7', maximum=True) >> 8
+    name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), None)
+    if name is None:
+        raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no layout or input write sent')
+    return name
+
+
+def select_dell_usb(command, value):
     # E7 current bytes hold the USB/video assignment table. Its MH status byte
     # identifies the active input; observed 1=Thunderbolt and 4=HDMI1.
     status = read_feature(command, 'E7', maximum=True)
     active = status >> 8
-    if args.value is not None:
+    if value is not None:
         if active not in DELL_USB_TARGETS.values():
             raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no switch sent')
         # This toggle is deliberately restricted to the two mapped hosts.
         target = (next(value for value in DELL_USB_TARGETS.values() if value != active)
-                  if args.value == 'next' else DELL_USB_TARGETS[args.value])
+                  if value == 'next' else DELL_USB_TARGETS[value])
         if target != active:
             layout = read_feature(command, 'E9')
             main = read_feature(command, '60')
             secondary_raw = read_feature(command, 'E8')
             secondary = next((DELL_MAIN_INPUTS[name] for name, raw in DELL_SECONDARY_INPUTS.items()
                               if raw == secondary_raw), None)
-            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != set(DELL_MAIN_INPUTS.values()):
+            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != {DELL_MAIN_INPUTS[name] for name in DELL_KVM_INPUTS}:
                 raise RuntimeError('USB switching requires a mapped active two-window layout with '
                                    'Thunderbolt and HDMI1; no switch sent')
             write_switch(command, 'E7', DELL_USB_SWITCH)
             wait_for_feature(command, 'E7', (target << 8) | (status & 0xFF), maximum=True)
             active = target
     name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), 'unknown')
+    return name, active
+
+
+def run_dell_usb(args, command):
+    name, active = select_dell_usb(command, args.value)
     print(f'{name} (status 0x{active:02X})')
     return 0
 
@@ -370,6 +436,17 @@ def run_dell_volume(args, command):
     return 0
 
 def run(args, parser):
+    if args.external_action == 'layout':
+        left = getattr(args, 'layout_input', None)
+        right = getattr(args, 'layout_secondary', None)
+        if (left is not None or right is not None) and args.value is None:
+            parser.error('input options require a layout value')
+        if right is not None and args.value in ('off', '100'):
+            parser.error('--right/--sub-input requires an active PiP/PbP layout')
+        if left == 'active_kvm' and args.value not in ('off', '100'):
+            parser.error('active_kvm requires layout off or layout 100')
+        if right is not None:
+            secondary_value(right)  # Validate before changing layout.
     if not shutil.which('ddcutil'):
         raise RuntimeError('ddcutil is not installed; install app-misc/ddcutil (see docs/displays.md)')
     command = ['ddcutil']
@@ -383,6 +460,9 @@ def run(args, parser):
             return run_dell_volume(args, command)
         if action in ('layout', 'pip-position', 'sub-input', 'audio-source', 'speakers', 'usb'):
             return run_dell(args, command, bus)
+        if action == 'input' and args.value in DELL_MAIN_INPUTS:
+            require_dell_u5226kw(bus)
+            args.value = str(main_value(args.value))
         if action == 'capabilities':
             command += ['capabilities']
         else:
