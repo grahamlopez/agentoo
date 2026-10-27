@@ -71,6 +71,15 @@ for path in sorted(root.rglob('*')):
         subprocess.run(['strip', '--strip-unneeded', str(path)], check=True)
 paths = ['.'] + sorted(str(path.relative_to(root)) for path in root.rglob('*'))
 with (work / 'initramfs.cpio').open('wb') as stream:
+    # Emit these newc entries directly: creating a device node on disk would
+    # require root. The parent must precede /dev/console for kernel unpacking.
+    for name, mode, major, minor in (('dev', 0o040755, 0, 0),
+                                      ('dev/console', 0o020600, 5, 1)):
+        filename = name.encode() + b'\0'
+        fields = (0, mode, 0, 0, 1, 0, 0, 0, 0, major, minor, len(filename), 0)
+        entry = b'070701' + ''.join(f'{value:08x}' for value in fields).encode() + filename
+        stream.write(entry + b'\0' * (-len(entry) % 4))
+    stream.flush()
     subprocess.run(['cpio', '--null', '-o', '-H', 'newc', '--owner=0:0', '--reproducible'],
                    cwd=root, input=('\0'.join(paths) + '\0').encode(), stdout=stream, check=True)
 print(work / 'initramfs.cpio')

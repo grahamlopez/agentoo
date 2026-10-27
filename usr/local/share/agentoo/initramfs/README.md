@@ -26,6 +26,10 @@ cryptsetup with its shared libraries. No packages or boot files are installed.
 The archive contains stripped copies of installed libraries; rebuild after
 cryptsetup/library security updates. BusyBox is statically linked.
 
+The archive includes a root-owned `/dev/console` character device (5:1, mode
+0600), so the kernel can attach initial standard input/output before `/init`
+mounts devtmpfs. Its archive entry is generated without requiring root.
+
 The init script explicitly disables device-mapper udev handling for cryptsetup
 only. It enables discards, tries the passphrase three times, mounts `@` read-only,
 writes a runtime udev rule for the active mapping, moves the API mounts and
