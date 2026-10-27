@@ -108,7 +108,7 @@ class CliTest(unittest.TestCase):
                  ('secrets',), ('secrets', 'install'), ('cloud-storage',), ('cloud-storage', 'pcloud'),
                  *(('cloud-storage', 'pcloud', action) for action in ('start', 'stop', 'status')), ('checkpoint',),
                  ('checkpoint', 'create'), ('checkpoint', 'list'),
-                 ('checkpoint', 'inspect'), ('checkpoint', 'restore'),
+                 ('checkpoint', 'inspect'), ('checkpoint', 'restore'), ('checkpoint', 'remove'),
                  ('power',), ('fonts',), ('fonts', 'status'),
                  ('fonts', 'test'), ('fonts', 'set'), ('fonts', 'doctor'),
                  ('desktop',), ('desktop', 'transparency'), ('desktop', 'blur'),

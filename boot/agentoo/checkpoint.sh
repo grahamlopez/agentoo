@@ -15,14 +15,16 @@ usage() {
         create) printf '%s\n' 'Usage: agentoo checkpoint create LABEL [options]';;
         list) printf '%s\n' 'Usage: agentoo checkpoint list [options]';;
         inspect) printf '%s\n' 'Usage: agentoo checkpoint inspect NAME [options]';;
+        remove) printf '%s\n' 'Usage: agentoo checkpoint remove NAME [options]';;
         restore) printf '%s\n' 'Usage: agentoo checkpoint restore NAME --device DEVICE [options]';;
-        *) printf '%s\n' 'Usage: agentoo checkpoint {create|list|inspect|restore} [options]';;
+        *) printf '%s\n' 'Usage: agentoo checkpoint {create|list|inspect|restore|remove} [options]';;
     esac
     cat <<'HELP'
 
 Create LABEL: online capture; appends UTC timestamp and PID to label.
 List: report Btrfs extent sizes (EFI excluded; shared sizes not additive).
 Inspect NAME: verify recorded snapshots and EFI archive without target changes.
+Remove NAME: permanently delete all saved components; current system unchanged.
 Restore NAME: recovery media only; DISCARD selected current state, no backup.
 
   --device DEVICE       Target Btrfs device (required for restore; not create)
@@ -32,10 +34,10 @@ Restore NAME: recovery media only; DISCARD selected current state, no backup.
   --clean-package-caches / --no-clean-package-caches  Create only; default CLEAN
                         when capturing system; otherwise keep caches
                         Explicit cleanup deletes distfiles, binpkgs, binhost
-  --dry-run             Create/restore: validate and plan; temporary read-only
+  --dry-run             Create/restore/remove: validate and plan; temporary read-only
                         inspection mount/files only, no target modifications
   --yes                 Create: authorize capture without confirmation prompt
-  --confirm NAME        Restore: authorize exact checkpoint without prompt
+  --confirm NAME        Restore/remove: authorize exact checkpoint without prompt
   --no-input            Never prompt; sudo -n; explicit authorization required
   -h, --help            Show help without privileges or effects
 
@@ -53,7 +55,7 @@ for ARG do
     [ "$ARG" != -- ] || break
     case "$ARG" in --help|-h) usage; exit 0;; esac
 done
-case "$ACTION" in '') usage; exit 0;; create|list|inspect|restore) shift;; *) die "unknown command: $ACTION";; esac
+case "$ACTION" in '') usage; exit 0;; create|list|inspect|restore|remove) shift;; *) die "unknown command: $ACTION";; esac
 NAME=; S=; H=; E=; CLEAN=; DEVICE=; ESP_ARG=
 DRY_RUN=0; NO_INPUT=0; YES=0; CONFIRM=; OPTIONS=1
 POSITIVE=0
@@ -100,9 +102,9 @@ else
 fi
 [ "$ACTION" != create ] || [ "${#NAME}" -le 64 ] || die 'create label is too long'
 case "$ACTION" in list|inspect)
-    [ "$DRY_RUN$YES" = 00 ] && [ -z "$CONFIRM" ] || die 'authorization/dry-run applies only to create/restore';; esac
+    [ "$DRY_RUN$YES" = 00 ] && [ -z "$CONFIRM" ] || die 'authorization/dry-run applies only to create/restore/remove';; esac
 [ "$YES" = 0 ] || [ "$ACTION" = create ] || die '--yes applies only to create'
-[ -z "$CONFIRM" ] || { [ "$ACTION" = restore ] && [ "$CONFIRM" = "$NAME" ]; } || die '--confirm must match the exact restore name'
+[ -z "$CONFIRM" ] || { { [ "$ACTION" = restore ] || [ "$ACTION" = remove ]; } && [ "$CONFIRM" = "$NAME" ]; } || die '--confirm must match the exact restore/remove name'
 [ "$ACTION" != restore ] || [ -n "$DEVICE" ] || die 'restore requires --device'
 DEFAULT=1; [ "$POSITIVE" = 0 ] || DEFAULT=0
 S=${S:-$DEFAULT}; E=${E:-$DEFAULT}
@@ -115,7 +117,7 @@ if [ "$ACTION" = create ]; then CLEAN=${CLEAN:-$S}; else CLEAN=${CLEAN:-0}; fi
 if [ "$DRY_RUN" = 0 ]; then
     case "$ACTION" in
         create) [ "$YES" = 1 ] || { [ "$NO_INPUT" = 0 ] && [ -t 0 ]; } || die 'capture requires --yes or interactive stdin';;
-        restore) [ -n "$CONFIRM" ] || { [ "$NO_INPUT" = 0 ] && [ -t 0 ]; } || die 'restore requires --confirm NAME or interactive stdin';;
+        restore|remove) [ -n "$CONFIRM" ] || { [ "$NO_INPUT" = 0 ] && [ -t 0 ]; } || die "$ACTION requires --confirm NAME or interactive stdin";;
     esac
 fi
 }
@@ -151,6 +153,9 @@ cleanup() {
     STATUS=$?
     if [ "$STATUS" != 0 ]; then
         printf 'Checkpoint %s failed during %s. Completed components: %s.\n' "$ACTION" "$PHASE" "${COMPLETED:-none}" >&2
+        if [ "$ACTION" = remove ]; then
+            printf 'Retry remove %s with the same device and EFI mount to finish any remaining cleanup.\n' "$NAME" >&2
+        fi
         if [ "$RESTORE_STARTED" = 1 ]; then
             printf 'Do not boot partial state. Remain in recovery, correct the failure, then retry restore %s with the same component selection and device. Named checkpoint retained.\n' "$NAME" >&2
         fi
@@ -180,12 +185,14 @@ subuuid() {
 enabled() { case "$1" in system) [ "$S" = 1 ];; home) [ "$H" = 1 ];; efi) [ "$E" = 1 ];; esac; }
 rootname() { case "$1" in system) printf '@';; home) printf '@home';; esac; }
 meta() {
-    [ "$(awk -F= -v key="$1" '$1==key {n++} END {print n+0}' "$CP/manifest")" = 1 ] || die "missing/duplicate metadata: $1"
-    awk -F= -v key="$1" '$1==key {print substr($0,index($0,"=")+1)}' "$CP/manifest"
+    META_FILE=$CP/manifest
+    if [ "$ACTION" = remove ] && [ ! -e "$META_FILE" ]; then META_FILE=$CP/REMOVING; fi
+    [ "$(awk -F= -v key="$1" '$1==key {n++} END {print n+0}' "$META_FILE")" = 1 ] || die "missing/duplicate metadata: $1"
+    awk -F= -v key="$1" '$1==key {print substr($0,index($0,"=")+1)}' "$META_FILE"
 }
 esp_check() {
     [ "$(field "$ESP" FSTYPE)" = vfat ] || die "EFI must be mounted at $ESP"
-    case "$ACTION:$DRY_RUN" in create:0|restore:0)
+    case "$ACTION:$DRY_RUN" in create:0|restore:0|remove:0)
         case ",$(field "$ESP" OPTIONS)," in *,rw,*) :;; *) die 'EFI filesystem is read-only';; esac;;
     esac
     [ -z "${ESP_UUID:-}" ] || [ "$(field "$ESP" UUID)" = "$ESP_UUID" ] || die 'EFI UUID mismatch'
@@ -203,25 +210,31 @@ hash_efi() {
 }
 plan() {
     printf '\n┌─ %s %s\n' "$ACTION" "$NAME"
-    for KIND in system home efi; do
-        if enabled "$KIND"; then
-            WORD=capture
-            if [ "$ACTION" = restore ]; then
-                WORD='DISCARD current state; replace from checkpoint'
-                [ "$KIND" != efi ] || WORD='overlay saved files; preserve later additions'
-            fi
-        else
-            WORD='not captured'; [ "$ACTION" != restore ] || WORD='preserve current'
-        fi
-        printf '│ %-7s %s\n' "$KIND" "$WORD"
-    done
-    printf '│ Btrfs UUID: %s\n' "$FS_UUID"
-    if [ "$E" = 1 ]; then printf '│ EFI: %s (UUID %s); firmware entries unchanged\n' "$ESP" "$ESP_UUID"; fi
-    if [ "$ACTION" = create ]; then
-        WORD='keep distfiles and binary packages'; [ "$CLEAN" != 1 ] || WORD='DELETE distfiles and binary packages'
-        printf '│ Cleanup: %s\n└─ Keep other writers idle; capture is sequential.\n' "$WORD"
+    if [ "$ACTION" = remove ]; then
+        printf '│ DELETE checkpoint snapshots and EFI archive permanently.\n'
+        printf '│ Btrfs UUID: %s; checkpoint: %s\n' "$FS_UUID" "$CP"
+        printf '└─ Current system, home, boot files and firmware entries unchanged.\n'
     else
-        printf '└─ No implicit backups. Named checkpoint retained; temporary copies discarded.\n'
+        for KIND in system home efi; do
+            if enabled "$KIND"; then
+                WORD=capture
+                if [ "$ACTION" = restore ]; then
+                    WORD='DISCARD current state; replace from checkpoint'
+                    [ "$KIND" != efi ] || WORD='overlay saved files; preserve later additions'
+                fi
+            else
+                WORD='not captured'; [ "$ACTION" != restore ] || WORD='preserve current'
+            fi
+            printf '│ %-7s %s\n' "$KIND" "$WORD"
+        done
+        printf '│ Btrfs UUID: %s\n' "$FS_UUID"
+        if [ "$E" = 1 ]; then printf '│ EFI: %s (UUID %s); firmware entries unchanged\n' "$ESP" "$ESP_UUID"; fi
+        if [ "$ACTION" = create ]; then
+            WORD='keep distfiles and binary packages'; [ "$CLEAN" != 1 ] || WORD='DELETE distfiles and binary packages'
+            printf '│ Cleanup: %s\n└─ Keep other writers idle; capture is sequential.\n' "$WORD"
+        else
+            printf '└─ No implicit backups. Named checkpoint retained; temporary copies discarded.\n'
+        fi
     fi
     [ "$DRY_RUN" = 0 ] || { printf 'Dry run: temporary inspection mount/files only; targets unchanged.\n'; exit 0; }
     [ "$YES" != 1 ] && [ -z "$CONFIRM" ] || return 0
@@ -255,6 +268,7 @@ verify_checkpoint() {
     [ -f "$CP/manifest" ] && [ ! -L "$CP/manifest" ] || die 'legacy/unsupported checkpoint: use its original recovery instructions'
     [ "$(meta format)" = 2 ] && [ "$(meta name)" = "$NAME" ] || die 'invalid checkpoint metadata'
     [ "$(meta root_uuid)" = "$FS_UUID" ] || die 'Btrfs UUID mismatch'
+    [ ! -e "$CP/REMOVING" ] || die 'checkpoint removal in progress; retry remove'
     [ -f "$CP/COMPLETE" ] && [ "$(cat "$CP/COMPLETE")" = "$NAME" ] && [ ! -e "$CP/INCOMPLETE" ] || die 'incomplete checkpoint'
     for KIND in system home efi; do
         PRESENT=$(meta "$KIND")
@@ -285,6 +299,107 @@ verify_efi() {
         'substr($0,1,1)!="d" && substr($0,1,1)!="-" {bad=1} END {exit bad}' "$TMP/archive-types" || die 'unsafe EFI archive entries'
     mkdir "$TMP/extracted"
     tar -xzf "$BOOT/efi-files.tar.gz" -C "$TMP/extracted"
+}
+# Removal never recursively traverses checkpoint directories. Validate every
+# entry before authorization, and preserve the manifest until all payload is gone.
+removal_files() {
+    for ENTRY in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+        [ -e "$ENTRY" ] || [ -L "$ENTRY" ] || continue
+        case "${ENTRY##*/}" in
+            system|home) [ "$1" = "$CP" ] || die 'unexpected EFI directory'; continue;;
+            manifest|COMPLETE) :;;
+            REMOVING) [ "$1" = "$CP" ] || die 'unexpected EFI removal marker';;
+            checksums|efi-files.tar.gz|boot-entries.txt|restore-instructions.txt)
+                [ "$1" != "$CP" ] || die 'unexpected Btrfs checkpoint file';;
+            *) die "unexpected checkpoint entry: $ENTRY";;
+        esac
+        [ -f "$ENTRY" ] && [ ! -L "$ENTRY" ] || die "unsafe checkpoint entry: $ENTRY"
+    done
+}
+remove_checkpoint() {
+    PHASE='validate removal'
+    [ -d "$CP" ] && [ ! -L "$CP" ] || die 'checkpoint not found'
+    findmnt -rn -o TARGET > "$TMP/removal-mounts"
+    awk -v dir="$CP" '$0==dir || index($0,dir"/")==1 {bad=1} END {exit bad}' "$TMP/removal-mounts" || die 'mounted checkpoint path'
+    # An empty final directory may remain if interrupted just before rmdir.
+    if [ -z "$(find "$CP" -mindepth 1 -maxdepth 1 -print)" ]; then
+        plan >&2
+        rmdir "$CP"; sync
+        printf 'Removed checkpoint %s.\n' "$NAME" >&2
+        exit 0
+    fi
+    for ENTRY in "$CP/manifest" "$CP/REMOVING"; do
+        [ ! -L "$ENTRY" ] || die 'unsafe removal metadata'
+    done
+    [ -f "$CP/manifest" ] || [ -f "$CP/REMOVING" ] || die 'legacy/unsupported checkpoint removal; manual cleanup required'
+    [ "$(meta format)" = 2 ] && [ "$(meta name)" = "$NAME" ] || die 'invalid checkpoint metadata'
+    [ "$(meta root_uuid)" = "$FS_UUID" ] || die 'Btrfs UUID mismatch'
+    RETRY=0
+    if [ -e "$CP/REMOVING" ]; then
+        [ -f "$CP/REMOVING" ] && [ ! -L "$CP/REMOVING" ] || die 'invalid removal marker'
+        RETRY=1
+    else
+        [ -f "$CP/COMPLETE" ] && [ "$(cat "$CP/COMPLETE")" = "$NAME" ] && [ ! -e "$CP/INCOMPLETE" ] || die 'incomplete checkpoint; manual cleanup required'
+    fi
+    removal_files "$CP"
+    for KIND in system home efi; do
+        PRESENT=$(meta "$KIND")
+        case "$PRESENT" in 0|1) :;; *) die 'invalid component metadata';; esac
+        if [ "$KIND" = efi ]; then E=$PRESENT; continue; fi
+        [ ! -L "$CP/$KIND" ] || die 'snapshot is a symlink'
+        if [ -e "$CP/$KIND" ]; then
+            [ "$PRESENT" = 1 ] || die 'unexpected snapshot'
+            [ "$(btrfs property get -ts "$CP/$KIND" ro)" = ro=true ] || die 'snapshot is not read-only'
+            [ "$(subuuid "$CP/$KIND")" = "$(meta "${KIND}_uuid")" ] || die 'snapshot UUID mismatch'
+            flat "$CP/$KIND"
+        else
+            [ "$PRESENT" = 0 ] || [ "$RETRY" = 1 ] || die 'missing snapshot'
+        fi
+    done
+    BOOT=
+    if [ "$E" = 1 ]; then
+        ESP_UUID=$(meta esp_uuid); esp_check
+        [ ! -L "$ESP/checkpoints" ] || die 'EFI checkpoint storage is a symlink'
+        BOOT=$ESP/checkpoints/$NAME
+        [ ! -L "$BOOT" ] || die 'EFI checkpoint is a symlink'
+        if [ -e "$BOOT" ]; then
+            [ -d "$BOOT" ] || die 'EFI checkpoint is not a directory'
+            removal_files "$BOOT"
+            if [ "$RETRY" = 0 ]; then
+                cmp "$CP/manifest" "$BOOT/manifest" >&2 || die 'EFI/Btrfs manifests differ'
+            fi
+        else
+            [ "$RETRY" = 1 ] || die 'missing EFI checkpoint'
+        fi
+    fi
+    for DIR in "$CP" ${BOOT:+"$BOOT"}; do
+        awk -v dir="$DIR" '$0==dir || index($0,dir"/")==1 {bad=1} END {exit bad}' "$TMP/removal-mounts" || die "mounted checkpoint path: $DIR"
+    done
+    plan >&2
+    PHASE='mark removal'
+    if [ -f "$CP/manifest" ]; then cp "$CP/manifest" "$CP/REMOVING"; fi
+    sync
+    # Restore and inspect refuse REMOVING even while COMPLETE still exists.
+    for KIND in system home; do
+        PHASE="remove $KIND snapshot"
+        if [ -e "$CP/$KIND" ]; then btrfs subvolume delete "$CP/$KIND" >&2; fi
+    done
+    PHASE='remove EFI archive'
+    if [ -n "$BOOT" ] && [ -d "$BOOT" ]; then
+        for ENTRY in "$BOOT"/*; do [ ! -e "$ENTRY" ] || rm -- "$ENTRY"; done
+        rmdir "$BOOT"
+    fi
+    sync
+    PHASE='remove metadata'
+    # Keep retry metadata through payload deletion. A final directory containing
+    # only these files can be safely retried after a failed metadata cleanup.
+    rm -f -- "$CP/COMPLETE"
+    rm -f -- "$CP/manifest"
+    rm -- "$CP/REMOVING"
+    rmdir "$CP"
+    sync
+    printf 'Removed checkpoint %s.\n' "$NAME" >&2
+    exit 0
 }
 if [ "$ACTION" = create ]; then
     [ "${#NAME}" -le 64 ] || die 'create label is too long'
@@ -377,8 +492,10 @@ else
         [ "$(field / FSTYPE)" = btrfs ] || die 'supply --device for the target'
         DEVICE=UUID=$(field / UUID)
     fi
-    MODE=ro; [ "$ACTION:$DRY_RUN" != restore:0 ] || MODE=rw
+    MODE=ro; case "$ACTION:$DRY_RUN" in restore:0|remove:0) MODE=rw;; esac
     mount_top "$MODE"
+    CP=$STORE/$NAME
+    if [ "$ACTION" = remove ]; then remove_checkpoint; fi
     if [ "$ACTION" = list ]; then
         PHASE="measure checkpoint extents"
         printf 'Scanning checkpoint file extents...\n' >&2
@@ -387,6 +504,7 @@ else
             [ -d "$CP" ] && [ ! -L "$CP" ] || continue
             STATE=incomplete
             if [ -f "$CP/COMPLETE" ] && [ "$(cat "$CP/COMPLETE")" = "${CP##*/}" ] && [ ! -e "$CP/INCOMPLETE" ]; then STATE=complete; fi
+            [ ! -e "$CP/REMOVING" ] || STATE=removing
             [ -f "$CP/manifest" ] || STATE="$STATE (legacy format)"
             # Scan each checkpoint as one set, including legacy nested snapshots.
             # FIEMAP sizes describe file extents, not compressed physical usage.

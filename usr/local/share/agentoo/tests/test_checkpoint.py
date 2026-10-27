@@ -41,13 +41,14 @@ elif name=='pgrep': sys.exit(1)
 elif name=='portageq': print('/var/cache/distfiles' if args[-1]=='DISTDIR' else '/var/cache/binpkgs')
 elif name=='stat': print('1:1')
 elif name=='df': print('Filesystem 1024-blocks Used Available Capacity Mounted on\\n/dev/mock 10000000 0 9000000 0% /')
-elif name=='mount': shutil.copytree(os.environ['FIXTURE'],args[-1],dirs_exist_ok=True)
-elif name=='umount': pass
+elif name=='mount': shutil.copytree(os.environ['FIXTURE'],args[-1],dirs_exist_ok=True,symlinks=True)
+elif name=='umount':
+    if os.environ.get('PERSIST'): shutil.copytree(args[-1],os.environ['FIXTURE'],dirs_exist_ok=True,symlinks=True)
 elif name=='findmnt':
     field=args[args.index('-o')+1]
     target=args[-1]
     if field=='TARGET': print(target)
-    elif field=='FSTYPE': print('btrfs')
+    elif field=='FSTYPE': print('vfat' if target==os.environ.get('ESP') else 'btrfs')
     elif field=='FSROOT': print('/@home' if target=='/home' else '/@')
     elif field=='UUID': print(os.environ.get('ROOT_UUID','fixture-uuid') if target=='/' else 'fixture-uuid')
     elif field=='UUID,FSROOT,TARGET': print('other-uuid / /')
@@ -58,7 +59,11 @@ elif name=='btrfs':
     elif args[:2]==['filesystem','du']:
         if os.environ.get('BAD_SIZES'): sys.exit(1)
         print('Total Exclusive Set shared Filename\\n123 45 67 path')
-    elif args[:2]==['subvolume','list']: pass
+    elif args[:2]==['subvolume','list']:
+        if os.environ.get('NESTED'): print('nested')
+    elif args[:2]==['subvolume','delete']:
+        if os.environ.get('FAIL_DELETE'): sys.exit(1)
+        shutil.rmtree(args[-1])
     else: sys.exit('unexpected mutating btrfs: '+repr(args))
 else: sys.exit('unexpected tool '+name)
 ''')
@@ -175,6 +180,76 @@ else: sys.exit('unexpected tool '+name)
         self.assertIn('DISCARD current state', result.stderr)
         self.assertIn('subvolid=5,ro,rescue=nologreplay', next(c for c in self.calls() if c[0]=='mount'))
         self.assertFalse(any(c[1:3] in [['subvolume','snapshot'], ['subvolume','delete']] for c in self.calls()))
+
+    def test_remove_authorization_before_tools(self):
+        for args in [('remove', 'saved', '--no-input'),
+                     ('remove', 'saved', '--confirm=other'),
+                     ('remove', 'saved', '--system', '--dry-run')]:
+            result = self.invoke(*args)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(self.calls())
+
+    def test_remove_dry_run_and_success(self):
+        cp = self.checkpoint()
+        result = self.invoke('remove', 'saved', '--dry-run', '--no-input')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(cp.exists())
+        self.assertFalse(any(c[1:3] == ['subvolume', 'delete'] for c in self.calls()))
+        self.assertIn('subvolid=5,ro,rescue=nologreplay', next(c for c in self.calls() if c[0]=='mount'))
+        result = self.invoke('remove', 'saved', '--confirm=saved', '--no-input', PERSIST='1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The mock mount copies files, so observe deletion in the operation log.
+        self.assertTrue(any(c[1:3] == ['subvolume', 'delete'] for c in self.calls()))
+        self.assertIn('Removed checkpoint saved', result.stderr)
+
+    def test_remove_failure_marks_and_retry_finishes(self):
+        cp = self.checkpoint()
+        result = self.invoke('remove', 'saved', '--confirm=saved', FAIL_DELETE='1', PERSIST='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((cp / 'REMOVING').exists())
+        result = self.invoke('inspect', 'saved')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('removal in progress', result.stderr)
+        (cp / 'system').rmdir()  # Payload deletion completed before interruption.
+        (cp / 'manifest').unlink()  # Final metadata cleanup also started.
+        result = self.invoke('remove', 'saved', '--confirm=saved')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_remove_efi_payload_and_retry_after_partial_deletion(self):
+        cp = self.checkpoint()
+        manifest = (cp / 'manifest').read_text().replace('efi=0', 'efi=1').replace('esp_uuid=none', 'esp_uuid=fixture-uuid')
+        (cp / 'manifest').write_text(manifest)
+        esp = self.root / 'esp'
+        boot = esp / 'checkpoints/saved'
+        boot.mkdir(parents=True)
+        (boot / 'manifest').write_text(manifest)
+        (boot / 'efi-files.tar.gz').write_text('damaged archives can be deleted')
+        (boot / 'COMPLETE').write_text('saved')
+        args = ('remove', 'saved', '--confirm=saved', '--efi-mount', str(esp))
+        result = self.invoke(*args, ESP=str(esp), FAIL_DELETE='1', PERSIST='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((cp / 'REMOVING').exists())
+        self.assertTrue(boot.exists())
+        (boot / 'manifest').unlink()  # Interrupted EFI cleanup can lose metadata.
+        result = self.invoke(*args, ESP=str(esp))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(boot.exists())
+
+    def test_remove_refuses_unsafe_or_unsupported_entries(self):
+        cp = self.checkpoint()
+        for entry in ('unexpected', 'REMOVING'):
+            (cp / entry).symlink_to(self.root)
+            result = self.invoke('remove', 'saved', '--confirm=saved')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(any(c[1:3] == ['subvolume', 'delete'] for c in self.calls()))
+            (cp / entry).unlink()
+        result = self.invoke('remove', 'saved', '--confirm=saved', NESTED='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('nested subvolumes', result.stderr)
+        (cp / 'manifest').unlink()
+        result = self.invoke('remove', 'saved', '--confirm=saved')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('legacy/unsupported', result.stderr)
 
 
 if __name__ == '__main__':

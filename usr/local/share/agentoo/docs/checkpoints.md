@@ -76,6 +76,35 @@ To measure a snapshot directly when its path is mounted:
 If full Btrfs quotas are already enabled, `btrfs qgroup show /` provides per-
 subvolume referenced and exclusive accounting without walking every file.
 
+## Removing checkpoints
+
+Use the exact name from `agentoo checkpoint list`:
+
+    agentoo checkpoint remove <name> --dry-run
+    agentoo checkpoint remove <name>
+
+Removal permanently deletes all recorded system/home snapshots and the matching
+EFI archive. It leaves the current system, home, boot files, and firmware entries
+unchanged. It works on the booted system; from recovery, supply `--device DEVICE`
+and the appropriate `--efi-mount PATH`. The command mounts Btrfs top level itself
+and takes the same lock as other checkpoint operations.
+
+Interactive removal asks for confirmation. For automation, use
+`remove NAME --confirm NAME --no-input`. Component selection flags and `--yes`
+are refused. Dry-run validates and prints the plan using a temporary read-only
+Btrfs mount, without deleting files or marking the checkpoint.
+
+Removal validates filesystem and snapshot identities, rejects symlinks,
+unexpected directory entries, mounts inside checkpoint paths, and nested
+subvolumes. Legacy and incomplete captures require manual cleanup. Archive
+checksums need not pass to delete an otherwise identified EFI backup.
+
+Deletion across Btrfs and EFI is not atomic. Before payload deletion, a durable
+`REMOVING` marker makes inspect/restore refuse the checkpoint and list show
+`removing`. After a failure or interruption, rerun the same removal command;
+missing payloads are accepted only once removal has started. Keep other writers
+away from checkpoint storage. Space reclamation by Btrfs can finish asynchronously.
+
 ## Planning, output, and automation
 
 `create LABEL --dry-run` and `restore NAME --device DEVICE --dry-run` run the
@@ -165,7 +194,7 @@ this command lists them and refuses automatic inspection/restoration.
 - Creation is online-only; offline capture is deferred.
 - Live capture is sequential, without application or cross-component atomicity.
 - On-disk checkpoints do not protect against disk failure.
-- Checkpoint deletion, scheduling and retention are manual.
+- Scheduling and retention are manual; deletion uses explicit `remove`.
 - First-boot verification invokes this same capture command after its health checks.
 
 ## Verification status

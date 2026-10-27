@@ -19,7 +19,7 @@ COMMANDS = {
     'git': 'Run Git against the Agentoo system repository',
     'repos': 'Check system and home Git repositories',
     'term-colors': 'Show visual terminal color tests',
-    'checkpoint': 'Create, list, inspect, and restore system checkpoints',
+    'checkpoint': 'Create, list, inspect, restore, and remove system checkpoints',
     'kernel': 'Configure, rebuild, and install custom EFI kernels',
     'permissions': 'Check or repair managed ownership and permissions',
     'secrets': 'Install secret files from Proton Pass',
@@ -39,6 +39,7 @@ CHECKPOINT_USAGE = {
     'create': 'agentoo checkpoint create LABEL [options]',
     'list': 'agentoo checkpoint list [options]',
     'inspect': 'agentoo checkpoint inspect NAME [options]',
+    'remove': 'agentoo checkpoint remove NAME [options]',
     'restore': 'agentoo checkpoint restore NAME --device DEVICE [options]',
 }
 
@@ -68,12 +69,13 @@ def parser_for(name):
     if name != 'checkpoint':
         return python_parser(name)
     parser = CompletionParser(prog='agentoo checkpoint',
-        usage='agentoo checkpoint {create|list|inspect|restore} [options]')
+        usage='agentoo checkpoint {create|list|inspect|restore|remove} [options]')
     sub = parser.add_subparsers(dest='operation', required=True, prog=parser.prog)
     for operation, description in {
         'create': 'Capture system, home, and EFI',
         'list': 'List checkpoints and storage usage',
         'inspect': 'Show metadata and verify saved components',
+        'remove': 'Permanently delete a checkpoint',
         'restore': 'Restore from recovery media; preserve home by default',
     }.items():
         child = sub.add_parser(operation, help=description)
@@ -84,12 +86,12 @@ def parser_for(name):
         if operation != 'create':
             child.add_argument('--device', help='Btrfs device').completion = 'files'
         child.add_argument('--no-input', action='store_true', help='Never prompt; use sudo -n')
-        if operation in ('create', 'restore'):
+        if operation in ('create', 'restore', 'remove'):
             child.add_argument('--dry-run', action='store_true', help='Validate and plan using read-only inspection')
             if operation == 'create':
                 child.add_argument('--yes', action='store_true', help='Authorize capture without prompting')
             else:
-                child.add_argument('--confirm', metavar='NAME', help='Authorize exact restore name')
+                child.add_argument('--confirm', metavar='NAME', help='Authorize exact checkpoint name')
         child.add_argument('--efi-mount', metavar='PATH', help='EFI mountpoint').completion = 'directories'
         if operation in ('create', 'restore'):
             for component in ('system', 'home', 'efi'):
