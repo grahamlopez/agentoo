@@ -1,0 +1,18 @@
+# Sourced by /init and the handoff smoke test.
+prepare_udev_handoff() {
+    for block in /sys/class/block/dm-*; do
+        [ -r "$block/dm/name" ] || continue
+        read -r name < "$block/dm/name"
+        [ "$name" = "$1" ] || continue
+        read -r uuid < "$block/dm/uuid"
+        case "$uuid" in CRYPT-LUKS2-*) ;; *) return 1 ;; esac
+        mkdir -p /run/udev/rules.d || return 1
+        # Real-root udev coldplugs with ACTION=add. Its device-mapper rules
+        # otherwise reject an existing mapping with no initramfs udev database.
+        # Match only this mapping, and only while its table is active.
+        printf '%s\n' "ACTION==\"add\", SUBSYSTEM==\"block\", KERNEL==\"${block##*/}\", ATTR{dm/uuid}==\"$uuid\", ATTR{dm/suspended}==\"0\", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=\"1\"" \
+            > /run/udev/rules.d/09-agentoo-initramfs-root.rules
+        return $?
+    done
+    return 1
+}

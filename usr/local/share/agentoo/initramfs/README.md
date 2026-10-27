@@ -28,7 +28,11 @@ cryptsetup/library security updates. BusyBox is statically linked.
 
 The init script explicitly disables device-mapper udev handling for cryptsetup
 only. It enables discards, tries the passphrase three times, mounts `@` read-only,
-moves the API mounts and executes BusyBox switch_root. It waits up to roughly
+writes a runtime udev rule for the active mapping, moves the API mounts and
+executes BusyBox switch_root. The rule lives in `/run/udev/rules.d/` and matches
+the exact kernel device and LUKS mapping UUID, with a non-suspended table. It
+lets real-root udev process the initial coldplug event without an initramfs
+udev database. It disappears at reboot and adds no daemon or hardware database. It waits up to roughly
 ten seconds for the partition. Failures before handoff enter a rescue shell.
 The real root must already contain /dev, /proc, /sys and /run directories.
 
@@ -47,8 +51,14 @@ It extracts the archive and runs its cryptsetup with private /dev and /run,
 without a udev daemon. It verifies mapping-node creation, formats the disposable
 mapping, creates `@`, and mounts that subvolume read-only using staged BusyBox.
 The trap removes test mounts, mapping, loop attachment and temporary files.
-It never opens or modifies the real encrypted partition. This test exercises
-storage activation and mounting, not the PID 1 handoff or physical keyboard.
+It never opens or modifies the real encrypted partition. After storage tests,
+it evaluates the installed real-root udev rules with private `/dev` and `/run`.
+It first reproduces the rejected coldplug (`SYSTEMD_READY=0`), then invokes the
+archived handoff helper and checks actual Btrfs probing, the requested UUID
+symlink, and systemd readiness properties. This uses `udevadm test`: it does not
+emit kernel events, run a daemon, create the requested symlinks, or start
+systemd units. Full PID 1 handoff and physical keyboard acceptance still require
+boot testing. The host test also requires `udevadm` and `blkid`.
 
 ## Boot candidate
 
@@ -76,30 +86,30 @@ structure and Caps Lock -> Control entry were verified. Archive size is about
 on the host: LUKS2 unlock without udev, mapping-node creation, discards and
 read-only Btrfs `@` mounting passed. Boot acceptance remains pending.
 
-## Direct mapper fstab experiment
+## Direct mapper fstab experiment (unsuccessful)
 
-The first boot reached real-root systemd, but `/home` timed out waiting for its
-filesystem UUID. This branch tests direct mapper paths without the runtime udev
-handoff rule. The initramfs already opens the container as `root`, so the existing
-EFI image can be reused. Change the source of both Btrfs entries in the live
-`/etc/fstab` from the filesystem UUID to `/dev/mapper/root`, preserving all mount
-options. Keep `/boot` on its existing FAT UUID:
+Changing the source of both Btrfs fstab entries from the filesystem UUID to
+`/dev/mapper/root` did not fix the handoff. The subsequent boot timed out waiting
+for `/dev/mapper/root`, confirming that changing the path alone does not satisfy
+systemd device readiness. Configuration generation had passed, but boot
+acceptance failed. The runtime udev handoff rule below addresses that readiness
+problem directly.
 
-```fstab
-/dev/mapper/root / btrfs noatime,compress=zstd:1,subvol=@ 0 0
-/dev/mapper/root /home btrfs noatime,compress=zstd:1,subvol=@home 0 0
-UUID=ECE7-96EF /boot vfat fmask=0133,dmask=0022 0 2
-```
-
-Back up the live fstab before applying the change; restore that backup to revert.
+Restore the saved UUID-based fstab before testing the udev handoff approach.
 The live fstab is installer-generated and is not tracked in this repository, so
-a Git deployment alone does not apply this experiment. No installer defaults or
-historical kernel configurations are changed.
+switching branches or deploying Git changes does not restore it automatically.
+No installer defaults or historical kernel configurations were changed.
 
-The installed systemd fstab generator was tested against both versions in a
-private mount namespace. The generated `home.mount` changes its source from the
-UUID path to `/dev/mapper/root` and its block-device ordering target accordingly.
-This confirms configuration generation, not device readiness. A full boot with
-no handoff rule must still verify that systemd accepts the mapper device and
-mounts `/home`. After boot, check `findmnt /` and `findmnt /home`,
-`systemctl status home.mount`, and `systemctl --failed`.
+## First boot investigation (2026-10-27)
+
+The first boot unlocked and mounted root and started real-root systemd.
+Its persistent journal (boot `03b3874a3b4e4736ab1cb9b8ff8d23df`) records a
+successful root remount, then a timeout for the Btrfs UUID needed by `/home`.
+The installed `10-dm.rules` rejects coldplug `add` events for mappings without a
+prior activation property; the original daemon-free initramfs provided none.
+The runtime handoff rule addresses this exact transition. A namespace-isolated
+regression test reproduces rejection and checks acceptance plus mapping scoping;
+filesystem probe properties are supplied by a test fixture because the sandbox
+cannot open block devices. The extended host smoke test uses real probing on the
+disposable mapping. Acceptance of that extended test and a corrected boot remain
+pending.

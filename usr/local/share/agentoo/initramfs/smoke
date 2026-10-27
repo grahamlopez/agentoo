@@ -8,7 +8,7 @@ fi
 mount --make-rprivate /
 build=$2
 [[ -x $build/root/bin/cryptsetup && -f $build/initramfs.cpio ]] || exit 2
-for tool in losetup cryptsetup mkfs.btrfs btrfs cpio mountpoint findmnt mount umount chroot; do command -v "$tool" >/dev/null; done
+for tool in losetup cryptsetup mkfs.btrfs btrfs cpio mountpoint findmnt mount umount chroot udevadm blkid; do command -v "$tool" >/dev/null; done
 work=$(mktemp -d /tmp/agentoo-initramfs-smoke.XXXXXXXX)
 name=agentoo-smoke-${work##*.}
 loop=
@@ -63,3 +63,41 @@ chroot "$root" /bin/mount -t btrfs -o ro,subvol=@ "/dev/mapper/$name" /newroot
 findmnt -no SOURCE,FSTYPE,OPTIONS --target "$root/newroot"
 DM_DISABLE_UDEV=1 chroot "$root" /bin/cryptsetup status "$name"
 echo 'PASS: archived cryptsetup unlocked LUKS2 without udev, created its mapping node, and BusyBox mounted Btrfs @ read-only.'
+
+# Reproduce real-root coldplug using the host rules with fresh /run and the
+# private device directory. udevadm test evaluates rules and filesystem probing;
+# it does not start a daemon, emit events, execute RUN commands or start units.
+[[ -f $root/udev-handoff ]] || { echo 'Rebuild the archive: missing udev-handoff helper.' >&2; exit 1; }
+sys=$(readlink -f "/sys/dev/block/$(stat -c '%Hr:%Lr' "$root/dev/mapper/$name")")
+read -r major minor < <(stat -c '%t %T' "$root/dev/mapper/$name")
+mknod "$root/dev/${sys##*/}" b "$((16#$major))" "$((16#$minor))"
+uuid=$(blkid -s UUID -o value "$root/dev/mapper/$name")
+unshare --mount --fork /bin/bash -euo pipefail -c '
+    root=$1; name=$2; sys=$3; uuid=$4; work=$5
+    mount --make-rprivate /
+    mount --bind "$root/dev" /dev
+    mount --bind "$root/run" /run
+    udevadm test --action=add "$sys" > "$work/coldplug-before.log" 2>&1
+    if ! grep -Eq "^[[:space:]]*SYSTEMD_READY=0$" "$work/coldplug-before.log"; then
+        cat "$work/coldplug-before.log"
+        echo "Expected coldplug failure was not reproduced; inspect host rule behavior." >&2
+        exit 1
+    fi
+    echo "REPRODUCED: coldplug without the handoff rule reports SYSTEMD_READY=0."
+    . "$root/udev-handoff"
+    prepare_udev_handoff "$name"
+    udevadm verify /run/udev/rules.d/09-agentoo-initramfs-root.rules
+    udevadm test --action=add "$sys" > "$work/coldplug-after.log" 2>&1
+    cat "$work/coldplug-after.log" | grep -E "^[[:space:]]*(DEVLINKS|DM_NAME|DM_UDEV_PRIMARY_SOURCE_FLAG|ID_FS_UUID|SYSTEMD_READY|TAGS)=" || true
+    if ! grep -Eq "^[[:space:]]*ID_FS_UUID=$uuid$" "$work/coldplug-after.log" ||
+       ! grep -Fq "/dev/disk/by-uuid/$uuid" "$work/coldplug-after.log" ||
+       ! grep -Eq "^[[:space:]]*TAGS=.*:systemd:" "$work/coldplug-after.log"; then
+        cat "$work/coldplug-after.log"
+        exit 1
+    fi
+    if grep -Eq "^[[:space:]]*SYSTEMD_READY=0$|^[[:space:]]*DM_UDEV_DISABLE_(DISK|OTHER)_RULES_FLAG=1$" "$work/coldplug-after.log"; then
+        cat "$work/coldplug-after.log"
+        exit 1
+    fi
+    echo "PASS: real-root udev rule evaluation probes Btrfs, requests its UUID link, and permits systemd device readiness."
+' smoke-handoff "$root" "$name" "$sys" "$uuid" "$work"
