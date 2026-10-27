@@ -8,10 +8,63 @@ system module installation, ESP writes and firmware registration. Initramfs buil
 as the build user and create user-owned workspace files.
 
 ```sh
-agentoo kernel config --label agentoo-v0.4
+agentoo kernel config --label agentoo-v0.4 \
+  --config /usr/local/share/agentoo/docs/kernel-shared-v04-config
 agentoo kernel build --label agentoo-v0.4 -j16
 agentoo kernel install --label agentoo-v0.4
 ```
+
+## Host specialization
+
+Configure on the destination host. `/etc/agentoo/target-host` selects the tracked
+native Kconfig fragment `/etc/agentoo/kernel/hosts/<name>.config`; `--host NAME`
+overrides the selection, not the destination hardware or storage. Missing or
+malformed profiles fail before workspace/source changes. Thinktop and flattop
+are supplied initially; other hosts need reviewed profiles first.
+
+The starting config supplies the shared driver/capability union. Host fragments
+set explicit embedded firmware names, their absolute directory, CPU microcode
+support and any justified Kconfig exceptions. They do not contain command lines,
+initramfs paths or release labels. Complete saved configs remain useful baseline
+snapshots, but their old boot identifiers and embedded firmware are replaced.
+Adding a host must not prune the shared driver union. A future bequiet profile
+can enable modules for NVIDIA; external-module building is still separate work.
+
+`/etc/kernel/cmdline` is local installation data, never a tracked host UUID list.
+Config reads it and inspects the mounted root through findmnt, lsblk and sysfs.
+The supported layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed
+by a GPT partition. Filesystem/LUKS/partition UUIDs and the actual mapping name
+are recorded together. The command line must contain matching `root=UUID=...`,
+`rootfstype=btrfs`, `rootflags=subvol=@`, and either matching `crypt_root=UUID=...`
+or the installer's `rd.luks.uuid=luks-...` plus `rd.luks.name=...=...`. If both
+styles appear, both must match. Stale, duplicate or conflicting identifiers fail
+with an explanation; correct the local file and retry. There is no automatic
+rewrite of this file, fstab or storage. Block-device and dm sysfs access are
+required; a restricted container is not a substitute for running on the host.
+
+The minimal initramfs uses the recorded PARTUUID and mapping name, US/Caps-to-Control
+keymap, passphrase unlock, discards, `@` and `/sbin/init`. It accepts either boot
+identifier style because its storage selection comes from those recorded inputs.
+Alternative roots/layouts, token/key-file unlock, hibernation, nonstandard init,
+or conflicting discard policy require separately scoped initramfs support.
+Genkernel requires the matching `crypt_root=UUID=...` argument; dracut's
+`rd.luks.*` arguments alone are insufficient for that generator. Custom archives
+remain explicit operator inputs and their internal storage policy is not inspected.
+
+Config saves the original baseline, host fragment snapshot and provenance hashes,
+resolved boot/storage identity and required host settings in the workspace.
+Build uses this recorded policy even if the selector/profile/local command line
+later changes. It checks host settings after each Kconfig resolution and refuses
+silent changes. To adopt new host policy or boot identity, configure a fresh
+workspace. Workspaces predating specialization must also be configured afresh.
+
+Installed firmware remains independent: follow the native savedconfig procedure
+in [firmware maintenance](firmware.md). Thinktop's existing selection is unchanged;
+flattop retains broad installed coverage pending a reviewed savedconfig list.
+Do not use the embedded list as the installed list: recovery kernels and
+peripherals may need more files. CPU microcode, SOF and regulatory data also have
+separate package ownership. Updating embedded payloads requires rebuilding the
+kernel. Verify early microcode revision and actual hardware behavior after boot.
 
 ## Configure
 
@@ -34,17 +87,20 @@ After showing the plan and confirming, config:
    original Makefile beside it when a change is needed. Genkernel reads that
    field directly, so changing only make's command-line value is insufficient.
 3. Sets `CONFIG_LOCALVERSION="-<label>"`, disables automatic SCM release suffixes,
-   and enables EFI-stub, initramfs and `/proc/config.gz` support. It preserves
-   `CONFIG_CMDLINE` and existing module choices.
+   and enables EFI-stub, initramfs and `/proc/config.gz` support. It replaces
+   embedded firmware and command-line settings with the selected host inputs,
+   clears the old initramfs path and otherwise preserves existing module choices
+   unless the host fragment explicitly overrides them.
 4. Lists new Kconfig options and runs interactive `oldconfig`.
    `--accept-defaults` chooses `olddefconfig` instead.
-5. Checks the resulting release and prints configuration differences, including
-   removed symbols and changes from dependency resolution.
+5. Checks the resulting release, required host settings and firmware-file presence,
+   then prints configuration differences, including removed symbols and changes
+   from dependency resolution.
 6. Offers an optional config export, then prints the workspace path on stdout.
 
 Only the starting config is imported from an older build. Old initramfs images,
-firmware staging and caches are not copied. If embedded firmware paths in the
-config are stale, update them to current system inputs before building.
+firmware staging and caches are not copied. Missing selected firmware fails
+configuration; review the host fragment and installed packages before retrying.
 
 ## Build
 
@@ -81,12 +137,12 @@ and bundles installed cryptsetup and its libraries. The complete subtree is
 regenerated on each build/retry; no network download is performed. The archive is
 `<workspace>/initramfs/<release>/initramfs.cpio`.
 
-This default is machine-specific to thinktop's LUKS2 partition and Btrfs `@`
-subvolume, with the US/Caps-to-Control console map. It requires
+This default uses the host identity recorded by config, with Btrfs `@`
+and the US/Caps-to-Control console map. It requires
 `CONFIG_MODULES=n` and built-in boot drivers. See the
 [minimal initramfs instructions](../initramfs/README.md) for dependencies and
-smoke tests. On another machine, generate an archive with the appropriate
-`--partuuid` and `--keymap` and pass it with `--initramfs`.
+smoke tests. The builder receives explicit `--partuuid`, `--mapper` and `--keymap`
+arguments; it has no implicit thinktop partition UUID.
 
 Use `--genkernel` explicitly for the previous generator. Genkernel creates a
 fresh uncompressed LUKS-capable initramfs using the workspace cache, temporary,

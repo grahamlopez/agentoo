@@ -7,10 +7,27 @@ No uevents are emitted and no host udev database or devices are changed.
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 HERE = Path(__file__).resolve().parents[1] / 'initramfs'
+
+
+class BuilderArgumentsTest(unittest.TestCase):
+    def test_requires_explicit_partition_and_rejects_invalid_mapping_before_building(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary) / 'output'
+            base = [sys.executable, str(HERE / 'build'), '--work', str(work)]
+            for arguments, message in (([], '--partuuid'),
+                                       (['--partuuid', 'not-a-uuid'], 'invalid GPT PARTUUID'),
+                                       (['--partuuid', '33333333-3333-4333-8333-333333333333',
+                                         '--mapper', '../bad'], 'invalid root mapping name')):
+                with self.subTest(arguments=arguments):
+                    result = subprocess.run([*base, *arguments], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn(message, result.stderr)
+                    self.assertFalse(work.exists())
 
 
 class HandoffTest(unittest.TestCase):

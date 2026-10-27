@@ -35,6 +35,13 @@ then `90-${GENTOO_TARGET_HOST}` when present. `SOF_FIRMWARE` must be `yes` or
 `no`; the common default is `no`, and `thinktop` enables it for its audio DSP.
 These files describe the target hardware, independent of the installation host.
 
+Custom kernel builds separately select native Kconfig fragments under
+`/etc/agentoo/kernel/hosts/<name>.config` through the same target-host selector
+(or `agentoo kernel config --host NAME`). These fragments own embedded firmware
+and host Kconfig exceptions. Local `/etc/kernel/cmdline` and discovered storage
+identity supply boot identifiers; UUIDs are not tracked host policy. See the
+[kernel guide](../../usr/local/share/agentoo/docs/kernel.md#host-specialization).
+
 ## Flattop hardware baseline
 
 Flattop is a Framework Laptop (13th Gen Intel Core), board FRANMCCP06 A6,
@@ -280,8 +287,8 @@ removed after repeated namespace-holder failures made its complexity excessive.
 
 Kernel policy is tracked in `/etc/portage/package.use/kernel`,
 `/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
-The stable binary distribution kernel remains the fallback; the future custom
-image workflow is separate and undefined. `/etc/kernel/cmdline` contains local
+The stable binary distribution kernel remains the fallback; the custom
+image workflow uses `agentoo kernel config|build|install`. `/etc/kernel/cmdline` contains local
 boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
 data, not a permanently maintained running-kernel requirement.
 

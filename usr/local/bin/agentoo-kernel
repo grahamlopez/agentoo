@@ -18,6 +18,7 @@ import time
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
+import kernel_host
 
 WORKSPACES = Path('/dev/shm')
 MODULES_ROOT = Path('/lib/modules')
@@ -45,6 +46,7 @@ def build_parser():
             'workspace (default: find this label under /dev/shm)').completion = 'directories'
         child.add_argument('--yes', action='store_true', help='accept displayed plans; does not answer Kconfig or sudo prompts')
         if name == 'config':
+            child.add_argument('--host', metavar='NAME', help='host profile (default: /etc/agentoo/target-host); builds still target this machine')
             child.add_argument('--config', metavar='FILE', help='starting config (default: /proc/config.gz); plain or gzip').completion = 'files'
             child.add_argument('--sources', default='/usr/src/linux', metavar='DIR', help='kernel sources (default: /usr/src/linux)').completion = 'directories'
             child.add_argument('--accept-defaults', action=argparse.BooleanOptionalAction, default=False,
@@ -211,6 +213,8 @@ def check_config(work, data):
             raise RuntimeError(f'{output}/.config requires {key}=y')
     if values.get('CONFIG_LOCALVERSION') != json.dumps('-' + data['label']):
         raise RuntimeError('CONFIG_LOCALVERSION does not match --label; prepare a new workspace')
+    if 'host_settings' in data:
+        kernel_host.check_expected(values, data['host_settings'])
     release = make(work, data, '-s', 'kernelrelease', capture=True)
     if release != data['release']:
         raise RuntimeError(f'kernel release mismatch: expected {data["release"]}, got {release}')
@@ -236,6 +240,8 @@ def load(work, label, completed=False):
         raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
     if data.get('label') != label or not data.get('configured'):
         raise RuntimeError(f'{work}: not a configured workspace for label {label}')
+    if not isinstance(data.get('host_settings'), dict) or not isinstance(data.get('identity'), dict):
+        raise RuntimeError(f'{work}: workspace predates host specialization; run config in a fresh directory')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', data.get('release', '')):
         raise RuntimeError(f'{work}: invalid recorded kernel release')
     sources = Path(data['sources'])
@@ -275,7 +281,7 @@ def select_workspace(args):
 
 
 def configure(args):
-    require_tools('make')
+    require_tools('make', 'findmnt', 'lsblk')
     sources = Path(args.sources).expanduser().resolve()
     if not (sources / 'scripts/config').is_file():
         raise RuntimeError(f'{sources}: not a kernel source tree (scripts/config missing)')
@@ -302,17 +308,34 @@ def configure(args):
         raise ValueError(f'{origin}: no kernel configuration settings found')
     if not args.accept_defaults and not sys.stdin.isatty():
         raise RuntimeError('oldconfig needs a terminal; use --accept-defaults to accept new defaults')
+    host, profile, profile_text, host_values = kernel_host.read_profile(args.host)
+    identity = kernel_host.resolve_identity(run)
+    expected = kernel_host.expectations(host_values, identity)
+    notice(f'Host profile:     {host} ({profile})\nKernel command line: {identity["cmdline"]}\n'
+           f'Encrypted root:   PARTUUID={identity["partuuid"]} -> {identity["mapper"]}\n'
+           f'Initramfs policy: LUKS2 / Btrfs @; keymap={identity["keymap"]}; allow discards')
     notice(f'Old config:       {origin}\nKernel sources:   {sources}\nBuild directory:  {work}\nKernel version:   {release}')
     notice(f'EXTRAVERSION:     {extra!r} -> {upstream_extra!r}' if extra != upstream_extra else f'EXTRAVERSION:     {extra!r}')
     confirm('Proceed', args.yes)
     work.mkdir(parents=True, exist_ok=True)
     data = dict(label=args.label, release=release, sources=str(sources), kcflags=os.environ.get('KCFLAGS', DEFAULT_FLAGS))
+    data.update(host=host, identity=identity, host_settings=expected,
+                config_origin=str(origin), config_input_sha256=hashlib.sha256(raw).hexdigest(),
+                profile_origin=str(profile), profile_sha256=hashlib.sha256(profile_text.encode()).hexdigest())
     output, gen = paths(work, data)
     output.mkdir(parents=True)
     for name in ('cache', 'tmp', 'output', 'modules'):
         (gen / name).mkdir(parents=True)
     (work / 'config.original').write_text(text)
-    (output / '.config').write_text(text)
+    (work / 'host.config').write_text(profile_text)
+    # Merge native fragment entries without leaving duplicate assignments for Kconfig.
+    inherited = []
+    for line in text.splitlines():
+        match = re.match(r'(?:# )?(CONFIG_\w+)(?:=| is not set)', line)
+        if not match or match[1] not in expected:
+            inherited.append(line)
+    (output / '.config').write_text('\n'.join(inherited) + '\n' +
+                                  '\n'.join(f'{key}={value}' for key, value in expected.items()) + '\n')
     if extra != upstream_extra:
         original = sources / 'Makefile'
         backup = sources / f'Makefile.agentoo-{time.time_ns()}.bak'
@@ -325,13 +348,12 @@ def configure(args):
         notice(f'Original source Makefile saved to {backup}')
     edit_config(work, data, '--set-str', 'LOCALVERSION', '-' + args.label,
                 '--disable', 'LOCALVERSION_AUTO', '--enable', 'EFI_STUB', '--enable', 'BLK_DEV_INITRD',
-                '--enable', 'IKCONFIG', '--enable', 'IKCONFIG_PROC')
+                '--enable', 'IKCONFIG', '--enable', 'IKCONFIG_PROC', '--set-str', 'INITRAMFS_SOURCE', '')
     notice('New Kconfig options:')
     make(work, data, 'listnewconfig')
     make(work, data, 'olddefconfig' if args.accept_defaults else 'oldconfig')
     values = check_config(work, data)
-    if values.get('CONFIG_CMDLINE') != read_config(work / 'config.original').get('CONFIG_CMDLINE'):
-        raise RuntimeError('Kconfig changed CONFIG_CMDLINE; inspect the candidate before proceeding')
+    validate_inputs(work, data)
     show_diff(read_config(work / 'config.original'), values)
     data.update(configured=True, source_makefile_sha256=digest(sources / 'Makefile'))
     save(work, data)
@@ -364,12 +386,15 @@ def build(args):
         archive = minimal_work / 'initramfs.cpio'
     if custom == archive:
         raise RuntimeError('custom initramfs must be outside the generated output path')
+    if args.genkernel and not any(token.startswith('crypt_root=') for token in shlex.split(data['identity']['cmdline'])):
+        raise RuntimeError('genkernel requires crypt_root=UUID=... in /etc/kernel/cmdline; review the local arguments and prepare a fresh config workspace')
     values = check_config(work, data)
     if not custom and not args.genkernel and values.get('CONFIG_MODULES') == 'y':
         raise RuntimeError('minimal initramfs requires built-in drivers (CONFIG_MODULES=n); use --genkernel or --initramfs')
     validate_inputs(work, data)
     notice(f'KCFLAGS:          {data["kcflags"]}\nKernel config:    {output}/.config\nKernel sources:   {data["sources"]}\nBuild directory:  {work}\nKernel version:   {data["release"]}')
-    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or ("fresh genkernel image (LUKS)" if args.genkernel else "fresh minimal image (thinktop LUKS/Btrfs)")}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
+    notice(f'Host:             {data["host"]}\nKernel command line: {data["identity"]["cmdline"]}')
+    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or ("fresh genkernel image (LUKS)" if args.genkernel else "fresh minimal image (recorded host LUKS2/Btrfs inputs)")}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
     confirm('Proceed', args.yes)
     data['built'] = False
     save(work, data)
@@ -392,7 +417,8 @@ def build(args):
         # Regenerate only this builder's disposable subtree on every build/retry.
         if minimal_work.exists():
             shutil.rmtree(minimal_work)
-        run([INITRAMFS_BUILDER, '--work', minimal_work])
+        run([INITRAMFS_BUILDER, '--work', minimal_work, '--partuuid', data['identity']['partuuid'],
+             '--mapper', data['identity']['mapper'], '--keymap', data['identity']['keymap']])
     else:
         # --no-ramdisk-modules still creates modules.builtin metadata via make.
         command = ['genkernel', f'--kerneldir={data["sources"]}', f'--kernel-outputdir={output}', f'--kernel-config={output / ".config"}',

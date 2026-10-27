@@ -89,6 +89,13 @@ to implement shared-configuration capture or complete fleet validation.
 
 Retain these deferred workflow items for later scoping:
 
+- Host specialization is now implemented for thinktop/flattop: native tracked
+  Kconfig fragments, local `/etc/kernel/cmdline` cross-checks and recorded storage
+  identity for the minimal initramfs. Missing profiles fail explicitly; startop
+  and bequiet still need reviewed profiles. Installed-firmware trimming remains
+  native/manual, and flattop keeps broad installed coverage. See the
+  [kernel guide](../../docs/kernel.md#host-specialization) for behavior and limits.
+
 - Shared configuration generation and selective menuconfig capture into Git,
   preserving the union of required host drivers/capabilities. Keep host boot
   identifiers, firmware/microcode and build paths separate from shared choices;

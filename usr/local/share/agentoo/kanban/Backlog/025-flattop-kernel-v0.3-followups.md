@@ -28,6 +28,17 @@ retain the shared driver union. See [shared follow-ups](027-shared-kernel-v0.3-f
 
 ## Candidate build and validation
 
+- [x] Prepare tracked host specialization: `kernel/hosts/flattop.config` replaces
+  inherited thinktop embedded firmware/microcode; `agentoo kernel config` checks
+  local boot UUIDs and records the PARTUUID/mapping for the fresh initramfs.
+  The embedded list uses successful distribution-kernel firmware loads on
+  2026-10-27 (6.18.57-gentoo-dist-bin): i915 ADLP DMC/GuC and TGL HuC, AX211
+  so-a0-gf-a0 API 89/PNVM, Intel Bluetooth 0040-0041 and regulatory data.
+  CPU family 6/model 186/stepping 2 selects `intel-ucode/06-ba-02`.
+  Current microcode is 0x6134, updated early from 0x6133. All selected payloads
+  exist locally. This is preparation evidence, not custom-kernel boot acceptance.
+- [ ] Review a flattop native linux-firmware savedconfig list after broad-kernel
+  hardware/peripheral validation; keep installed firmware broad until then.
 - [ ] Build/boot v0.3 with host inputs and record config, firmware loading and
   boot diagnostics, retaining a working recovery boot.
 - [ ] Test built-in Realtek UVC camera `0bda:5634`: binding, actual capture,

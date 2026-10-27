@@ -33,10 +33,10 @@ while [ "$attempt" -lt 10 ]; do
 done
 [ -n "$device" ] && [ -b "$device" ] || fail 'root partition not found'
 DM_DISABLE_UDEV=1 cryptsetup open --type luks2 --disable-external-tokens \
-    --allow-discards --tries 3 "$device" root || fail 'unlock root'
-mount -t btrfs -o ro,subvol=@ /dev/mapper/root /newroot || fail 'mount root'
+    --allow-discards --tries 3 "$device" "$ROOT_MAPPER" || fail 'unlock root'
+mount -t btrfs -o ro,subvol=@ "/dev/mapper/$ROOT_MAPPER" /newroot || fail 'mount root'
 . /udev-handoff
-prepare_udev_handoff root || fail 'prepare root device for real-root udev'
+prepare_udev_handoff "$ROOT_MAPPER" || fail 'prepare root device for real-root udev'
 for directory in dev proc sys run; do
     mount --move /"$directory" /newroot/"$directory" || fail "move /$directory"
 done
