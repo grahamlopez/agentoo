@@ -82,17 +82,33 @@ Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
 
 ## Existing work and build maintenance
 
-Continue the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
-for durable inputs, menuconfig capture, host embedding, source/version migration
-and reproducibility. It already owns that implementation; this card does not
-revive the retired general kernel-reduction project. Link
+The [kernel rebuild workflow](../Completed/015-shared-kernel-configuration-workflow.md)
+closed on 2026-10-27 after Thinktop operator build/install/boot acceptance. Its
+first increment supplies `agentoo kernel config|build|install`; it does not claim
+to implement shared-configuration capture or complete fleet validation.
+
+Retain these deferred workflow items for later scoping:
+
+- Shared configuration generation and selective menuconfig capture into Git,
+  preserving the union of required host drivers/capabilities. Keep host boot
+  identifiers, firmware/microcode and build paths separate from shared choices;
+  include dependent changes and verify regenerated results before claiming capture.
+- Real source-version migration at the next applicable update, reviewing new,
+  removed and dependency-changed options. Source adoption remains explicit;
+  repository updates must not silently rebuild or replace boot artifacts.
+- Live module-enabled and custom-initramfs validation when those paths are used;
+  external NVIDIA integration remains with the bequiet host card. Secure Boot
+  signing remains separately deferred, not a condition for the completed CLI.
+
+This does not revive the retired general kernel-reduction project. Link
 [initramfs keyboard policy](020-initramfs-keyboard-policy.md) and
 [firmware maintenance](../Completed/018-host-firmware-savedconfig.md) when relevant.
 
 For each remaining host build use its own boot/firmware/microcode inputs and
-fresh initramfs, portable compiler flags (do not replay old `-march=native`
-notes), and verify synchronized release metadata before image naming or external
-module builds. Review newly enabled defaults/dependencies during version bumps.
+fresh initramfs, and verify synchronized release metadata before image naming
+or external module builds. The accepted CLI builds locally for the target machine
+with native flags; use portable flags explicitly if producing an image for a
+different CPU. Review newly enabled defaults/dependencies during version bumps.
 Thinktop has completed its fresh-initramfs build/boot and release verification;
 the exact compiler flags used for that build were not independently established.
 

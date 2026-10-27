@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Build a machine-specific uncompressed initramfs using installed cryptsetup."""
+import argparse
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tarfile
+
+HERE = Path(__file__).resolve().parent
+p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--busybox-source', type=Path, help='extracted BusyBox source tree (default: extract cached BusyBox 1.36.1)')
+p.add_argument('--work', required=True, type=Path, help='new, disposable output directory')
+p.add_argument('--partuuid', default='dec57fad-2813-498e-a5bf-affa97631d1a')
+p.add_argument('--keymap', default='/usr/share/keymaps/i386/qwerty/us-caps.map.gz')
+a = p.parse_args()
+if not re.fullmatch(r'[0-9a-fA-F-]{36}', a.partuuid):
+    p.error('invalid GPT PARTUUID')
+cached_source = Path('/var/cache/distfiles/busybox-1.36.1.tar.bz2')
+if not a.busybox_source and not cached_source.is_file():
+    p.error(f'BusyBox source archive missing: {cached_source}; cache it or use --busybox-source')
+work = a.work.resolve()
+work.mkdir(parents=True, exist_ok=False)
+if a.busybox_source:
+    source = a.busybox_source.resolve()
+else:
+    with tarfile.open(cached_source) as archive:
+        archive.extractall(work / 'sources', filter='data')
+    source = work / 'sources/busybox-1.36.1'
+output = work / 'busybox'
+output.mkdir()
+subprocess.run(['make', '-C', str(source), f'O={output}', 'allnoconfig'], check=True)
+config = output / '.config'
+text = config.read_text()
+for line in (HERE / 'busybox.config').read_text().splitlines():
+    name = line.split('=', 1)[0]
+    text = re.sub(r'^(?:' + name + r'=.*|# ' + name + r' is not set)$', line, text, flags=re.M)
+config.write_text(text)
+subprocess.run(['make', '-C', str(source), f'O={output}', 'oldconfig'], input='\n' * 2000, text=True, check=True)
+subprocess.run(['make', '-C', str(source), f'O={output}', f'-j{len(os.sched_getaffinity(0))}'], check=True)
+root = work / 'root'
+for directory in ('bin', 'dev', 'proc', 'sys', 'run', 'newroot', 'tmp'):
+    (root / directory).mkdir(parents=True)
+shutil.copy2(output / 'busybox', root / 'bin/busybox')
+applets = subprocess.check_output([str(root / 'bin/busybox'), '--list'], text=True).split()
+required = {'sh', 'mount', 'mkdir', 'sleep', 'switch_root', 'loadkmap'}
+if not required.issubset(applets):
+    raise SystemExit('BusyBox is missing required applets')
+for applet in applets:
+    (root / 'bin' / applet).symlink_to('busybox')
+cryptsetup = Path(shutil.which('cryptsetup'))
+shutil.copy2(cryptsetup, root / 'bin/cryptsetup')
+# ldd is used only on the trusted system executable, never on arbitrary inputs.
+listing = subprocess.check_output(['ldd', str(cryptsetup)], text=True)
+if 'not found' in listing:
+    raise SystemExit('unresolved cryptsetup library')
+for library in sorted(set(re.findall(r'(/[^\s()]+)', listing))):
+    target = root / library.lstrip('/')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(Path(library).resolve(), target)
+shutil.copy2(HERE / 'init', root / 'init')
+(root / 'init').chmod(0o755)
+(root / 'machine').write_text(f"ROOT_PARTUUID='{a.partuuid.lower()}'\n")
+with (root / 'keymap').open('wb') as stream:
+    subprocess.run(['loadkeys', '-b', a.keymap], stdout=stream, check=True)
+for path in sorted(root.rglob('*')):
+    if path.is_file() and not path.is_symlink() and path.read_bytes()[:4] == b'\x7fELF':
+        path.chmod(0o755)
+        subprocess.run(['strip', '--strip-unneeded', str(path)], check=True)
+paths = ['.'] + sorted(str(path.relative_to(root)) for path in root.rglob('*'))
+with (work / 'initramfs.cpio').open('wb') as stream:
+    subprocess.run(['cpio', '--null', '-o', '-H', 'newc', '--owner=0:0', '--reproducible'],
+                   cwd=root, input=('\0'.join(paths) + '\0').encode(), stdout=stream, check=True)
+print(work / 'initramfs.cpio')

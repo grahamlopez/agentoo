@@ -29,7 +29,7 @@ Retain the inventory, configuration checkpoints and firmware findings below as
 historical evidence only. Recheck them against the source, configuration and
 initramfs used by any new build; do not treat pending steps as current operating
 instructions. Keep the distribution boot path available. Card
-[15](../Open/015-shared-kernel-configuration-workflow.md) remains separate workflow
+[15](../Completed/015-shared-kernel-configuration-workflow.md) remains separate workflow
 work. [Card 16](../Completed/016-kernel-reduction-and-evidence.md) was retired on
 2026-10-16 because the operator will perform reduction manually. Successful boot
 and closure alone do not establish full functional acceptance.
@@ -65,7 +65,7 @@ treating another host's configuration as Thinktop's configuration.
 
 Build the bootable baseline manually first, retaining the configuration, inputs
 and commands. Use that actual build and subsequent feature debugging to develop
-the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md).
+the [shared configuration workflow](../Completed/015-shared-kernel-configuration-workflow.md).
 Do not require a complete automation framework before establishing boot.
 
 The now-removed `docs/kernel-build.md` was the user-facing procedure for this experiment.

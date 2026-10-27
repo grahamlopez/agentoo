@@ -4,8 +4,8 @@
 builds a local x86_64 EFI kernel with an embedded initramfs, and installs it under
 a versioned filename. Each subcommand also works through `agentoo-kernel`.
 Run as your normal user; the command uses sudo for source Makefile changes,
-system module installation, ESP writes and firmware registration. Genkernel runs
-as the build user and creates user-owned workspace files.
+system module installation, ESP writes and firmware registration. Initramfs builders run
+as the build user and create user-owned workspace files.
 
 ```sh
 agentoo kernel config --label agentoo-v0.4
@@ -23,7 +23,7 @@ its concrete path for subsequent steps.
 The default workspace is `/dev/shm/<version>-<label>`. It must be absent or
 empty. `--build-dir DIR` chooses another location. Build storage must permit
 execution and writes; a read-only or `noexec` `/dev/shm` requires another location.
-Kernel outputs and genkernel working directories live beneath that workspace.
+Kernel outputs and initramfs working directories live beneath that workspace.
 The workspace normally disappears at reboot; no persistent build archive or
 last-workspace pointer is created.
 
@@ -71,12 +71,27 @@ the kernel installs built-in-module metadata in that case. Thus **build writes
 to `/lib/modules/<release>`**, before EFI image installation. Do not reuse a
 running module-enabled kernel's release for a different candidate.
 
-Genkernel creates a fresh uncompressed LUKS-capable initramfs on every invocation,
-using the workspace cache, temporary, module and output directories. It does not
-mount `/boot`, update a bootloader, install firmware or save a config in
-`/etc/kernels`. Module-free configs use `--no-ramdisk-modules`; module-enabled
-configs use the workspace's staged modules. Host `/etc/genkernel.conf` settings
-otherwise apply. External NVIDIA module rebuilding is not implemented.
+By default (`--no-genkernel`), build runs the minimal initramfs builder in
+`<workspace>/initramfs/<release>/`. It extracts the cached
+`/var/cache/distfiles/busybox-1.36.1.tar.bz2`, builds a minimal static BusyBox,
+and bundles installed cryptsetup and its libraries. The complete subtree is
+regenerated on each build/retry; no network download is performed. The archive is
+`<workspace>/initramfs/<release>/initramfs.cpio`.
+
+This default is machine-specific to thinktop's LUKS2 partition and Btrfs `@`
+subvolume, with the US/Caps-to-Control console map. It requires
+`CONFIG_MODULES=n` and built-in boot drivers. See the
+[minimal initramfs instructions](../initramfs/README.md) for dependencies and
+smoke tests. On another machine, generate an archive with the appropriate
+`--partuuid` and `--keymap` and pass it with `--initramfs`.
+
+Use `--genkernel` explicitly for the previous generator. Genkernel creates a
+fresh uncompressed LUKS-capable initramfs using the workspace cache, temporary,
+module and output directories. It does not mount `/boot`, update a bootloader,
+install firmware or save a config in `/etc/kernels`. Module-free configs use
+`--no-ramdisk-modules`; module-enabled configs use the workspace's staged modules.
+Host `/etc/genkernel.conf` settings otherwise apply. External NVIDIA module
+rebuilding is not implemented.
 
 For an explicitly supplied custom archive:
 
@@ -84,9 +99,8 @@ For an explicitly supplied custom archive:
 agentoo kernel build --label agentoo-v0.4 --initramfs /path/to/custom.cpio
 ```
 
-`--initramfs` automatically disables genkernel and copies that archive into the
-workspace. `--no-genkernel` requires an archive; explicit `--genkernel` conflicts
-with `--initramfs`. The old config's initramfs path is never selected implicitly.
+`--initramfs` bypasses both generators and copies that archive into the
+workspace. Explicit `--genkernel` conflicts with `--initramfs`. The old config's initramfs path is never selected implicitly.
 
 Finally, build embeds the archive, resolves the config and compiles again. It
 checks release consistency and records the completed config/image hashes in the

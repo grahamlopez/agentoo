@@ -22,6 +22,7 @@ from cli import ArgumentParser
 WORKSPACES = Path('/dev/shm')
 METADATA = 'agentoo-kernel.json'
 DEFAULT_FLAGS = '-march=native -O2 -pipe'
+INITRAMFS_BUILDER = Path(__file__).resolve().parent.parent / 'share/agentoo/initramfs/build'
 
 
 def build_parser():
@@ -49,8 +50,8 @@ def build_parser():
                                help='accept new Kconfig defaults instead of asking (default: no)')
         elif name == 'build':
             child.add_argument('-j', '--jobs', type=int, default=len(os.sched_getaffinity(0)), metavar='N', help='parallel jobs (default: available CPUs)')
-            child.add_argument('--genkernel', action=argparse.BooleanOptionalAction, default=None,
-                               help='generate a fresh initramfs (default: yes)')
+            child.add_argument('--genkernel', action=argparse.BooleanOptionalAction, default=False,
+                               help='use genkernel instead of the minimal initramfs builder (default: no)')
             child.add_argument('--initramfs', metavar='FILE', help='custom archive; implies --no-genkernel').completion = 'files'
         else:
             child.add_argument('--dest', default='/boot/EFI/Gentoo', metavar='DIR', help='EFI destination (default: /boot/EFI/Gentoo)').completion = 'directories'
@@ -324,22 +325,27 @@ def configure(args):
 
 
 def build(args):
-    require_tools('make', *(['genkernel'] if not args.initramfs else []))
+    require_tools('make', *(['genkernel'] if args.genkernel else []))
     work, data = select_workspace(args)
     data['kcflags'] = os.environ.get('KCFLAGS', data['kcflags'])
     output, gen = paths(work, data)
     custom = Path(args.initramfs).expanduser().resolve() if args.initramfs else None
     if custom and not custom.is_file():
         raise RuntimeError(f'initramfs not found: {custom}')
-    if not custom and any(character.isspace() for character in str(work) + data['sources']):
+    if args.genkernel and any(character.isspace() for character in str(work) + data['sources']):
         raise RuntimeError('genkernel does not support whitespace in source/workspace paths; choose another --build-dir/source path')
     archive = gen / 'output' / f'initramfs-{data["release"]}.cpio'
+    minimal_work = work / 'initramfs' / data['release']
+    if not custom and not args.genkernel:
+        archive = minimal_work / 'initramfs.cpio'
     if custom == archive:
         raise RuntimeError('custom initramfs must be outside the generated output path')
-    check_config(work, data)
+    values = check_config(work, data)
+    if not custom and not args.genkernel and values.get('CONFIG_MODULES') == 'y':
+        raise RuntimeError('minimal initramfs requires built-in drivers (CONFIG_MODULES=n); use --genkernel or --initramfs')
     validate_inputs(work, data)
     notice(f'KCFLAGS:          {data["kcflags"]}\nKernel config:    {output}/.config\nKernel sources:   {data["sources"]}\nBuild directory:  {work}\nKernel version:   {data["release"]}')
-    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or "fresh genkernel image (LUKS)"}\nModules:          install to system and workspace (also with CONFIG_MODULES=n)')
+    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or ("fresh genkernel image (LUKS)" if args.genkernel else "fresh minimal image (thinktop LUKS/Btrfs)")}\nModules:          install to system and workspace (also with CONFIG_MODULES=n)')
     confirm('Proceed', args.yes)
     data['built'] = False
     save(work, data)
@@ -351,6 +357,11 @@ def build(args):
     make(work, data, 'modules_install', f'INSTALL_MOD_PATH={gen / "modules"}', 'INSTALL_MOD_STRIP=1')
     if custom:
         shutil.copyfile(custom, archive)
+    elif not args.genkernel:
+        # Regenerate only this builder's disposable subtree on every build/retry.
+        if minimal_work.exists():
+            shutil.rmtree(minimal_work)
+        run([INITRAMFS_BUILDER, '--work', minimal_work])
     else:
         # --no-ramdisk-modules still creates modules.builtin metadata via make.
         command = ['genkernel', f'--kerneldir={data["sources"]}', f'--kernel-outputdir={output}', f'--kernel-config={output / ".config"}',
@@ -475,8 +486,6 @@ def main():
             parser.error('--jobs must be positive')
         if args.initramfs and args.genkernel is True:
             parser.error('--initramfs conflicts with --genkernel')
-        if args.genkernel is False and not args.initramfs:
-            parser.error('--no-genkernel requires --initramfs FILE')
     try:
         if platform.machine() not in ('x86_64', 'amd64'):
             raise RuntimeError('this workflow currently supports local x86_64 EFI kernels')

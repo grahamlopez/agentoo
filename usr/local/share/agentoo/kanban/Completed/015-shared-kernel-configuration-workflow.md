@@ -1,8 +1,57 @@
 # Develop the kernel configuration and rebuild workflow
 
 Created: 2026-10-14
-Status: Open — implemented; operator build/boot validation pending
-Updated: 2026-10-26
+Status: Completed — first increment accepted through operator use
+Updated: 2026-10-27
+Completed: 2026-10-27
+
+## Closure and operator validation
+
+Closed at the operator's request on 2026-10-27 for the agreed first increment:
+configure an existing complete config, build a local self-contained EFI kernel,
+and install it with optional firmware registration. This closes the rebuild CLI,
+not the broader shared-configuration capture vision.
+
+The operator exercised the Thinktop workflow with label `agentoo-v0.4`, starting
+from `/proc/config.gz` on `6.18.57-agentoo-v0.3` and using 6.18.57 sources. Config
+reported only the expected LOCALVERSION change and exported a config on request.
+The supplied build output confirms native compilation, both module-install
+stages with modules disabled, and genkernel initramfs generation. After fixing
+the root-owned archive handoff, the operator completed installation with
+`--efi-add-entry`, rebooted into the test kernel and reported that it worked fine.
+This is normal-use acceptance, not exhaustive host/workload validation.
+
+Issues addressed during operator use:
+
+- Restrict the configuration diff to `config`; build prints only its plan.
+- Wait for readiness before starting a timed sudo password prompt; cached
+  authorization proceeds immediately and `--yes` does not bypass readiness.
+- Run genkernel as the build user, avoiding root-owned unreadable initramfs output.
+- Use `efibootmgr --create`, preserve the other entries' relative order, recognize
+  both loader-path display formats and use umask `022` for new entries. The
+  observed root-only Boot0001 file and the permission repair were discussed;
+  no privileged firmware read or repair was performed by implementation tests.
+
+The separate tty1 autologin regression was traced to removal of the formerly
+tracked drop-in during the account-setup ordering fix. The operator restored the
+intended local, untracked drop-in and confirmed autologin works. This was not a
+kernel regression.
+
+A subsequent experimental config disabled debug-info compression while retaining
+BTF/BPF, kprobes, kallsyms and the compiler settings. The operator measured total
+`agentoo kernel build` time falling from 19:56 to 12:28: 7:28 saved, or 37.5%.
+The resulting image appeared the same size. These are whole-command timings,
+not isolated linker benchmarks; they do not establish a universal speedup or
+change the CLI's configuration defaults. No boot of that experimental image was
+reported as part of closure.
+
+Remaining coverage limits are accepted for this closure: a real source-version
+bump has not been demonstrated; module-enabled and custom-initramfs paths have
+focused automated coverage but no reported live validation. The workspace-move
+check exercised configuration/Kbuild regeneration, not a relocated full build.
+Secure Boot signing and external NVIDIA integration remain future work. Shared
+configuration generation/capture is retained in
+[shared follow-ups](../Backlog/027-shared-kernel-v0.3-followups.md).
 
 ## Current goal
 
@@ -12,9 +61,9 @@ run familiar kernel tools, and install the resulting self-contained EFI image.
 The build directory is the handoff between commands; a small metadata file there
 may record the choices needed by subsequent steps.
 
-The command, help/completion and focused verification are implemented.
-Full local build, module installation, genkernel and firmware behavior still need
-operator validation; the automated checks use disposable tools and files.
+The command, help/completion and focused verification are implemented, and the
+operator accepted the Thinktop build/install/boot path described above. Automated
+checks use disposable tools and files; live acceptance is scoped separately.
 The [manual build notes](../../docs/kernel-baseline-build.md) supply the starting
 procedure; the decisions below supersede conflicting older proposals.
 
@@ -24,7 +73,7 @@ Use `KCFLAGS="-march=native -O2 -pipe"` by default and display the effective fla
 The shared driver/capability configuration can still support multiple hosts;
 each host builds with its own boot inputs, firmware/microcode and CPU target.
 
-## Proposed interface
+## Implemented interface
 
 ```text
 agentoo kernel config
@@ -239,22 +288,24 @@ to match other commands when this workflow has no use for them.
 - External NVIDIA module rebuilding and acceptance remain future bequiet work;
   running the module-install stages does not itself implement that integration.
 
-## Completion criteria for the first increment
+## Accepted first-increment delivery
 
-- [ ] Demonstrate migration from a running or supplied config to newer sources,
-  showing new, removed and dependency-changed settings and correct release naming.
-- [ ] Demonstrate fresh-workspace enforcement, metadata handoff, build retries and
-  label-based discovery under `/dev/shm`, including useful diagnostics for
-  missing, inconsistent or ambiguous workspaces.
-- [ ] Demonstrate local native compilation, the explicit module-install stages
-  with module support disabled/enabled, and fresh genkernel/custom archive paths.
-- [ ] Demonstrate confirmation bypass separately from accepting Kconfig defaults,
-  and optional config export without mandatory durable records.
-- [ ] Install a versioned EFI image while preserving recovery artifacts; verify
-  overwrite/backup confirmation, printed registration commands and opt-in
-  entry/order handling.
-- [ ] Record operator boot results separately from static/build checks. Provide
-  help/completion and focused verification following existing command conventions.
+- [x] Carry running/supplied configs through Kconfig with release naming and
+  visible changes. Real same-source-version use and configuration smoke checks
+  are recorded; genuine version-to-version adoption remains a coverage limit.
+- [x] Implement fresh-workspace enforcement, metadata handoff, retries and label
+  discovery, with focused checks for missing/inconsistent/ambiguous workspaces.
+- [x] Exercise local native compilation, module-free module installation and
+  fresh genkernel embedding in operator use. Module-enabled/custom archive paths
+  remain covered by focused tests rather than live acceptance.
+- [x] Provide separate plan confirmation and Kconfig-default acceptance, plus
+  optional config export. The operator exercised interactive config/export;
+  confirmation bypass has automated coverage.
+- [x] Implement versioned EFI installation, overwrite/backup handling and optional
+  entry/order management. The operator installed and booted the candidate;
+  backup/order-preservation cases also have focused automated coverage.
+- [x] Record operator boot results separately from static checks and provide
+  parser-owned help/completion following the existing CLI conventions.
 
 ## Related work
 
@@ -295,6 +346,7 @@ shared runtime layer was introduced.
   Makefile change was needed because this source tree was already normalized.
 - The source-Makefile fingerprint and completed config/image hashes catch common
   stale handoffs; they are not a complete source-tree provenance system.
-- No full kernel build, real module/genkernel installation, ESP write, firmware
-  change or reboot was performed during implementation verification. Leave this
-  card open for normal operator validation; mocked paths do not prove bootability.
+- Initial implementation verification performed no full kernel build, real
+  module/genkernel installation, ESP write, firmware change or reboot. Subsequent
+  operator build/install/boot results are recorded separately in the closure
+  section; mocked paths alone do not prove bootability.

@@ -65,6 +65,16 @@ if a[0] == '-n': a = a[1:]
 if a[0] == '--': a = a[1:]
 os.execvp(a[0], a)
 ''')
+        self.tool('minimal-initramfs', '''
+import json, os, pathlib, sys
+with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['minimal-initramfs', *sys.argv[1:]]) + '\\n')
+work = pathlib.Path(sys.argv[sys.argv.index('--work') + 1])
+work.mkdir(parents=True, exist_ok=False)
+(work / 'initramfs.cpio').write_text('fresh minimal archive')
+''')
+        builder = patch.object(kernel, 'INITRAMFS_BUILDER', self.bin / 'minimal-initramfs')
+        builder.start()
+        self.addCleanup(builder.stop)
         config_tool = self.sources / 'scripts/config'
         config_tool.write_text('''#!/usr/bin/env python3
 import pathlib, re, sys
@@ -145,12 +155,12 @@ p.write_text(text)
 
     def test_build_runs_module_install_without_modules_and_regenerates_initramfs(self):
         self.prepare()
-        self.invoke('build', '--label', 'test', '--yes', '-j', '2')
+        self.invoke('build', '--label', 'test', '--genkernel', '--yes', '-j', '2')
         data = kernel.load(self.work, 'test', completed=True)
         output, gen = kernel.paths(self.work, data)
         archive = gen / 'output/initramfs-6.18.57-test.cpio'
         archive.write_text('stale archive')
-        self.invoke('build', '--label', 'test', '--yes')
+        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
         self.assertEqual(archive.read_text(), 'fresh archive')
         calls = self.calls()
         self.assertFalse(any('genkernel' in call for call in calls if call[0] == 'sudo'))
@@ -163,13 +173,35 @@ p.write_text(text)
         with self.assertRaisesRegex(RuntimeError, 'image/config changed'):
             kernel.load(self.work, 'test', completed=True)
 
+    def test_default_build_regenerates_minimal_archive_in_workspace(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        archive = self.work / 'initramfs/6.18.57-test/initramfs.cpio'
+        self.assertEqual(archive.read_text(), 'fresh minimal archive')
+        archive.write_text('stale')
+        self.invoke('build', '--label', 'test', '--no-genkernel', '--yes')
+        self.assertEqual(archive.read_text(), 'fresh minimal archive')
+        data = kernel.load(self.work, 'test', completed=True)
+        output, _ = kernel.paths(self.work, data)
+        self.assertEqual(kernel.read_config(output / '.config')['CONFIG_INITRAMFS_SOURCE'], json.dumps(str(archive)))
+        self.assertFalse(any(call[0] == 'genkernel' for call in self.calls()))
+        self.assertEqual(len([call for call in self.calls() if call[0] == 'minimal-initramfs']), 2)
+
+    def test_minimal_builder_rejects_module_kernel_before_compilation(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+        self.prepare()
+        args = kernel.build_parser().parse_args(['build', '--label', 'test', '--yes'])
+        with self.assertRaisesRegex(RuntimeError, 'built-in drivers'):
+            kernel.build(args)
+        self.assertFalse(any('modules_install' in call for call in self.calls()))
+
     def test_custom_archive_implies_no_genkernel_and_module_config_is_retained(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
         self.prepare()
         archive = self.root / 'custom.cpio'
         archive.write_text('custom input')
         self.invoke('build', '--label', 'test', '--initramfs', str(archive), '--yes')
-        self.assertFalse(any(call[0] == 'genkernel' for call in self.calls()))
+        self.assertFalse(any(call[0] in ('genkernel', 'minimal-initramfs') for call in self.calls()))
         self.assertEqual(len([call for call in self.calls() if call[0] == 'make' and 'modules_install' in call]), 2)
         data = kernel.load(self.work, 'test', completed=True)
         output, gen = kernel.paths(self.work, data)

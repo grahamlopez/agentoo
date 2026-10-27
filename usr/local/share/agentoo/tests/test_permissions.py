@@ -193,6 +193,23 @@ class PermissionsTest(unittest.TestCase):
         self.assertEqual(finding['expected']['mode'], '0644')
         self.assertEqual(report['errors'], [])
 
+    def test_repository_policy_preserves_git_executable_bits(self):
+        root = Path(__file__).resolve().parents[5]
+        rules = MODULE['load_policy'](root)
+        entries = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-s', '-z'])
+        for entry in entries.split(b'\0'):
+            if not entry:
+                continue
+            metadata, relative = os.fsdecode(entry).split('\t', 1)
+            mode = metadata.split()[0]
+            if mode not in ('100644', '100755'):
+                continue
+            expected = MODULE['resolve_rule'](rules, relative)
+            with self.subTest(path=relative):
+                self.assertIsNotNone(expected)
+                self.assertEqual(bool(int(mode, 8) & 0o111), bool(expected[2] & 0o111),
+                                 'permission repair would change the Git executable bit')
+
     def test_no_input_privilege_request_uses_sudo_noninteractive(self):
         with patch('sys.argv', ['agentoo-permissions', 'fix', '--no-input']), \
                 patch('os.execvp', side_effect=SystemExit(37)) as execute, \

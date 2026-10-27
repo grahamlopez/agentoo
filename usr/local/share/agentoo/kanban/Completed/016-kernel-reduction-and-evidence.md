@@ -10,7 +10,7 @@ Retired at the operator's request on 2026-10-16. Kernel reduction will be
 performed manually by the operator and is no longer tracked as project work.
 This closure does not claim that the experiments or completion criteria below
 were implemented or validated. Retain the original scope as historical context.
-The [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
+The [shared configuration workflow](../Completed/015-shared-kernel-configuration-workflow.md)
 remains separate work for operationalizing custom single-binary kernel builds.
 
 ## Historical objective and prerequisites
@@ -18,7 +18,7 @@ remains separate work for operationalizing custom single-binary kernel builds.
 Minimize kernel size, code surface and boot time while preserving required
 features and performance. Begin deliberate reduction after acceptance of the
 relevant [single-binary functional baseline](../Completed/014-single-binary-kernel-baseline.md).
-Use the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
+Use the [shared configuration workflow](../Completed/015-shared-kernel-configuration-workflow.md)
 to record and reproduce changes across hosts.
 
 Maintain one shared driver/capability configuration supporting all Agentoo hosts,

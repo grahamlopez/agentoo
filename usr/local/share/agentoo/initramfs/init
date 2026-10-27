@@ -1,0 +1,41 @@
+#!/bin/sh
+export PATH=/bin
+export LC_ALL=C
+
+fail() {
+    echo "initramfs: $*; entering rescue shell"
+    while :; do sh; done
+}
+
+mount -t devtmpfs devtmpfs /dev || fail 'mount /dev'
+exec </dev/console >/dev/console 2>&1
+mount -t proc proc /proc || fail 'mount /proc'
+mount -t sysfs sysfs /sys || fail 'mount /sys'
+mount -t tmpfs -o mode=0755 tmpfs /run || fail 'mount /run'
+mkdir -p /run/cryptsetup /dev/mapper || fail 'create runtime directories'
+loadkmap < /keymap || fail 'load console keymap'
+. /machine
+
+device=
+attempt=0
+while [ "$attempt" -lt 10 ]; do
+    for entry in /sys/class/block/*/uevent; do
+        while IFS='=' read -r key value; do
+            if [ "$key" = PARTUUID ] && [ "$value" = "$ROOT_PARTUUID" ]; then
+                device=${entry%/uevent}
+                device=/dev/${device##*/}
+            fi
+        done < "$entry"
+    done
+    [ -n "$device" ] && [ -b "$device" ] && break
+    sleep 1
+    attempt=$((attempt + 1))
+done
+[ -n "$device" ] && [ -b "$device" ] || fail 'root partition not found'
+DM_DISABLE_UDEV=1 cryptsetup open --type luks2 --disable-external-tokens \
+    --allow-discards --tries 3 "$device" root || fail 'unlock root'
+mount -t btrfs -o ro,subvol=@ /dev/mapper/root /newroot || fail 'mount root'
+for directory in dev proc sys run; do
+    mount --move /"$directory" /newroot/"$directory" || fail "move /$directory"
+done
+exec switch_root /newroot /sbin/init

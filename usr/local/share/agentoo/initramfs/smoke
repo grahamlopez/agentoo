@@ -1,0 +1,65 @@
+#!/bin/bash
+# Exercise staged cryptsetup without udev, using a disposable LUKS2 loop device.
+set -euo pipefail
+if [[ ${1:-} != --inside ]]; then
+    [[ $EUID == 0 && $# == 1 ]] || { echo "Usage: sudo $0 BUILD_DIRECTORY" >&2; exit 2; }
+    exec unshare --mount --fork "$0" --inside "$(realpath "$1")"
+fi
+mount --make-rprivate /
+build=$2
+[[ -x $build/root/bin/cryptsetup && -f $build/initramfs.cpio ]] || exit 2
+for tool in losetup cryptsetup mkfs.btrfs btrfs cpio mountpoint findmnt mount umount chroot; do command -v "$tool" >/dev/null; done
+work=$(mktemp -d /tmp/agentoo-initramfs-smoke.XXXXXXXX)
+name=agentoo-smoke-${work##*.}
+loop=
+opened=no
+cleanup() {
+    set +e
+    mountpoint -q "$work/root/newroot" && umount "$work/root/newroot"
+    if [[ $opened == yes ]]; then cryptsetup close "$name"; fi
+    for directory in sys proc run dev; do
+        mountpoint -q "$work/root/$directory" && umount "$work/root/$directory"
+    done
+    if [[ -n $loop ]]; then losetup -d "$loop"; fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+cp -a "$build/root" "$work/root"
+root=$work/root
+# Extract the deliverable too, so smoke tests exercise archived ownership/contents.
+(cd "$root" && cpio -idu --quiet < "$build/initramfs.cpio")
+head -c 32 /dev/urandom > "$root/test.key"
+chmod 600 "$root/test.key"
+truncate -s 512M "$work/disk"
+loop=$(losetup --find --show "$work/disk")
+# Match the real root's cipher, sector size and Argon2id parameters.
+cryptsetup luksFormat --batch-mode --type luks2 --cipher aes-xts-plain64 \
+    --key-size 512 --sector-size 512 --pbkdf argon2id --pbkdf-memory 1048576 \
+    --pbkdf-parallel 4 --pbkdf-force-iterations 4 --key-file "$root/test.key" "$loop"
+mount -t tmpfs tmpfs "$root/dev"
+mkdir -p "$root/dev/mapper"
+for device in null random urandom; do
+    read -r major minor < <(stat -c '%t %T' "/dev/$device")
+    mknod "$root/dev/$device" c "$((16#$major))" "$((16#$minor))"
+done
+read -r major minor < <(stat -c '%t %T' /dev/mapper/control)
+mknod "$root/dev/mapper/control" c "$((16#$major))" "$((16#$minor))"
+read -r major minor < <(stat -c '%t %T' "$loop")
+mknod "$root/dev/test-disk" b "$((16#$major))" "$((16#$minor))"
+mount -t proc proc "$root/proc"
+mount -t sysfs -o ro sysfs "$root/sys"
+mount -t tmpfs tmpfs "$root/run"
+mkdir -p "$root/run/cryptsetup"
+# Fresh /run contains no udev state; don't export this into the host session.
+DM_DISABLE_UDEV=1 chroot "$root" /bin/cryptsetup open --type luks2 \
+    --disable-external-tokens --allow-discards --key-file /test.key /dev/test-disk "$name"
+opened=yes
+[[ -b $root/dev/mapper/$name ]]
+mkfs.btrfs -q "$root/dev/mapper/$name"
+chroot "$root" /bin/mount -t btrfs "/dev/mapper/$name" /newroot
+btrfs subvolume create "$root/newroot/@"
+chroot "$root" /bin/umount /newroot
+chroot "$root" /bin/mount -t btrfs -o ro,subvol=@ "/dev/mapper/$name" /newroot
+findmnt -no SOURCE,FSTYPE,OPTIONS --target "$root/newroot"
+DM_DISABLE_UDEV=1 chroot "$root" /bin/cryptsetup status "$name"
+echo 'PASS: archived cryptsetup unlocked LUKS2 without udev, created its mapping node, and BusyBox mounted Btrfs @ read-only.'
