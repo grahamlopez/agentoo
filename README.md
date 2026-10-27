@@ -27,6 +27,11 @@ your home. Use `agentoo repos --path=.` to scan only the current directory;
 See [repository and terminal tools](usr/local/share/agentoo/docs/terminal-tools.md)
 for scope, local exclusions, bare work trees, and output contracts.
 
+`agentoo kernel config|build|install --label LABEL` rebuilds a configured custom
+EFI kernel from updated sources. See [kernel rebuilding](usr/local/share/agentoo/docs/kernel.md)
+for temporary workspaces, genkernel/custom initramfs inputs, module installation
+and optional firmware registration.
+
 The concise command policy lives in
 [`usr/local/share/agentoo/lib/cli.py`](usr/local/share/agentoo/lib/cli.py).
 Command scripts own their parsing, help, privileges, and output. Shared helpers

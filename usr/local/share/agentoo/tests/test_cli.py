@@ -17,7 +17,7 @@ class CliTest(unittest.TestCase):
         self.entry = self.root / 'agentoo'
         self.entry.write_text(ENTRY.read_text().replace(
             "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(COMMANDS.parent)!r})"))
-        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage'):
+        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage', 'kernel'):
             (self.root / ('agentoo-' + name)).symlink_to(ENTRY.with_name('agentoo-' + name))
         checkpoint = self.root / 'agentoo-checkpoint'
         if checkpoint.is_symlink():
@@ -102,7 +102,8 @@ class CliTest(unittest.TestCase):
         self.assertFalse(call.exists())
 
     def test_completion_usage_matches_actual_help(self):
-        paths = [(), ('git',), ('repos',), ('term-colors',), ('permissions',), ('permissions', 'check'),
+        paths = [(), ('git',), ('repos',), ('term-colors',), ('kernel',),
+                 *(('kernel', action) for action in ('config', 'build', 'install')), ('permissions',), ('permissions', 'check'),
                  ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
                  ('secrets',), ('secrets', 'install'), ('cloud-storage',), ('cloud-storage', 'pcloud'),
                  *(('cloud-storage', 'pcloud', action) for action in ('start', 'stop', 'status')), ('checkpoint',),
@@ -211,6 +212,8 @@ class CliTest(unittest.TestCase):
 
     def test_migrated_command_direct_grouped_equivalence(self):
         for name, args in [('fonts', ('doctor', '--help')), ('fonts', ('set', '--no-input')),
+                           ('kernel', ('build', '--label', '--help')), ('kernel', ('build', '--lab', 'test')),
+                           ('kernel', ('build', '--label', 'test', '--genkernel', '--initramfs', '/missing')),
                            ('permissions', ('check', '--help')), ('permissions', ('check', '--fix'))]:
             with self.subTest(name=name, args=args):
                 grouped = self.run_cli(name, *args)

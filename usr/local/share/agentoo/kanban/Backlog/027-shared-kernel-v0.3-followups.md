@@ -82,7 +82,7 @@ Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
 
 ## Existing work and build maintenance
 
-Continue the [shared configuration workflow](015-shared-kernel-configuration-workflow.md)
+Continue the [shared configuration workflow](../Open/015-shared-kernel-configuration-workflow.md)
 for durable inputs, menuconfig capture, host embedding, source/version migration
 and reproducibility. It already owns that implementation; this card does not
 revive the retired general kernel-reduction project. Link

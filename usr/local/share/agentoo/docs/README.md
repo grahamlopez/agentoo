@@ -76,6 +76,7 @@ than host identities. Avoid giving Git and ebuilds competing ownership of a file
 - [Cloud storage installation and setup](cloud-storage.md)
 - [Displays, HiDPI, and laptop lid behavior](displays.md)
 - [Firmware maintenance and diagnostics](firmware.md)
+- [Custom kernel rebuild commands](kernel.md)
 - [Desktop preferences](desktop.md)
 - [Font diagnostics and selection](fonts.md)
 - [Repository status and terminal color tests](terminal-tools.md)
@@ -125,8 +126,8 @@ See [configuration details](../../../../../etc/agentoo/README.md) and the
 
 See [managed file permissions](permissions.md) for checks and Git automation.
 
-See the [custom kernel build notes](kernel-baseline-build.md) for the current
-work-in-progress distribution-config approach. These are not yet a validated
-runbook. [Card 14](../kanban/Completed/014-single-binary-kernel-baseline.md)
+Use the [custom kernel rebuild commands](kernel.md) to carry an existing config
+to updated sources. The [manual build notes](kernel-baseline-build.md) retain
+the earlier distribution-config procedure. [Card 14](../kanban/Completed/014-single-binary-kernel-baseline.md)
 records the operator-confirmed successful custom-kernel boot, the superseded
 defconfig-first experiment, and the remaining unverified acceptance checks.
