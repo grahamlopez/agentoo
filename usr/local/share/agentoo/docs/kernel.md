@@ -4,7 +4,8 @@
 builds a local x86_64 EFI kernel with an embedded initramfs, and installs it under
 a versioned filename. Each subcommand also works through `agentoo-kernel`.
 Run as your normal user; the command uses sudo for source Makefile changes,
-system module installation, genkernel, ESP writes and firmware registration.
+system module installation, ESP writes and firmware registration. Genkernel runs
+as the build user and creates user-owned workspace files.
 
 ```sh
 agentoo kernel config --label agentoo-v0.4
@@ -115,11 +116,15 @@ agentoo kernel install --label agentoo-v0.4 --efi-add-entry
 ```
 
 Registration reuses an entry matching the partition identity and loader path, or
-creates one without changing BootOrder first. It then puts that entry first and
-preserves the other entries' relative order. It leaves BootNext alone and prints
+creates one with `--create`, which also adds it to BootOrder. It then puts that
+entry first and preserves the other entries' relative order. It leaves BootNext alone and prints
 the resulting `efibootmgr -u` report. If a firmware operation fails, the installed
 image remains; inspect the reported failure and `efibootmgr -u` before retrying.
 There is no automatic reboot, signing or key enrollment.
+
+Creation uses a child-process umask of `022` so a restrictive inherited umask
+does not remove the read permissions requested by efibootmgr. An existing
+root-only variable is not automatically chmodded by registration.
 
 ## Interaction and results
 
@@ -128,6 +133,12 @@ displayed plans, including backup/replacement; it does not answer Kconfig or sud
 prompts. It also skips the optional config-export question. For config without a
 terminal, supply both `--yes` and `--accept-defaults`. There is no `--no-input`
 option and no promise of unattended sudo authentication.
+
+Before each privileged operation, the command checks cached sudo authorization
+without prompting. If a password is needed, it waits on the controlling terminal
+for you to press Enter before starting sudo's timed password prompt. This wait
+has no timeout and `--yes` does not skip it. The operation then uses `sudo -n`,
+so revoked authorization fails rather than starting another unexpected prompt.
 
 Results and requested help go to stdout; plans, prompts, build output and progress
 go to stderr. Exit status is 0 for success, 1 for operational failure or

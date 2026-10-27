@@ -62,6 +62,12 @@ proposal: fully unattended execution is not a current requirement. Without a
 terminal, fail clearly if confirmation or configuration interaction is needed.
 Skip the optional config-export question when confirmations are bypassed.
 
+Before privileged operations, check cached sudo authorization noninteractively.
+If renewal is needed, wait without a timeout for Enter on the controlling terminal
+before starting sudo's password prompt. `--yes` does not skip this readiness wait.
+Run the privileged command with `sudo -n` after authorization so it cannot start
+an unexpected timed password prompt if the authorization has been revoked.
+
 Build/install load the selected workspace's recorded paths and release rather
 than recalculating them from the current `/usr/src/linux` symlink. Both require
 `--label`; by default search under `/dev/shm` for that exact build label, validate
@@ -95,9 +101,10 @@ each build invocation, including retries; never silently reuse a prior image.
   archived artifacts or automatic config exports. Offer an optional config copy;
   the successfully booted kernel's `/proc/config.gz` is the usual next baseline.
   Ensure support for that configuration interface remains enabled.
-- Build retries and incremental builds reuse a prepared workspace. Report local
-  config changes; fail on missing or contradictory preparation with the specific
-  paths/settings that caused the failure. Show available temporary storage.
+- Build retries and incremental builds reuse a prepared workspace. Print config
+  differences only during `config`; fail on missing or contradictory preparation
+  with the specific paths/settings that caused the failure. Show available
+  temporary storage.
 
 ## Config: prepare and review the candidate
 
@@ -147,8 +154,8 @@ agentoo kernel config --label agentoo-v0.4 --config ../path/to/.config --sources
 ## Build: compile, install modules and embed the initramfs
 
 1. Load the workspace metadata and check that source, config and release agree.
-   Show specific findings for unexpected state. Resolve errors before compiling;
-   ordinary config edits can be shown for review. Print effective `KCFLAGS`,
+   Show specific findings for unexpected state. Resolve errors before compiling.
+   Print effective `KCFLAGS`,
    config/source/workspace paths and release, then ask `proceed [Y/n]?`.
 2. Clear `CONFIG_INITRAMFS_SOURCE` for the initial build, resolve the config and
    run `make -jN` with the recorded source and separate output directory.
@@ -167,7 +174,9 @@ agentoo kernel config --label agentoo-v0.4 --config ../path/to/.config --sources
    even with `CONFIG_MODULES=n`. Run the normal target and propagate failures;
    do not replace it with a simulated success.
 4. In genkernel mode, generate a fresh uncompressed initramfs using workspace
-   cache/tmp/output paths and `<release>` filenames. Retain LUKS support,
+   cache/tmp/output paths and `<release>` filenames. Run genkernel as the build
+   user so its outputs remain readable by the subsequent unprivileged make.
+   Retain LUKS support,
    `--no-mountboot`, `--no-bootloader` and `--no-firmware-install`. For module-free
    configs use `--no-ramdisk-modules`; for module-enabled configs use the staged
    modules prefix. Replace historical hardcoded versions with recorded paths.
@@ -199,8 +208,10 @@ agentoo kernel config --label agentoo-v0.4 --config ../path/to/.config --sources
    the image. With `--efi-add-entry`, create or reuse the matching entry, put it
    first, preserve all other entries and their relative order, then print
    `efibootmgr -u`. Match entries by GPT partition identity and loader path.
-   Create with `--create-only` before setting the preserved order; leave BootNext
-   alone. Report failures without deleting the installed image or existing entries.
+   Create with `--create`, which also adds the entry to BootOrder, then set the
+   preserved order; leave BootNext alone. Use a child-process umask of `022` for
+   creation so efivarfs entries retain their requested read permissions. Report
+   failures without deleting the installed image or existing entries.
 5. Do not automatically reboot. Successful compilation/installation is separate
    from the operator's boot and functional validation.
 
@@ -267,10 +278,13 @@ shared completion service. [Kernel command documentation](../../docs/kernel.md)
 records invocation, interaction, effects and limits. No build framework or new
 shared runtime layer was introduced.
 
-- Six focused tests use disposable sources and fake make/genkernel/sudo tools:
+- Focused tests use disposable sources and fake make/genkernel/sudo tools:
   config handoff and source backup, module-install stages, fresh initramfs on
   retry, custom archives with module-enabled configs, installation backup,
   ambiguous workspace/source checks and preserved EFI order.
+- Sudo readiness follow-up (2026-10-27): all eight focused tests pass, including
+  waiting for Enter before authentication and using cached authorization without
+  prompting. No real sudo authentication was exercised by these tests.
 - Existing CLI tests cover direct/grouped help, incomplete-value help, invalid
   options and completion parity; real Zsh completion includes the new command.
 - Repository verification passed: 247 Python tests and all five Lua scripts.

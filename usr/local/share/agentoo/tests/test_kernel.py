@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -56,8 +57,11 @@ name = next(x.split('=', 1)[1] for x in a if x.startswith('--initramfs-filename=
 (out / name).write_text('fresh archive')
 ''')
         self.tool('sudo', '''
-import os, sys
+import json, os, sys
 a = sys.argv[1:]
+with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['sudo', *a]) + '\\n')
+if a == ['-n', '-v']: sys.exit(0)
+if a[0] == '-n': a = a[1:]
 if a[0] == '--': a = a[1:]
 os.execvp(a[0], a)
 ''')
@@ -104,6 +108,28 @@ p.write_text(text)
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
+    def test_sudo_waits_for_readiness_before_authenticating(self):
+        tty_in, tty_out = io.StringIO('\n'), io.StringIO()
+
+        def call(command, **kwargs):
+            if command == ['sudo', '-n', '-v']:
+                return SimpleNamespace(returncode=1)
+            self.assertEqual(command, ['sudo', '-v'])
+            self.assertEqual(tty_in.tell(), 1)
+            self.assertIn('Press Enter when ready', tty_out.getvalue())
+            return SimpleNamespace(returncode=0)
+
+        with patch('builtins.open', side_effect=[tty_in, tty_out]), \
+                patch.object(kernel.subprocess, 'run', side_effect=call):
+            kernel.authorize_sudo()
+
+    def test_cached_sudo_runs_privileged_command_without_prompting(self):
+        with patch.object(kernel.os, 'geteuid', return_value=1000), \
+                patch('builtins.open', side_effect=AssertionError('unexpected readiness prompt')), \
+                patch.object(kernel.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='ok')) as run:
+            self.assertEqual(kernel.run(['example'], capture=True, root=True), 'ok')
+        self.assertEqual(run.call_args_list[-1].args[0], ['sudo', '-n', '--', 'example'])
+
     def test_config_handoff_preserves_cmdline_and_rejects_reconfiguration(self):
         self.prepare()
         data = kernel.load(self.work, 'test')
@@ -127,7 +153,8 @@ p.write_text(text)
         self.invoke('build', '--label', 'test', '--yes')
         self.assertEqual(archive.read_text(), 'fresh archive')
         calls = self.calls()
-        installs = [call for call in calls if 'modules_install' in call]
+        self.assertFalse(any('genkernel' in call for call in calls if call[0] == 'sudo'))
+        installs = [call for call in calls if call[0] == 'make' and 'modules_install' in call]
         self.assertEqual(len(installs), 4)
         self.assertEqual(sum(any(x.startswith('INSTALL_MOD_PATH=') for x in call) for call in installs), 2)
         self.assertTrue(all('--no-ramdisk-modules' in call for call in calls if call[0] == 'genkernel'))
@@ -143,7 +170,7 @@ p.write_text(text)
         archive.write_text('custom input')
         self.invoke('build', '--label', 'test', '--initramfs', str(archive), '--yes')
         self.assertFalse(any(call[0] == 'genkernel' for call in self.calls()))
-        self.assertEqual(len([call for call in self.calls() if 'modules_install' in call]), 2)
+        self.assertEqual(len([call for call in self.calls() if call[0] == 'make' and 'modules_install' in call]), 2)
         data = kernel.load(self.work, 'test', completed=True)
         output, gen = kernel.paths(self.work, data)
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_MODULES'], 'y')
@@ -178,10 +205,16 @@ p.write_text(text)
 
     def test_firmware_registration_preserves_other_entry_order(self):
         before = 'BootOrder: 0003,0001\nBoot0001* Windows\nBoot0003* Prior kernel\n'
-        after = before + 'Boot0004* New kernel\n'
+        after = before.replace('BootOrder: 0003,0001', 'BootOrder: 0004,0003,0001') + 'Boot0004* New kernel\n'
         with patch.object(kernel, 'run', side_effect=[before, '', after, '', after]) as run, redirect_stdout(io.StringIO()):
-            kernel.register_entry(['efibootmgr', '--create-only'], dict(partn=1, partuuid='uuid'), r'\EFI\Gentoo\new.efi')
+            kernel.register_entry(['efibootmgr', '--create'], dict(partn=1, partuuid='uuid'), r'\EFI\Gentoo\new.efi')
+        self.assertEqual(run.call_args_list[1].args[0], ['efibootmgr', '--create'])
+        self.assertEqual(run.call_args_list[1].kwargs['umask'], 0o022)
         self.assertEqual(run.call_args_list[-2].args[0], ['efibootmgr', '--bootorder', '0004,0003,0001'])
+        existing = before + 'Boot0004* New kernel\tHD(1,GPT,uuid,0x800,0x200000)/\\EFI\\Gentoo\\new.efi\n'
+        with patch.object(kernel, 'run', side_effect=[existing, '', existing]) as run, redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            kernel.register_entry(['efibootmgr', '--create'], dict(partn=1, partuuid='uuid'), r'\EFI\Gentoo\new.efi')
+        self.assertFalse(any('--create' in call.args[0] for call in run.call_args_list))
 
 
 if __name__ == '__main__':
