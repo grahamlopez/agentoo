@@ -48,6 +48,9 @@ elif 'modules_install' in a:
     modules.mkdir(parents=True, exist_ok=True)
     (modules / 'modules.builtin').write_text('built-in metadata')
     (modules / 'modules.builtin.modinfo').write_text('built-in modinfo')
+    # Real modules_install preserves private modes of generated metadata.
+    (modules / 'modules.builtin').chmod(0o600)
+    (modules / 'modules.builtin.modinfo').chmod(0o600)
     (modules / 'build').symlink_to(out)
     (modules / 'source').symlink_to(pathlib.Path(a[a.index('-C') + 1]))
     if 'CONFIG_MODULES=y' in config:
@@ -78,9 +81,10 @@ if a[0] == '--': a = a[1:]
 os.execvp(a[0], a)
 ''')
         self.tool('depmod', '''
-import json, os, sys
+import json, os, pathlib, sys
 with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['depmod', *sys.argv[1:]]) + '\\n')
-sys.exit(1 if os.environ.get('FAIL_DEPMOD') else 0)
+if os.environ.get('FAIL_DEPMOD'): sys.exit(1)
+(pathlib.Path(os.environ['TEST_MODULES_ROOT']) / sys.argv[-1] / 'modules.builtin.bin').write_text('index')
 ''')
         modules_root = patch.object(kernel, 'MODULES_ROOT', self.root / 'system-modules')
         modules_root.start()
@@ -109,7 +113,8 @@ while a:
 p.write_text(text)
 ''')
         config_tool.chmod(0o755)
-        self.env = patch.dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}', KERNEL_TEST_LOG=str(self.log))
+        self.env = patch.dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}', KERNEL_TEST_LOG=str(self.log),
+                              TEST_MODULES_ROOT=str(kernel.MODULES_ROOT))
         self.env.start()
         self.addCleanup(self.env.stop)
         self.workspaces = patch.object(kernel, 'WORKSPACES', self.root)
@@ -262,6 +267,29 @@ p.write_text(text)
         self.assertIn(['depmod', '-a', data['release']], calls)
         self.assertLess(next(i for i, call in enumerate(calls) if call[0] == 'depmod'),
                         next(i for i, call in enumerate(calls) if call[0] == 'sudo' and 'mv' in call))
+
+    def test_module_permissions_with_restrictive_umask(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+        self.prepare()
+        previous = os.umask(0o077)
+        try:
+            self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+            data = kernel.load(self.work, 'test', completed=True)
+            modules = kernel.staged_modules(self.work, data)
+            for path in [modules, *modules.rglob('*')]:
+                if not path.is_symlink():
+                    self.assertEqual(path.stat().st_mode & 0o777,
+                                     0o755 if path.is_dir() else 0o644, str(path))
+            destination = self.root / 'esp/EFI/Gentoo'
+            device = dict(pkname='/dev/test', partn=1, partuuid='test')
+            with patch.object(kernel, 'esp_details', return_value=(device, 'loader')):
+                self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+            installed = kernel.MODULES_ROOT / data['release']
+            for name in ('modules.builtin', 'modules.builtin.modinfo', 'modules.builtin.bin',
+                         'kernel/drivers/example.ko'):
+                self.assertEqual((installed / name).stat().st_mode & 0o777, 0o644, name)
+        finally:
+            os.umask(previous)
 
     def test_install_rejects_changed_or_missing_staged_modules(self):
         self.prepare()

@@ -414,6 +414,12 @@ def build(args):
     image = output / 'arch/x86/boot/bzImage'
     if (output / 'include/config/kernel.release').read_text().strip() != data['release']:
         raise RuntimeError('compiled kernel release differs from the planned release')
+    # Kernel copies generated metadata with its original (possibly private) mode.
+    # Normalize the deployable tree before recording its permission-aware manifest.
+    modules = staged_modules(work, data)
+    for path in [modules, *modules.rglob('*')]:
+        if not path.is_symlink():
+            path.chmod(0o755 if path.is_dir() else 0o644)
     data.update(built=True, image_sha256=digest(image), config_sha256=digest(output / '.config'),
                 modules_manifest=module_manifest(staged_modules(work, data)))
     save(work, data)
@@ -495,7 +501,7 @@ def install(args):
         confirm('Back up the existing image and overwrite it', args.yes, default=False)
     run(['install', '-d', '-m', '0755', '--', modules_destination], root=True)
     run(['cp', '-a', '--no-preserve=ownership', '--', str(modules) + '/.', modules_destination], root=True)
-    run(['depmod', '-a', data['release']], root=True)
+    run(['depmod', '-a', data['release']], root=True, umask=0o022)
     if backup:
         run(['cp', '--preserve=mode', '--', destination, backup], root=True)
     staging = destination.with_name('.' + destination.name + f'.{os.getpid()}.tmp')

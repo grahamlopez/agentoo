@@ -107,7 +107,9 @@ workspace. Explicit `--genkernel` conflicts with `--initramfs`. The old config's
 
 Finally, build embeds the archive, resolves the config and compiles again. It
 checks release consistency and records the completed config/image hashes and a
-manifest of staged module files and symlinks in the workspace. It prints the final `bzImage` path on stdout. Interrupted builds retain
+manifest of staged module files and symlinks in the workspace. Before recording
+the manifest, staged directories are normalized to `0755` and files to `0644`;
+symlinks are preserved. It prints the final `bzImage` path on stdout. Interrupted builds retain
 their workspace for inspection/retry; install rejects incomplete or changed
 config/image pairs or changed staged modules. Workspaces built before module
 manifests were introduced must be rebuilt before installation. The final config remains available for manual copying; there
@@ -125,7 +127,8 @@ If an image already exists at the destination, installation shows its backup
 path and asks explicitly before backing up and replacing it. Backups have unique
 timestamped names beside the image. Once all confirmations and ESP checks pass,
 install copies the validated staged module tree into `/lib/modules/<release>`
-as root and runs `depmod -a <release>`. This includes built-in metadata with
+as root and runs `depmod -a <release>` with umask `022` so generated indexes
+remain readable even with a restrictive caller umask. This includes built-in metadata with
 `CONFIG_MODULES=n`. It does not rerun make or require the original sources.
 Existing files not present in the staged tree, including separately installed
 external modules, are retained; external-module rebuilding remains manual.
