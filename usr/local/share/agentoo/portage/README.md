@@ -155,6 +155,45 @@ establish arm64 runtime operation or authenticated transfers. pCloud GUI login,
 sync, FUSE operation, autostart, and update notifications require a user-session
 check on the target desktop; they were not exercised during packaging.
 
+## Amazon DCV remote desktop client
+
+`net-misc/amazon-dcv-client-bin` installs the official amd64 Amazon DCV viewer
+(formerly NICE DCV) under `/opt/amazon-dcv`, with the `dcvviewer` command,
+Amazon DCV application-menu entry, `.dcv` file association, and `dcv:` URL handler.
+It is optional; no package set selects it. The common keyword configuration
+accepts its testing keyword.
+
+```sh
+emerge --ask net-misc/amazon-dcv-client-bin::agentoo
+dcvviewer
+```
+
+Enter the server address supplied by the remote desktop administrator. Gentoo
+is not supported upstream. On systems without Agentoo's configuration, accept
+`~amd64` and the `NICE-EULA-8.4` license for this package first. Updates are
+managed through Portage; installation does not connect to a server, authenticate,
+enable services, or change user settings.
+
+The recipe pins Amazon's Ubuntu 24.04 client package, preserving its private GTK,
+GLib, GStreamer, codec, and CEF libraries. It requires glibc 2.39 or newer. The
+unused HarfBuzz ICU bridge is omitted because it requires Ubuntu's ICU 74;
+no packaged ELF links to it. The remaining external dependencies are declared,
+including libxml2-compat for the older libxml2 ABI. The launcher uses the private
+installation paths, application and GTK schemas are compiled during staging,
+and the private image-loader cache is generated after installation. The host's
+dconf backend is linked into the private GIO module directory.
+
+For version bumps, use the versioned client links at <https://www.amazondcv.com/>,
+verify the artifact against Amazon's published SHA-256 checksum, inspect all ELF
+dependencies and plugins again, review the EULA, and regenerate the Manifest.
+Keep downloaded artifacts outside Git. Recheck the omitted ICU bridge and all
+launcher paths whenever upstream changes its bundle.
+
+Initial validation checked the upstream checksum, Portage unpack through staged
+installation, dependency resolution, shell syntax, and desktop-file validation.
+The host lacks several declared runtime dependencies, so GUI startup and remote
+connections remain to be checked after installation.
+
 ## User-managed AI clients
 
 `dev-util/codex-cli-deps` and `dev-util/claude-code-deps` supply prerequisites

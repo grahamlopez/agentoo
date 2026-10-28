@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <longdescription>
+    Installs Amazon's native DCV viewer with its private bundled libraries,
+    desktop entry, MIME associations, and dcv URL handler. Authentication
+    and remote desktop connections remain user-managed.
+  </longdescription>
+</pkgmetadata>

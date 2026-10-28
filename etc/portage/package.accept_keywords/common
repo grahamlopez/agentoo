@@ -26,6 +26,9 @@ www-client/prisma-browser-bin::agentoo ~amd64
 net-misc/proton-drive-cli-bin::agentoo ~amd64 ~arm64
 net-misc/pcloud-drive-bin::agentoo ~amd64
 
+# Optional native Amazon DCV remote desktop viewer.
+net-misc/amazon-dcv-client-bin::agentoo ~amd64
+
 # Other agentoo ebuilds
 app-misc/ttfx ~amd64
 
