@@ -84,12 +84,15 @@ package.env. Other hosts retain broad coverage.
 `/etc/agentoo/firmware/<host>.list` is the reviewed, explicit firmware list.
 Flattop retains its Intel graphics/Wi-Fi/Bluetooth firmware and the RTL8156
 dock Ethernet payload identified on Thinktop. No other external firmware-dependent
-peripherals are assumed. The operator installs the matching list as the machine-local
+peripherals are assumed. `agentoo kernel firmware` reports selection, precedence,
+installed firmware and running embedded names. After deployment, the operator
+runs `agentoo kernel firmware apply` to install the matching list as the machine-local
 `/etc/portage/savedconfig/sys-kernel/linux-firmware`. Gentoo consumes that file
 and writes a versioned snapshot after each build. Matching versioned and
-triplet-specific files take precedence; move them aside when applying a revised
-list. There are no Agentoo build hooks, automatic list expansion, or custom
-firmware validation. For another host, review its own list before enabling
+triplet-specific files take precedence; apply backs up and retires matching
+overrides, rebuilds from source and checks the generated snapshot/installed paths.
+There are no Agentoo build hooks or automatic list expansion. For another host,
+review its own list before enabling
 savedconfig and installing its selected input.
 
 See the [firmware operator guide](../../usr/local/share/agentoo/docs/firmware.md)

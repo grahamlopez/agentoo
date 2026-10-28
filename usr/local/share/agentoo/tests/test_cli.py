@@ -41,7 +41,8 @@ class CliTest(unittest.TestCase):
                      ['secrets', 'install', '--help'], ['help', 'power'],
                      ['help', 'display', 'backlight'], ['help', 'display'], ['help', 'screenshot'],
                      ['help', 'repos'], ['help', 'term-colors'], ['help', 'cloud-storage'],
-                     ['help', 'cloud-storage', 'pcloud'], ['cloud-storage', 'pcloud', 'start', '--help']]:
+                     ['help', 'cloud-storage', 'pcloud'], ['cloud-storage', 'pcloud', 'start', '--help'],
+                     ['kernel', 'firmware', '--help'], ['kernel', 'firmware', 'apply', '--help']]:
             with self.subTest(args=args):
                 result = self.run_cli(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -103,7 +104,8 @@ class CliTest(unittest.TestCase):
 
     def test_completion_usage_matches_actual_help(self):
         paths = [(), ('git',), ('repos',), ('term-colors',), ('kernel',),
-                 *(('kernel', action) for action in ('config', 'build', 'install')), ('permissions',), ('permissions', 'check'),
+                 *(('kernel', action) for action in ('config', 'build', 'install', 'firmware')),
+                 ('kernel', 'firmware', 'apply'), ('permissions',), ('permissions', 'check'),
                  ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
                  ('secrets',), ('secrets', 'install'), ('cloud-storage',), ('cloud-storage', 'pcloud'),
                  *(('cloud-storage', 'pcloud', action) for action in ('start', 'stop', 'status')), ('checkpoint',),

@@ -78,6 +78,11 @@ in [firmware maintenance](firmware.md). Thinktop and Flattop have reviewed nativ
 savedconfig lists; applying or revising them and rebuilding linux-firmware are
 separate from kernel configuration. The Thinktop list also includes the recorded
 RTL8156 dock Ethernet correction, which needs application on that host.
+Use `agentoo kernel firmware` for read-only status, including savedconfig precedence,
+installed selection and the running embedded names. After deploying a reviewed
+host list and its Portage USE policy, `agentoo kernel firmware apply` backs up
+overriding inputs, installs the native list and rebuilds the installed package
+version from source. `apply --dry-run` displays the plan without sudo or changes.
 Do not use the embedded list as the installed list: recovery kernels and
 peripherals may need more files. CPU microcode, SOF and regulatory data also have
 separate package ownership. Updating embedded payloads requires rebuilding the

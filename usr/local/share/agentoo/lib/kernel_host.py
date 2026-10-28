@@ -15,7 +15,7 @@ KEYMAP = '/usr/share/keymaps/i386/qwerty/us-caps.map.gz'
 SYS_BLOCK = Path('/sys/class/block')
 
 
-def read_profile(host=None):
+def selected_host(host=None):
     if host is None:
         match = re.fullmatch(r'\s*GENTOO_TARGET_HOST="([a-zA-Z0-9_-]+)"\s*', SELECTOR.read_text())
         if not match:
@@ -23,6 +23,11 @@ def read_profile(host=None):
         host = match[1]
     if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*', host):
         raise ValueError('invalid host name')
+    return host
+
+
+def read_profile(host=None):
+    host = selected_host(host)
     path = HOSTS / f'{host}.config'
     if not path.is_file():
         raise RuntimeError(f'{path}: no kernel profile for {host}; create a reviewed host profile first')

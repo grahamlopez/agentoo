@@ -10,6 +10,63 @@ firmware embedded in a custom kernel are separate maintenance concerns.
 
 ## Apply or revise the selection
 
+After deploying the host policy and reviewed list, use:
+
+```sh
+agentoo kernel firmware
+agentoo kernel firmware apply --dry-run
+agentoo kernel firmware apply
+```
+
+The bare command is read-only and never requests sudo. It shows the selected
+target host/kernel profile, host firmware list, effective and installed USE flags,
+existing native savedconfigs in precedence order, differences from the durable
+input and installed package paths, installed payload bytes, and the running
+kernel's embedded names and microcode. Embedded names are configuration evidence,
+not proof of every runtime load or firmware version. The printed journal command
+helps investigate actual firmware loads; initramfs copies remain separate.
+
+`apply` handles local onboarding and later list revisions. It requires a deployed
+reviewed list and effective `savedconfig -deduplicate -compress-xz -compress-zstd`
+policy for linux-firmware. It pins the currently installed package version and
+requires its source ebuild; it does not choose an upgrade or enable host policy
+implicitly. Run with other package/configuration operations idle.
+
+After displaying the plan and confirming, it mounts `/boot` through its existing
+mount configuration if initramfs policy requires it and runs a Portage pretend
+before changing savedconfigs. It then creates a unique backup under
+`/var/backups/agentoo/kernel-firmware/`, saves the previous durable input and the
+reviewed host list, and moves overriding native inputs into the backup. It handles
+the installed version/revision and native target/build triplet precedence, leaving
+unrelated package-version snapshots and lower-priority inputs alone. It installs
+the host list at `/etc/portage/savedconfig/sys-kernel/linux-firmware` with mode 0644,
+then runs a source-only, oneshot rebuild with `--ignore-default-opts`,
+`--usepkg=n` and `--getbinpkg=n`. This bypasses `EMERGE_DEFAULT_OPTS`, including
+binary-only defaults, without passing negative `*pkgonly` options that some
+Portage resolver paths interpret by their presence. Host USE policy still applies.
+
+On success it compares the generated versioned snapshot and installed package
+paths against the host list and reports installed payload bytes. Distribution
+initramfs regeneration follows the effective `dist-kernel`/`initramfs` policy.
+It does not rebuild the custom kernel, alter its embedded firmware, register EFI
+entries or reboot. Repeat cold-boot and functional/suspend checks on both kernels.
+
+`--dry-run` performs no changes, sudo requests or confirmation. `--yes` accepts
+the displayed apply plan, but does not bypass sudo authentication; the existing
+kernel command readiness prompt is used when credentials are needed. Help works
+without Portage or sudo. Exit status is 0 for a successful report/apply/plan,
+1 for an operational failure/cancellation and 2 for invalid arguments. A reported
+status mismatch is information, not itself a command failure.
+
+Failed/interrupted apply can leave updated savedconfigs or a partially merged
+package. The backup path is printed; no automatic rollback hides that state.
+Inspect `agentoo kernel firmware` and the Portage failure, then correct and retry
+or use the broad-coverage recovery below. Configuration backups do not contain a
+copy of the full firmware tree. Installer integration is separate: a new install
+still needs an explicit apply after deployment. No hook runs on Git updates.
+
+### Manual equivalent
+
 After deploying the configuration, install the reviewed host list into Portage's
 native savedconfig location. This example selects Flattop; use `thinktop.list`
 on Thinktop. Host selection does not copy the list automatically.
@@ -44,8 +101,8 @@ Use the appropriate version on later rebuilds. Check the build log's
 `Building using saved configfile` path is the intended unversioned file, and
 check successful distribution initramfs regeneration through `dist-kernel`.
 Inspect the newly generated versioned savedconfig for the actual installed list.
-There is no custom validation or binary-package guard; use source builds when
-applying or updating the selection, and review missing/renamed firmware manually.
+No custom Portage hook or binary-package guard is installed; use source builds
+when applying or updating the selection, and review missing/renamed firmware manually.
 
 A new package version normally uses the unversioned input because an older
 version's snapshot does not match. A rebuild of the same version prefers its
@@ -95,7 +152,7 @@ built-in firmware availability; changing savedconfig alone does not embed it.
 | Distribution kernel update | Update normally. Check firmware errors and hardware operation after booting it. If its drivers require new names, revise the host list and rebuild linux-firmware. |
 | Custom kernel update | Follow the working kernel/initramfs build procedure. Review firmware requirements when changing drivers or kernel versions; the installed selection does not update the embedded list. |
 | linux-firmware update | Review added/removed firmware names and relevant API versions. Update the explicit list as needed, reinstall it, check snapshot precedence, and build from source. New files are not selected automatically. |
-| Host-list edit | Reinstall the list, move aside matching higher-priority snapshots, and rebuild linux-firmware even if its version is unchanged. Regenerate custom artifacts if embedded inputs change. |
+| Host-list edit | Deploy and run `agentoo kernel firmware apply`, even if the package version is unchanged. It reinstalls the list, retires matching overrides and rebuilds from source. Regenerate custom artifacts if embedded inputs change. |
 | New hardware or driver | Review firmware requirements first; restore broad coverage while investigating if necessary. |
 
 After a selection change, test a cold boot of both custom and distribution

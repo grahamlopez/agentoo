@@ -20,7 +20,7 @@ COMMANDS = {
     'repos': 'Check system and home Git repositories',
     'term-colors': 'Show visual terminal color tests',
     'checkpoint': 'Create, list, inspect, restore, and remove system checkpoints',
-    'kernel': 'Configure, rebuild, and install custom EFI kernels',
+    'kernel': 'Build custom EFI kernels and manage host firmware',
     'permissions': 'Check or repair managed ownership and permissions',
     'secrets': 'Install secret files from Proton Pass',
     'cloud-storage': 'Start, stop, and inspect cloud storage clients',

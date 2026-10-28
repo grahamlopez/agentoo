@@ -19,6 +19,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
 import kernel_host
+import kernel_firmware
 
 WORKSPACES = Path('/dev/shm')
 MODULES_ROOT = Path('/lib/modules')
@@ -60,6 +61,13 @@ def build_parser():
             child.add_argument('--dest', default='/boot/EFI/Gentoo', metavar='DIR', help='EFI destination (default: /boot/EFI/Gentoo)').completion = 'directories'
             child.add_argument('--efi-add-entry', action=argparse.BooleanOptionalAction, default=False,
                                help='register the image and put its entry first (default: no)')
+    firmware = sub.add_parser('firmware', help='Show host firmware status or apply its native savedconfig',
+                              description='With no subcommand, show host policy, Portage savedconfigs, installed firmware and running kernel firmware.')
+    actions = firmware.add_subparsers(dest='firmware_operation')
+    apply = actions.add_parser('apply', help='Back up overriding savedconfigs, install the host list and rebuild from source',
+                               description='Apply the current host list to the installed linux-firmware version. Back up overriding native savedconfigs and rebuild from source; keep custom kernel images unchanged.')
+    apply.add_argument('--yes', action='store_true', help='accept the displayed plan; sudo authentication may still be required')
+    apply.add_argument('--dry-run', action='store_true', help='show the apply plan without confirmation, sudo or changes')
     return parser
 
 
@@ -580,7 +588,7 @@ def main():
     if args.operation is None:
         parser.print_help()
         return 0
-    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.label):
+    if args.operation != 'firmware' and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.label):
         parser.error('--label must start with a letter/digit and contain only letters, digits, dots, underscores or hyphens')
     if args.operation == 'build':
         if args.jobs < 1:
@@ -588,6 +596,9 @@ def main():
         if args.initramfs and args.genkernel is True:
             parser.error('--initramfs conflicts with --genkernel')
     try:
+        if args.operation == 'firmware':
+            kernel_firmware.command(args, run=run, confirm=confirm, notice=notice)
+            return 0
         if platform.machine() not in ('x86_64', 'amd64'):
             raise RuntimeError('this workflow currently supports local x86_64 EFI kernels')
         {'config': configure, 'build': build, 'install': install}[args.operation](args)
@@ -596,7 +607,7 @@ def main():
         notice(f'agentoo kernel: {error}')
         return 1
     except (KeyboardInterrupt, EOFError):
-        notice('agentoo kernel: cancelled; workspace retained for inspection')
+        notice('agentoo kernel: cancelled' + ('; workspace retained for inspection' if args.operation != 'firmware' else ''))
         return 1
 
 

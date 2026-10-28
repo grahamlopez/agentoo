@@ -15,16 +15,22 @@ separate from that overall acceptance. See [shared follow-ups](027-shared-kernel
 
 ## Framework charging and EC investigation
 
-- [ ] Investigate existing charging tools/interfaces, desired charge limits,
-  EC firmware/API compatibility and why the collected `cros_charge_control`
-  platform device was unbound despite its driver being loaded.
-- [ ] Decide whether to enable `CHARGER_CROS_CONTROL`, deliberately left off.
-  Target source normally declines attachment when a Framework-specific command
-  is detected; successful probe initializes automatic charging with 0–100%
-  thresholds. Inspect first and preserve or deliberately restore intended
-  limits during any eventual test. Normal firmware charging/ACPI reporting
-  remain available; Linux threshold/charge-behavior controls from this driver
-  are an unresolved capability, not a proven-safe permanent removal.
+- [x] Explain the unbound charge-control device and inspect the existing charge
+  limit using Framework's tool. The distribution boot explicitly reports
+  `Framework charge control detected, preventing load`; this is intentional
+  driver behavior. Operator queries confirm a 90% maximum and power readings
+  consistent with charging paused at that limit; see evidence below.
+- [x] Retain the current `CHARGER_CROS_CONTROL` exclusion. No kernel change is
+  justified by these warnings or the observed charging behavior. The driver
+  normally declines attachment when Framework's custom command is detected;
+  forcing a successful probe initializes automatic charging with 0–100%
+  thresholds. Revisit only if Linux threshold/charge-behavior controls are
+  specifically needed, preserving or deliberately restoring intended limits.
+- [ ] Track the separate CNVW ACPI missing-symbol bug. It occurs on both
+  kernels; practical impact and a firmware fix remain unestablished.
+- [ ] Consider BIOS 3.17 during routine firmware maintenance. It includes EC
+  and security updates, but its release notes do not claim a fix for the
+  USB-PD probe or CNVW errors. No update was performed in this investigation.
 - [ ] Verify EC LPC binding, expected fan/temperature channels, LEDs, keyboard
   backlight, EC character-device/sysfs interfaces and USB-PD information/logging.
   Do not change EC controls merely to inspect their presence.
@@ -53,6 +59,8 @@ separate from that overall acceptance. See [shared follow-ups](027-shared-kernel
   snapshot/distribution initramfs. Then cold-boot both kernels and repeat
   functional/suspend checks. The known RTL8156 monitor/KVM payload is retained;
   other external firmware-dependent peripherals are outside current scope.
+  After deployment, `agentoo kernel firmware apply` now performs the native
+  savedconfig/backups/source-rebuild steps; the bare command reports status.
 - [x] Build/boot v0.4 with host inputs and record config, firmware loading and
   boot diagnostics; see acceptance below. Retain the distribution recovery kernel.
 - [x] Operator functional acceptance before and after suspend (2026-10-27):
@@ -76,6 +84,64 @@ separate from that overall acceptance. See [shared follow-ups](027-shared-kernel
   from the shared baseline, independently of ordinary firmware loading.
 
 ## Evidence
+
+### Framework EC and charging review — 2026-10-27
+
+Read-only inspection of the current custom-kernel boot and preceding
+distribution boot confirms the same USB-PD probe and CNVW errors. The EC
+registers successfully and acquires AML mutex `ECMT`. Installed BIOS is 03.16
+(2026-03-06); EC sysfs reports `hx30_v0.0.1-94be25a`, firmware copy RO.
+
+The USB-PD sequence (`No USB PD charging ports found`, `Unexpected number of
+charge port count`, probe error -71) matches the longstanding Framework
+interface issue tracked in [Framework issue #2](https://github.com/FrameworkComputer/SoftwareFirmwareIssueTracker/issues/2).
+The installed kernel source returns `-EPROTO` when reported port counts fail
+its consistency check. An [upstream patch discussion](https://lkml.iu.edu/2404.0/07644.html)
+describes the unwanted messages on Framework systems. Treat this as a known
+interface warning with no demonstrated functional impact here, not proof of
+failed physical USB-C ports or failed battery protection. Actual charging,
+USB-C or suspend symptoms would require separate investigation.
+
+The preceding distribution boot's charge-control refusal is explained by the
+[upstream driver](https://code.googlesource.com/linux/torvalds/linux/+/8abc1c8badc11c859bb4ba43211611347e59c55c/drivers/power/supply/cros_charge-control.c):
+it detects Framework command `0x3E03` and returns `-ENODEV` by default. Normal
+firmware charging remains available. Forced attachment can change charging
+policy and is not needed merely to remove this message.
+
+The operator supplied these queries from `framework_tool`:
+
+```text
+sudo framework_tool --charge-limit
+Minimum 0%, Maximum 90%
+Battery Cutoff: Unknown
+
+sudo framework_tool --power
+AC connected; battery connected
+Charger Voltage: 16776mV
+Charger Current: 0mA (0.00C)
+Chg Input Current: 4748mA
+Battery SoC: 89%; Charge level: 90%
+Battery LFCC: 3058 mAh
+Battery Capacity: 2754 mAh (46.198 Wh)
+```
+
+Independent sysfs inspection reports AC online, capacity 90%, status
+`Not charging` and battery current 0. Together these are consistent with the
+90% ceiling working at the time of inspection; persistence across reboots and
+long-term behavior were not tested. The input-current field is distinct from
+battery charging current. `Battery Cutoff: Unknown` alone does not establish
+a fault. No evidence from this review indicates abnormal battery/power-system
+stress; it is not a comprehensive battery-health assessment. Charge-limit
+query syntax is documented in [Framework's examples](https://github.com/FrameworkComputer/framework-system/blob/main/EXAMPLES.md).
+
+The separate ACPI failure references missing `^^RP28.PXSX.WIST` and aborts
+`CNVW.IFUN` and `_DSM`. An [identical-signature report](https://community.frame.work/t/dmesg-acpi-bios-error-bug-could-not-resolve-symbol-rp28-pxsx-wist/72072)
+exists for Laptop 12; it does not establish impact or a fix for this Laptop 13.
+[Official Laptop 13 13th Gen BIOS 3.17 notes](https://resources.frame.work/downloads/laptop-13/13th-gen-intel-core/3.17/)
+list a 2026-06-22 stable release with updated EC firmware and security fixes,
+but no stated USB-PD probe or CNVW fix. No firmware, charging controls or kernel
+settings were changed during this review. Detailed interface/workload checks
+above remain open.
 
 ### Flattop v0.4 acceptance — 2026-10-27
 
