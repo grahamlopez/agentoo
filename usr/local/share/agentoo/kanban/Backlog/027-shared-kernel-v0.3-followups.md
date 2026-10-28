@@ -16,6 +16,9 @@ The final static audit passed at 3,068 enabled symbols, 1,584 fewer than the
 original running baseline. Thinktop subsequently booted v0.3, and the operator
 confirmed cameras, microphones and speakers working after suspend/resume.
 This is host-scoped evidence, not complete fleet/workload acceptance.
+Flattop subsequently booted `6.18.57-agentoo-v0.4` on 2026-10-27 with its host
+firmware and minimal initramfs; the operator confirmed everything works before
+and after suspend. Its host card records boot-log evidence and remaining scope.
 
 Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
 [startop](024-startop-kernel-v0.3-followups.md),

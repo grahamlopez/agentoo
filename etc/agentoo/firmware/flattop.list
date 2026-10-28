@@ -1,0 +1,49 @@
+# Flattop linux-firmware savedconfig: explicit paths relative to /lib/firmware.
+# Apply using /usr/local/share/agentoo/docs/firmware.md; no globs or expansion.
+# Reviewed against linux-firmware-20260622 and both 6.18.57 kernel boot logs.
+# SOF, Intel microcode and regulatory data have separate package ownership.
+
+# Raptor Lake-P i915: current ADLP DMC/GuC and TGL HuC plus driver fallbacks.
+# The retained Xe alternative uses the same ADLP GuC/TGL HuC names.
+i915/adlp_dmc.bin
+i915/adlp_dmc_ver2_16.bin
+i915/adlp_guc_70.bin
+i915/adlp_guc_70.1.1.bin
+i915/adlp_guc_69.0.3.bin
+i915/tgl_huc.bin
+i915/tgl_huc_7.9.3.bin
+
+# AX211: all packaged so-a0-gf-a0 API alternatives, PNVM and root aliases.
+# Both accepted kernels loaded API 89; retain the matching family on updates.
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-72.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-73.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-74.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-77.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-78.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-79.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-81.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-83.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-84.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-86.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0-89.ucode
+intel/iwlwifi/iwlwifi-so-a0-gf-a0.pnvm
+iwlwifi-so-a0-gf-a0-72.ucode
+iwlwifi-so-a0-gf-a0-73.ucode
+iwlwifi-so-a0-gf-a0-74.ucode
+iwlwifi-so-a0-gf-a0-77.ucode
+iwlwifi-so-a0-gf-a0-78.ucode
+iwlwifi-so-a0-gf-a0-79.ucode
+iwlwifi-so-a0-gf-a0-81.ucode
+iwlwifi-so-a0-gf-a0-83.ucode
+iwlwifi-so-a0-gf-a0-84.ucode
+iwlwifi-so-a0-gf-a0-86.ucode
+iwlwifi-so-a0-gf-a0-89.ucode
+iwlwifi-so-a0-gf-a0.pnvm
+
+# Intel USB Bluetooth 8087:0033: executable and device configuration.
+intel/ibt-0040-0041.sfi
+intel/ibt-0040-0041.ddc
+
+# Shared monitor/KVM's RTL8156 dock Ethernet: identified in Thinktop card 023.
+# No other external firmware-dependent peripherals are assumed for Flattop.
+rtl_nic/rtl8156b-2.fw

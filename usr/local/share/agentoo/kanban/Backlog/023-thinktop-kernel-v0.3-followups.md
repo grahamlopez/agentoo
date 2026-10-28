@@ -21,6 +21,10 @@ they do not establish acceptance on the other hosts or every audio route.
   installed savedconfig selection and early/built-in firmware availability;
   then verify link speed, connectivity, reconnect and resume. Driver binding
   alone does not establish wired operation. See [firmware maintenance](../Completed/018-host-firmware-savedconfig.md).
+  The tracked Thinktop savedconfig list was corrected on 2026-10-27 while
+  preparing Flattop's list; application/rebuild on Thinktop and wired validation
+  remain outstanding. The same payload is retained for Flattop's possible use
+  of the shared monitor/KVM.
 - [ ] Follow up the BERT diagnostic: this boot reports one firmware-provided
   error record from a previous boot, but skips printing its contents. Record
   recurrence and obtain the full record if it repeats or instability appears.

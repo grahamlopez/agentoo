@@ -40,6 +40,9 @@ iwlwifi-bz-b0-fm-c0.pnvm
 intel/ibt-0093-0291.ddc
 intel/ibt-0093-0291.sfi
 
+# RTL8156 dock Ethernet: missing-payload follow-up recorded in Thinktop card 023.
+rtl_nic/rtl8156b-2.fw
+
 # Meteor Lake NPU: production firmware and compatibility alias.
 intel/vpu/vpu_37xx_v0.0.bin
 intel/vpu/vpu_37xx_v1.bin

@@ -11,3 +11,6 @@ RUSTFLAGS="${RUSTFLAGS} -C target-cpu=raptorlake"
 PORTAGE_TMPDIR="/dev/shm"
 MAKEOPTS="-j12"
 VIDEO_CARDS="intel"
+
+# Native savedconfig; retain uncompressed inputs for custom-kernel embedding.
+AGENTOO_LINUX_FIRMWARE_USE="savedconfig -deduplicate -compress-xz -compress-zstd"

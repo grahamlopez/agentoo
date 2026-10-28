@@ -57,10 +57,10 @@ RAM capacity. Installer transactions also default to RAM-backed builds;
 `--no-ram-builds` selects disk-backed storage for an installer invocation.
 
 The captured boot used i915, iwlwifi, btusb, nvme, and snd_hda_intel, with an
-IDT 92HD95 audio codec. Keep broad linux-firmware coverage and the common
-`SOF_FIRMWARE=no` policy; a DSP-detected log line alone does not establish that
-SOF was used. Recheck audio and firmware requirements with the installed
-distribution kernel before considering a reduced firmware list.
+IDT 92HD95 audio codec. Retain the common `SOF_FIRMWARE=no` policy; a DSP-detected
+log line alone does not establish that SOF was used. Subsequent distribution
+and custom-kernel boot evidence supports the reviewed Flattop savedconfig list
+described below; application and post-trimming validation are separate steps.
 
 UEFI is evidenced by mounted efivarfs and EFI devices. System Secure Boot status
 was not collected (the Bluetooth controller's secure-boot message is unrelated).
@@ -75,14 +75,16 @@ fingerprint setup, and other desktop preferences remain unconfigured.
 
 ## Installed firmware selection
 
-Thinktop enables native `linux-firmware[savedconfig]` through
-`AGENTOO_LINUX_FIRMWARE_USE` in `make.conf.d/90-thinktop`. The common fragment
+Thinktop and Flattop enable native `linux-firmware[savedconfig]` through
+`AGENTOO_LINUX_FIRMWARE_USE` in their `make.conf.d/90-<host>` fragments. The common fragment
 sets `-savedconfig`; `package.env/kernel` applies the variable only to this
 package. Do not add a conflicting package.use setting: it takes precedence over
 package.env. Other hosts retain broad coverage.
 
-`/etc/agentoo/firmware/thinktop.list` is the reviewed, explicit firmware list.
-The operator installs it as the machine-local
+`/etc/agentoo/firmware/<host>.list` is the reviewed, explicit firmware list.
+Flattop retains its Intel graphics/Wi-Fi/Bluetooth firmware and the RTL8156
+dock Ethernet payload identified on Thinktop. No other external firmware-dependent
+peripherals are assumed. The operator installs the matching list as the machine-local
 `/etc/portage/savedconfig/sys-kernel/linux-firmware`. Gentoo consumes that file
 and writes a versioned snapshot after each build. Matching versioned and
 triplet-specific files take precedence; move them aside when applying a revised

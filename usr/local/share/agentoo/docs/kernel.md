@@ -74,8 +74,10 @@ silent changes. To adopt new host policy or boot identity, configure a fresh
 workspace. Workspaces predating specialization must also be configured afresh.
 
 Installed firmware remains independent: follow the native savedconfig procedure
-in [firmware maintenance](firmware.md). Thinktop's existing selection is unchanged;
-flattop retains broad installed coverage pending a reviewed savedconfig list.
+in [firmware maintenance](firmware.md). Thinktop and Flattop have reviewed native
+savedconfig lists; applying or revising them and rebuilding linux-firmware are
+separate from kernel configuration. The Thinktop list also includes the recorded
+RTL8156 dock Ethernet correction, which needs application on that host.
 Do not use the embedded list as the installed list: recovery kernels and
 peripherals may need more files. CPU microcode, SOF and regulatory data also have
 separate package ownership. Updating embedded payloads requires rebuilding the

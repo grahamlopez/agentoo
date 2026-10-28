@@ -1,7 +1,9 @@
 # Firmware maintenance
 
-Thinktop retains selected `linux-firmware` files using
-`/etc/agentoo/firmware/thinktop.list`. Other targets retain broad coverage.
+Thinktop and Flattop have reviewed native savedconfig lists at
+`/etc/agentoo/firmware/thinktop.list` and `/etc/agentoo/firmware/flattop.list`.
+Their host Portage fragments enable savedconfig; apply the matching list locally
+before rebuilding. Other targets retain broad coverage.
 SOF audio firmware, CPU microcode and wireless regulatory data belong to separate
 packages and are not trimmed by this list. Installed files, initramfs copies and
 firmware embedded in a custom kernel are separate maintenance concerns.
@@ -9,10 +11,11 @@ firmware embedded in a custom kernel are separate maintenance concerns.
 ## Apply or revise the selection
 
 After deploying the configuration, install the reviewed host list into Portage's
-native savedconfig location:
+native savedconfig location. This example selects Flattop; use `thinktop.list`
+on Thinktop. Host selection does not copy the list automatically.
 
 ```sh
-sudo install -D -m 0644 /etc/agentoo/firmware/thinktop.list /etc/portage/savedconfig/sys-kernel/linux-firmware
+sudo install -D -m 0644 /etc/agentoo/firmware/flattop.list /etc/portage/savedconfig/sys-kernel/linux-firmware
 sudo find /etc/portage/savedconfig -name 'linux-firmware*' -print
 ```
 
@@ -33,8 +36,8 @@ version being built; check triplet subdirectories too. Mount the normal boot
 filesystems, then rebuild from source:
 
 ```sh
-sudo emerge --pretend --verbose --oneshot --usepkg=n =sys-kernel/linux-firmware-20260622
-sudo emerge --oneshot --usepkg=n =sys-kernel/linux-firmware-20260622
+sudo emerge --pretend --verbose --oneshot --usepkg=n '=sys-kernel/linux-firmware-20260622'
+sudo emerge --oneshot --usepkg=n '=sys-kernel/linux-firmware-20260622'
 ```
 
 Use the appropriate version on later rebuilds. Check the build log's
@@ -50,6 +53,40 @@ generated snapshot: move it aside again when revising the durable list. Neither
 kernel needs rebuilding solely to trim installed files. Regenerate custom
 initramfs copies if needed; rebuild the custom kernel when its embedded inputs
 change.
+
+## Flattop selection and Thinktop dock correction
+
+The Flattop list targets the accepted 6.18.57 distribution/custom kernels and
+linux-firmware-20260622. It retains ADLP graphics DMC/GuC, TGL HuC and their
+advertised i915 fallbacks; all packaged AX211 so-a0-gf-a0 API alternatives and
+PNVM, including root aliases; Intel Bluetooth 8087:0033 SFI/DDC; and
+`rtl_nic/rtl8156b-2.fw` for the RTL8156 dock Ethernet documented on Thinktop.
+The last entry preserves potential use of the shared monitor/KVM; no other
+external firmware-dependent peripherals are assumed for Flattop.
+
+The reviewed list has 34 paths (22 regular payloads, 12 symlinks), totaling
+21,371,877 regular-file bytes versus 1,929,485,517 for the current broad package:
+a projected 98.9% reduction. These are installed-input measurements and a
+projection, not post-merge allocation or kernel/initramfs savings. Selected
+regular-file checksums match Portage's installed VDB; symlink targets are
+explicitly retained. The native installer has not yet been exercised with this
+list. Inspect its resulting versioned savedconfig and test both boot paths.
+
+Both accepted kernels use legacy HDA/IDT audio; no SOF firmware is selected.
+The retained AVS driver alternative requests `intel/avs/adl/dsp_basefw.bin`,
+which is absent even from this broad package. An AVS/SOF experiment needs a
+separate firmware review; trimming does not establish that alternative's support.
+UVC camera, keyboard/touchpad and the recorded USB fingerprint device establish
+no additional linux-firmware requirement. Microcode and regulatory data remain
+installed through their own packages, and the custom embedded selection stays
+separate from this installed-file list.
+
+Thinktop card 023 records a missing `rtl8156b-2.fw` request under v0.2/v0.3.
+The tracked Thinktop list now includes that payload too. Its earlier 43-path
+acceptance predates this correction: reapply the updated list and rebuild on
+Thinktop. Check wired link speed, traffic, reconnect and resume. If a built-in
+driver requests it before root becomes available, separately review early or
+built-in firmware availability; changing savedconfig alone does not embed it.
 
 ## Routine maintenance
 
@@ -109,11 +146,11 @@ savedconfig rather than assuming every requested file was retained.
 For a one-time recovery rebuild, use the applicable package version:
 
 ```sh
-sudo env USE="-savedconfig" emerge --oneshot --usepkg=n =sys-kernel/linux-firmware-20260622
+sudo env USE="-savedconfig" emerge --oneshot --usepkg=n '=sys-kernel/linux-firmware-20260622'
 ```
 
 For persistent broad coverage, set `AGENTOO_LINUX_FIRMWARE_USE="-savedconfig"`
-in `/etc/portage/make.conf.d/90-thinktop` and rebuild. Check distribution
+in the affected host's `/etc/portage/make.conf.d/90-<host>` and rebuild. Check distribution
 initramfs regeneration and recreate affected custom artifacts. Keep a known
 working boot path or installation media: the fallback kernel shares the same
 root firmware directory.
