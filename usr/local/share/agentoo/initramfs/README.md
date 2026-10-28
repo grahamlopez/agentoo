@@ -28,6 +28,13 @@ defaults to `root`; select the actual installed mapping name (the installer uses
 Build requires a C compiler,
 static libc development files, make, Python 3, cpio, loadkeys, strip and installed
 cryptsetup with its shared libraries. No packages or boot files are installed.
+Cache the pinned archive using
+`sudo emerge --fetchonly --nodeps '=sys-apps/busybox-1.36.1-r4'`, with Portage's
+DISTDIR set to `/var/cache/distfiles`. Fetching does not install BusyBox.
+Pass `--check` with the normal builder arguments to validate input availability
+without creating the workspace or compiling. `agentoo kernel build` does this
+before kernel compilation. This preflight does not prove the static toolchain
+works or that the resulting archive boots.
 The archive contains stripped copies of installed libraries; rebuild after
 cryptsetup/library security updates. BusyBox is statically linked.
 

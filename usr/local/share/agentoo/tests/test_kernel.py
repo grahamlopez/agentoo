@@ -98,6 +98,7 @@ if os.environ.get('FAIL_DEPMOD'): sys.exit(1)
         self.tool('minimal-initramfs', '''
 import json, os, pathlib, sys
 with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['minimal-initramfs', *sys.argv[1:]]) + '\\n')
+if '--check' in sys.argv: sys.exit(0)
 work = pathlib.Path(sys.argv[sys.argv.index('--work') + 1])
 work.mkdir(parents=True, exist_ok=False)
 (work / 'initramfs.cpio').write_text('fresh minimal archive')
@@ -431,10 +432,28 @@ p.write_text(text)
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_INITRAMFS_SOURCE'], json.dumps(str(archive)))
         self.assertFalse(any(call[0] == 'genkernel' for call in self.calls()))
         self.assertFalse((kernel.staged_modules(self.work, data) / 'stale.ko').exists())
-        self.assertEqual(len([call for call in self.calls() if call[0] == 'minimal-initramfs']), 2)
+        self.assertEqual(len([call for call in self.calls() if call[0] == 'minimal-initramfs' and '--check' not in call]), 2)
         call = next(call for call in self.calls() if call[0] == 'minimal-initramfs')
         self.assertEqual(call[call.index('--partuuid') + 1], TEST_PARTUUID)
         self.assertEqual(call[call.index('--mapper') + 1], 'cryptroot')
+
+    def test_missing_initramfs_inputs_fail_before_compilation_or_workspace_changes(self):
+        self.prepare()
+        metadata = (self.work / kernel.METADATA).read_bytes()
+        self.tool('minimal-initramfs', '''
+import sys
+assert '--check' in sys.argv
+print('BusyBox source archive missing', file=sys.stderr)
+sys.exit(2)
+''')
+        start = len(self.calls())
+        args = kernel.build_parser().parse_args(['build', '--label', 'test', '--yes'])
+        with tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors), self.assertRaisesRegex(RuntimeError, 'exited 2'):
+            kernel.build(args)
+        self.assertEqual((self.work / kernel.METADATA).read_bytes(), metadata)
+        self.assertFalse((self.work / 'initramfs').exists())
+        calls = self.calls()[start:]
+        self.assertFalse(any('modules_install' in call or any(arg.startswith('-j') for arg in call) for call in calls))
 
     def test_minimal_builder_rejects_module_kernel_before_compilation(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))

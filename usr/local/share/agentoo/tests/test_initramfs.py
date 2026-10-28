@@ -5,6 +5,7 @@ probe properties; the full disposable-container smoke test uses actual blkid.
 No uevents are emitted and no host udev database or devices are changed.
 """
 from pathlib import Path
+import os
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,38 @@ HERE = Path(__file__).resolve().parents[1] / 'initramfs'
 
 
 class BuilderArgumentsTest(unittest.TestCase):
+    def test_check_mode_validates_inputs_without_building_or_creating_workspace(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source'
+            source.mkdir()
+            work = root / 'output'
+            keymap = root / 'keymap'
+            keymap.touch()
+            command = [sys.executable, str(HERE / 'build'), '--check', '--work', str(work),
+                       '--partuuid', '33333333-3333-4333-8333-333333333333',
+                       '--busybox-source', str(source), '--keymap', str(keymap)]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('source tree missing Makefile', result.stderr)
+            self.assertFalse(work.exists())
+            (source / 'Makefile').touch()
+            tools = root / 'bin'
+            tools.mkdir()
+            for name in ('make', 'cc', 'cpio', 'loadkeys', 'strip', 'cryptsetup', 'ldd'):
+                tool = tools / name
+                # Only ldd should execute during preflight; compilers/builders must not run.
+                tool.write_text('#!/bin/sh\nexit ' + ('0' if name == 'ldd' else '99') + '\n')
+                tool.chmod(0o755)
+            result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PATH': str(tools)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(work.exists())
+            keymap.unlink()
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('console keymap missing', result.stderr)
+            self.assertFalse(work.exists())
+
     def test_requires_explicit_partition_and_rejects_invalid_mapping_before_building(self):
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary) / 'output'

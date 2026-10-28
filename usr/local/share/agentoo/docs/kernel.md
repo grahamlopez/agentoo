@@ -162,6 +162,21 @@ and bundles installed cryptsetup and its libraries. The complete subtree is
 regenerated on each build/retry; no network download is performed. The archive is
 `<workspace>/initramfs/<release>/initramfs.cpio`.
 
+Before compiling or changing build metadata, build invokes the minimal builder's
+`--check` mode to check source availability, the keymap, required tools and
+cryptsetup's linked libraries. This checks inputs, not static-link toolchain or
+boot acceptance. Cache the pinned source once using the matching Gentoo ebuild:
+
+```sh
+sudo emerge --fetchonly --nodeps '=sys-apps/busybox-1.36.1-r4'
+```
+
+Portage must use `/var/cache/distfiles` as its DISTDIR for this default path.
+This fetches/verifies sources without installing BusyBox. If a previous build
+stopped at the missing-source check, rerun `agentoo kernel build --label LABEL`
+in the same workspace; compiled kernel objects remain available for incremental
+make. There is no need to rerun config or discard that workspace for this error.
+
 This default uses the host identity recorded by config, with Btrfs `@`
 and the US/Caps-to-Control console map. It requires
 `CONFIG_MODULES=n` and built-in boot drivers. See the

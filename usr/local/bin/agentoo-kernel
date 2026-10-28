@@ -419,6 +419,10 @@ def build(args):
     if not custom and not args.genkernel and values.get('CONFIG_MODULES') == 'y':
         raise RuntimeError('minimal initramfs requires built-in drivers (CONFIG_MODULES=n); use --genkernel or --initramfs')
     validate_inputs(work, data)
+    minimal_command = [INITRAMFS_BUILDER, '--work', minimal_work, '--partuuid', data['identity']['partuuid'],
+                       '--mapper', data['identity']['mapper'], '--keymap', data['identity']['keymap']]
+    if not custom and not args.genkernel:
+        run([*minimal_command, '--check'])
     notice(f'KCFLAGS:          {data["kcflags"]}\nKernel config:    {output}/.config\nKernel sources:   {data["sources"]}\nBuild directory:  {work}\nKernel version:   {data["release"]}')
     notice(f'Host:             {data["host"]}\nKernel command line: {data["identity"]["cmdline"]}')
     notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or ("fresh genkernel image (LUKS)" if args.genkernel else "fresh minimal image (recorded host LUKS2/Btrfs inputs)")}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
@@ -444,8 +448,7 @@ def build(args):
         # Regenerate only this builder's disposable subtree on every build/retry.
         if minimal_work.exists():
             shutil.rmtree(minimal_work)
-        run([INITRAMFS_BUILDER, '--work', minimal_work, '--partuuid', data['identity']['partuuid'],
-             '--mapper', data['identity']['mapper'], '--keymap', data['identity']['keymap']])
+        run(minimal_command)
     else:
         # --no-ramdisk-modules still creates modules.builtin metadata via make.
         command = ['genkernel', f'--kerneldir={data["sources"]}', f'--kernel-outputdir={output}', f'--kernel-config={output / ".config"}',
