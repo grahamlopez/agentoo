@@ -4,6 +4,8 @@ An opinionated Gentoo distribution. See the
 [project structure and configuration philosophy](usr/local/share/agentoo/docs/README.md)
 and [development board](usr/local/share/agentoo/kanban/README.md).
 
+For a new host configuration, use the [target host configuration checklist](usr/local/share/agentoo/docs/host-onboarding.md).
+
 Use `agentoo --help` for the unified CLI: Git, checkpoints, managed permissions,
 secrets, cloud storage client startup, display and external monitor controls, screenshots, desktop wallpaper, window transparency
 and blur, [desktop appearance](usr/local/share/agentoo/docs/desktop.md#desktop-appearance),

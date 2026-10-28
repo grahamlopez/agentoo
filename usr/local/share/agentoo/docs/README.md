@@ -71,6 +71,7 @@ than host identities. Avoid giving Git and ebuilds competing ownership of a file
 
 ## Guides and verification
 
+- [Target host configuration checklist](host-onboarding.md)
 - [GUI installation and session setup](gui-base.md)
 - [Audio setup and diagnostics](audio.md)
 - [Cloud storage installation and setup](cloud-storage.md)
@@ -118,7 +119,7 @@ it does not infer it from the hostname or installation machine. It writes the
 untracked local file `/etc/agentoo/target-host`, containing `GENTOO_TARGET_HOST="qemu"`,
 for example. Portage's `make.conf` sources the common fragment, this selector, then
 `90-${GENTOO_TARGET_HOST}`. Supported selectors currently include `generic`, `qemu`,
-`thinktop`, and `startop`. All their fragments remain visible on every host.
+`thinktop`, `startop`, and `flattop`. All their fragments remain visible on every host.
 
 See [configuration details](../../../../../etc/agentoo/README.md) and the
 [development board](../kanban/README.md), and

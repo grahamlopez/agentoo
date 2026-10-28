@@ -44,6 +44,8 @@ identity supply boot identifiers; UUIDs are not tracked host policy. See the
 
 ## Flattop hardware baseline
 
+For new host configuration support, use the [target host configuration checklist](../../usr/local/share/agentoo/docs/host-onboarding.md).
+
 Flattop is a Framework Laptop (13th Gen Intel Core), board FRANMCCP06 A6,
 with an Intel Core i7-1360P (12 cores, 16 logical CPUs), Intel Raptor Lake-P
 integrated graphics, AX211 Wi-Fi, Intel USB Bluetooth, and WD NVMe storage.
