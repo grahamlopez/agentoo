@@ -24,6 +24,33 @@ The Gentoo repository must also be configured because this overlay inherits it.
 Check that Portage recognizes the overlay with `portageq get_repo_path / agentoo`;
 it should print `/usr/local/share/agentoo/portage`.
 
+## Gentoo zsh completion fix
+
+Agentoo supplies a version-independent user patch at
+`/etc/portage/patches/app-shells/gentoo-zsh-completions/emerge-profile-matching.patch`.
+Portage applies it during `src_prepare` using Gentoo's normal recipe; no overlay
+ebuild or additional testing keyword is needed. The upstream legacy
+`world`/`system` alternative uses `_values`, whose separator matcher can insert
+`amazon--` when completing `amazo`. The patch uses `_describe` with plain
+matching instead, preserving the profile descriptions and package alternatives.
+
+```sh
+emerge --ask --oneshot --usepkg=n app-shells/gentoo-zsh-completions::gentoo
+```
+
+Rebuild after deploying the patch, even if the package is already installed.
+If the former overlay revision was installed, Portage may propose a downgrade
+to Gentoo's selected version. Open a new shell after rebuilding; completion
+functions already loaded in an existing shell retain their old definitions.
+Future source builds apply the patch automatically. A prebuilt binary package
+does not run `src_prepare`; use `--usepkg=n` when rebuilding to apply this patch.
+Review or remove the patch when upstream fixes the issue or changes the source
+enough that it no longer applies. Validation reproduced the
+original behavior in a clean zsh pseudo-terminal, checked prefix completion and
+the second-Tab package list after patching, and staged the patched package with
+Portage using Gentoo's unmodified ebuild and the user-patch directory. The source
+archive matches Gentoo's Manifest.
+
 ## Keyd
 
 `app-misc/keyd` builds the tagged upstream 2.6.0 release and installs the

@@ -1,0 +1,22 @@
+Use plain matching for the legacy world/system alternatives. _values adds a
+separator matcher which changes the unambiguous insertion for package names:
+amazo<Tab> becomes amazon-- for amazon-{dcv-client-bin,ec2-init,ecr-credential-helper}.
+Keep the profile descriptions without adding that matcher.
+
+--- a/src/_portage
++++ b/src/_portage
+@@ -223,4 +223,4 @@
+   profiles=(
+-    'world[All packages in the world profile]'
+-    'system[All packages in the system profile]'
++    'world:All packages in the world profile'
++    'system:All packages in the system profile'
+   )
+@@ -290,6 +290,6 @@
+       _arguments -s \
+         "$common_args[@]" "$install_args[@]" \
+-        "($nopkg_opts)::portage: _values 'profile' \$profiles[@] " \
++        "($nopkg_opts)::portage: _describe -t profiles profile profiles -M '' " \
+         "($nopkg_opts)*:portage:_gentoo_packages available" \
+         "($nopkg_opts)::available sets:_gentoo_packages available_sets" \
+         && return 0
