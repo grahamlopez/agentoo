@@ -205,7 +205,9 @@ The recipe pins Amazon's Ubuntu 24.04 client package, preserving its private GTK
 GLib, GStreamer, codec, and CEF libraries. It requires glibc 2.39 or newer. The
 unused HarfBuzz ICU bridge is omitted because it requires Ubuntu's ICU 74;
 no packaged ELF links to it. The remaining external dependencies are declared,
-including libxml2-compat for the older libxml2 ABI. The launcher uses the private
+including libxml2-compat for the older libxml2 ABI. A private library alias
+`libjbig.so.0` supplies Gentoo's unversioned JBIG-KIT 2.1 library;
+the dependency is pinned to its verified 2.1 subslot. The launcher uses the private
 installation paths, application and GTK schemas are compiled during staging,
 and the private image-loader cache is generated after installation. The host's
 dconf backend is linked into the private GIO module directory.

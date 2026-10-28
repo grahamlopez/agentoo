@@ -35,7 +35,7 @@ RDEPEND="
 	dev-libs/openssl:0/3
 	media-libs/alsa-lib
 	media-libs/gst-plugins-base:1.0[opengl]
-	media-libs/jbigkit
+	media-libs/jbigkit:0/2.1
 	media-libs/lerc
 	media-libs/libglvnd
 	media-libs/libpng:0/16
@@ -95,6 +95,9 @@ src_install() {
 	dosym /opt/amazon-dcv/usr/bin/dcvviewer /usr/bin/dcvviewer
 
 	local private=/opt/amazon-dcv/usr/lib/x86_64-linux-gnu/dcvviewer
+	# Ubuntu names the JBIG-KIT 2.1 ABI libjbig.so.0; Gentoo uses libjbig.so.
+	# Keep this compatibility alias private to DCV and pin the verified ABI.
+	dosym /usr/$(get_libdir)/libjbig.so "${private}/libjbig.so.0"
 	# Supply the host's dconf backend to the vendor's private GIO module directory.
 	dosym /usr/$(get_libdir)/gio/modules/libdconfsettings.so "${private}/gio/modules/libdconfsettings.so"
 	touch "${ED}${private}/gdk-pixbuf-2.0/2.10.0/loaders.cache" || die
