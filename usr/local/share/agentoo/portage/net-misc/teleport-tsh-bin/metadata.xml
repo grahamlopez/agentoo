@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <upstream>
+    <remote-id type="github">gravitational/teleport</remote-id>
+  </upstream>
+  <longdescription>
+    Installs only the official Teleport Community tsh client and its Bash and
+    zsh completions. Cluster authentication, profiles, and upstream managed
+    client updates remain user-managed. No Teleport server is installed.
+  </longdescription>
+</pkgmetadata>

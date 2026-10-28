@@ -29,6 +29,9 @@ net-misc/pcloud-drive-bin::agentoo ~amd64
 # Optional native Amazon DCV remote desktop viewer.
 net-misc/amazon-dcv-client-bin::agentoo ~amd64
 
+# Optional Teleport tsh client; match its major version to the target cluster.
+net-misc/teleport-tsh-bin::agentoo ~amd64 ~arm64
+
 # Other agentoo ebuilds
 app-misc/ttfx ~amd64
 

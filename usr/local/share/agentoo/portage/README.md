@@ -223,6 +223,57 @@ installation, dependency resolution, shell syntax, and desktop-file validation.
 The host lacks several declared runtime dependencies, so GUI startup and remote
 connections remain to be checked after installation.
 
+## Teleport tsh client
+
+`net-misc/teleport-tsh-bin` installs the official Community `tsh` binary as
+`/usr/bin/tsh`, with Bash and zsh completions, on amd64 and arm64. No package
+set selects it. The common keyword configuration accepts its testing keywords.
+
+```sh
+emerge --ask net-misc/teleport-tsh-bin::agentoo
+tsh version --client
+tsh login --proxy=YOUR_PROXY
+```
+
+Match the client major version to the cluster. Teleport supports clients on the
+same major or one major older, and does not support newer-major clients. The
+initial package is 18.11.7; confirm your cluster version before connecting. See
+[Teleport's compatibility guidance](https://goteleport.com/docs/installation/single-machine/linux/).
+
+The official archive uses `Teleport-Community-1.0`, including its organization
+eligibility conditions, rather than the source repository's AGPL license. The
+exact license is registered in the overlay and installed with the client.
+On systems without Agentoo's configuration, accept the appropriate testing
+keyword and license first. Only `tsh`, its license, and completions are installed;
+the archive's server, administrator tools, service files, and installer are omitted.
+Authentication and profiles stay in upstream locations, normally `~/.tsh`.
+
+Portage owns the installed binary. Upstream's managed client updates remain
+enabled according to the cluster and user settings: `tsh` may download and
+re-execute a cluster-selected binary under `~/.tsh/bin`. Set
+`TELEPORT_TOOLS_VERSION=off` to use only the Portage version, including for an
+offline version check. Removing this package preserves user profiles and cached
+managed updates. See [managed updates](https://goteleport.com/docs/upgrading/client-tools-managed-updates/).
+
+Version bumps must check <https://rlz.teleport.sh/versions>, verify both
+versioned CDN archives against their `.sha256` files, inspect each binary's ELF
+dependencies and glibc requirements, and review the included `LICENSE-community`
+against the registered license. Regenerate the Manifest. Generate the completion
+files from the release's native `tsh --completion-script-bash` and
+`tsh --completion-script-zsh` with an isolated `TELEPORT_HOME` and
+`TELEPORT_TOOLS_VERSION=off`. Keep only the named `tsh` blocks: this release also
+prints an empty root-command completion block. For zsh, install the named
+function's body under `#compdef tsh` so it runs on the first autoloaded call.
+Committing the generated scripts
+lets the ebuild stage either architecture without running its binary.
+Keep downloaded archives outside Git.
+
+Initial validation verified both publisher checksums and staged both architectures
+through Portage. The amd64 version command, ELF loading, Bash completion helper,
+and interactive zsh completion were checked with an isolated Teleport home and
+managed updates disabled. Arm64 was staged but not executed. Cluster login,
+SSH sessions, and hardware-key authentication were not exercised.
+
 ## User-managed AI clients
 
 `dev-util/codex-cli-deps` and `dev-util/claude-code-deps` supply prerequisites
