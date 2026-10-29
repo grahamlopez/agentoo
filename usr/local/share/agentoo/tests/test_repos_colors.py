@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import re
 import subprocess
 import tempfile
@@ -25,6 +26,38 @@ def load(name):
 
 repos = load('repos')
 colors = load('term-colors')
+
+
+class FetchAgentTests(unittest.TestCase):
+    def test_scoped_agent_preserves_arguments_and_exit_status(self):
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(repos.sys, 'argv', ['agentoo-repos', '--fetch', '--path=/a b']), \
+             patch.object(repos.subprocess, 'run', return_value=SimpleNamespace(returncode=2)), \
+             patch.object(repos.subprocess, 'call', return_value=1) as call:
+            self.assertEqual(repos.fetch_agent(SimpleNamespace(fetch=True, no_input=False)), 1)
+            command = call.call_args.args[0]
+            self.assertEqual(command[:2], ['ssh-agent', '-a'])
+            self.assertFalse(Path(command[2]).parent.exists())
+            self.assertEqual(command[3:],
+                             [repos.sys.executable, str(BIN / 'agentoo-repos'),
+                              '--fetch', '--path=/a b'])
+            self.assertEqual(call.call_args.kwargs['env'][repos.TEMP_AGENT_ENV], '1')
+            self.assertNotIn(repos.TEMP_AGENT_ENV, os.environ)
+
+    def test_existing_agents_and_noninteractive_invocations_are_untouched(self):
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(repos.subprocess, 'run') as run, \
+             patch.object(repos.subprocess, 'call') as call:
+            for code in (0, 1):
+                run.return_value = SimpleNamespace(returncode=code)
+                self.assertIsNone(repos.fetch_agent(SimpleNamespace(fetch=True, no_input=False)))
+            run.reset_mock()
+            for fetch, no_input in ((False, False), (True, True)):
+                self.assertIsNone(repos.fetch_agent(SimpleNamespace(fetch=fetch, no_input=no_input)))
+            with patch.dict(os.environ, {repos.TEMP_AGENT_ENV: '1'}):
+                self.assertIsNone(repos.fetch_agent(SimpleNamespace(fetch=True, no_input=False)))
+            run.assert_not_called()
+            call.assert_not_called()
 
 
 class ReposTests(unittest.TestCase):
@@ -56,6 +89,9 @@ class ReposTests(unittest.TestCase):
         self.environment = patch.dict(os.environ, env, clear=True)
         self.environment.start()
         self.addCleanup(self.environment.stop)
+        agent = patch.object(repos, 'fetch_agent', return_value=None)
+        self.agent = agent.start()
+        self.addCleanup(agent.stop)
 
     def git(self, path, *args):
         return subprocess.run(['git', '-C', str(path), *args], check=True,
@@ -187,17 +223,21 @@ class ReposTests(unittest.TestCase):
         # A fake transport proves Git honors core.sshCommand without networking
         # or requiring the test runner's SSH keys, agent, or terminal.
         transport = self.root / 'ssh-test'
-        transport.write_text('#!/bin/sh\necho REPOSITORY_SSH_TRANSPORT >&2\nexit 1\n')
+        transport.write_text('#!/bin/sh\necho REPOSITORY_SSH_TRANSPORT >&2\n'
+                             'echo "AGENT_SOCKET=$SSH_AUTH_SOCK" >&2\nexit 1\n')
         transport.chmod(0o755)
         self.git(path, 'config', 'core.sshCommand', str(transport))
         self.git(path, 'config', 'ssh.variant', 'ssh')
         self.git(path, 'remote', 'add', 'origin', 'git@example.invalid:repo')
-        env = {k: v for k, v in os.environ.items() if k != 'GIT_SSH_COMMAND'}
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('GIT_SSH_COMMAND', 'SSH_AUTH_SOCK', repos.TEMP_AGENT_ENV)}
         result = subprocess.run([str(BIN / 'agentoo-repos'), '--path=' + str(path), '--fetch', '--json'],
                                 env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn('REPOSITORY_SSH_TRANSPORT', result.stderr)
         self.assertIn('see fetch diagnostics above', json.loads(result.stdout)['repositories'][0]['fetch_error'])
+        socket = re.search(r'AGENT_SOCKET=(.+)', result.stderr).group(1)
+        self.assertFalse(Path(socket).exists(), 'temporary agent socket survives failed fetch')
 
     def test_table_alignment_and_nonclean_highlights(self):
         path = self.repository()

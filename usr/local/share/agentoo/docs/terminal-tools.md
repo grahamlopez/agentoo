@@ -58,7 +58,15 @@ include untracked entries. Git's optional index-refresh writes are disabled.
 `--fetch` explicitly fetches all remotes before status. Normal fetches use your
 Git/SSH configuration and can prompt for key passphrases, credentials, and host
 confirmation. Fetch diagnostics and prompts go directly to stderr, keeping JSON
-on stdout valid. Interactive fetches have no deadline while authentication may
+on stdout valid. If no SSH agent is reachable, interactive `--fetch` runs under
+a temporary `ssh-agent` that exits when the command finishes, including on fetch
+failure. Agentoo's `AddKeysToAgent 4h` SSH default caches each key on first use,
+so repositories sharing a key require only one passphrase entry per invocation.
+An existing agent is reused and left running. Host-specific SSH settings and
+custom transports still apply; disabling `AddKeysToAgent` disables this caching.
+The temporary agent serves user fetches; root's system fetch still uses root's
+credentials. `--no-input` never starts an agent.
+Interactive fetches have no deadline while authentication may
 be waiting for you. `--no-input` disables Git credential prompts, selects SSH
 batch mode, disconnects stdin, and limits each fetch to 60 seconds. This mode
 uses standard SSH instead of a custom SSH command, and requires existing

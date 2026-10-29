@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unicodedata
 
 sys.dont_write_bytecode = True
@@ -15,6 +16,29 @@ from xdg import xdg_directory
 
 from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE
 PRUNE = {'.git', '.cache', 'node_modules', '.venv', '__pycache__', '.Trash', 'Trash'}
+TEMP_AGENT_ENV = '_AGENTOO_REPOS_TEMP_AGENT'
+
+
+def fetch_agent(args):
+    """Run this invocation under a command-scoped agent when none is reachable."""
+    if not args.fetch or args.no_input or os.environ.get(TEMP_AGENT_ENV):
+        return None
+    try:
+        probe = subprocess.run(['ssh-add', '-l'], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=5)
+        # Exit 1 means an agent is reachable but has no identities yet.
+        if probe.returncode in (0, 1):
+            return None
+        env = {**os.environ, TEMP_AGENT_ENV: '1'}
+        # Command mode makes ssh-agent own the child lifetime and clean itself
+        # up when the child exits, including unsuccessful fetches.
+        with tempfile.TemporaryDirectory(prefix='agentoo-repos-') as directory:
+            return subprocess.call(['ssh-agent', '-a', str(Path(directory) / 'agent.sock'),
+                                    sys.executable, str(Path(__file__).resolve()),
+                                    *sys.argv[1:]], env=env)
+    except (OSError, subprocess.SubprocessError) as error:
+        print(f'agentoo repos: cannot start temporary SSH agent: {error}', file=sys.stderr)
+        return 1
 
 
 def build_parser():
@@ -262,6 +286,9 @@ def main():
         excludes, configured = load_config(config_path, bool(args.config))
     except (OSError, ValueError) as error:
         parser.error(f'{config_path}: {error}')
+    agent_result = fetch_agent(args)
+    if agent_result is not None:
+        return agent_result
     errors = []
     roots = [Path(p) for p in args.path] if args.path is not None else [Path.home()]
     pairs = []
