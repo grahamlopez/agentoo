@@ -17,14 +17,23 @@ document that limitation and choose an explicit configuration ownership model.
 User dotfiles must be real tracked files or local overrides, never deployed
 copies or symlinks. See `/usr/local/share/agentoo/docs/README.md` for the configuration philosophy.
 
-The supported initial host names are `generic`, `qemu`, `thinktop`, `startop`, and `flattop`.
+## Host selection
+
+The installer selects the host configuration explicitly with `--target-host`;
+it does not infer it from the hostname or installation machine. Supported
+selectors are `generic`, `qemu`, `thinktop`, `startop`, and `flattop`.
+
+It writes `/etc/agentoo/target-host`, containing the Portage-compatible assignment
+`GENTOO_TARGET_HOST="qemu"`, for example. This file is intentionally untracked
+local state because its value differs between installations. Portage's
+`/etc/portage/make.conf` sources `/etc/portage/make.conf.d/00-common`, this
+selector, then `/etc/portage/make.conf.d/90-${GENTOO_TARGET_HOST}`. All host
+fragments remain visible on every host.
+
 Startop matches Thinktop's shared-memory build directory and twelve-job build
 limit, while retaining universal CPU flags until its hardware is identified.
 The installer prints
 its EFI registration command with the full device path required by its firmware.
-`target-host` is intentionally local state rather than a tracked file because
-its value differs between installations. It contains the Portage-compatible
-assignment `GENTOO_TARGET_HOST="name"` so `make.conf` can source it directly.
 Hyprland also reads that assignment as data and automatically loads the tracked
 `/etc/xdg/hypr/hosts/name.lua` fragment when present; no separate Hyprland host
 selector is required.

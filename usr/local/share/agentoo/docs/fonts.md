@@ -135,6 +135,12 @@ fallback remains the default; Agentoo does not create global fontconfig policy.
 
 ## Agent diagnostic workflow
 
+Use `agentoo fonts doctor --text 'problem text' --json` for codepoints, Unicode
+normalization, coverage, package ownership, fontconfig policy, and resolved Kitty
+settings. Use `agentoo fonts doctor --text 'problem text'` for a human-readable report.
+Font installation belongs to Portage; browser preview is
+read-only, and saving a Kitty selection reloads all of the user's Kitty instances.
+
 Run diagnostics as the affected desktop user, with the same fontconfig and XDG
 environment as the application. Running through sudo can inspect a different
 user's fonts and configuration. Commands work from tmux/SSH, but a remote host's
