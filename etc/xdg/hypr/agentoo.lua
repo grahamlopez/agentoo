@@ -28,6 +28,8 @@ hl.config({
         key_press_enables_dpms = true,
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
+        -- GUI helpers are intentionally excluded from the minimal desktop.
+        disable_hyprland_guiutils_check = true,
         background_color = "rgb(111111)",
     },
 })
