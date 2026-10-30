@@ -15,9 +15,9 @@ Right now, this is built from the following main components:
 4. A portage overlay with custom ebuilds
 
 **Opinionated** means that only very specific configurations are supported and
-that many preferences are hardcoded. Support is hardware and use-case specific,
-so for a new host configuration, use the [target host configuration
-checklist](usr/local/share/agentoo/docs/host-onboarding.md).
+that many preferences are hardcoded for simplicity over user-choice
+flexibility. Support is hardware and use-case specific, so for a new host
+configuration, use the [target host configuration checklist](usr/local/share/agentoo/docs/host-onboarding.md).
 
 Find [further guides and configuration philosophy](usr/local/share/agentoo/docs/README.md)
 
