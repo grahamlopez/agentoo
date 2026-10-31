@@ -32,8 +32,9 @@ The caller explicitly chooses the host profile; no host is inferred.
 Each row means: install this vault field (or rendered template) at this path.
 `HOME/` expands to the selected user's home. `user` makes the file owned by that
 user; `root` makes it root-owned. All installed files have mode `0600`.
-Parent directories are created or assigned mode `0700` for user destinations
-and `0755` for root destinations. Choose dedicated parent directories.
+Existing directories keep their ownership and permissions. Missing parent
+directories are created with the file's owner and group, mode `0700` for user
+destinations and `0755` for root destinations.
 Destination paths cannot contain whitespace; source references may.
 
 For example, the SSH row retrieves the `private key` field and writes it to

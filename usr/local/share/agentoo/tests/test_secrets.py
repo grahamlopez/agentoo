@@ -8,7 +8,7 @@ import pwd
 import runpy
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 ENTRY = Path(__file__).resolve().parents[3] / 'bin/agentoo-secrets'
 MODULE = runpy.run_path(str(ENTRY))
@@ -51,6 +51,73 @@ if sys.argv[1] == 'item':
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             status = MODULE['main'](self.args + args)
         return status, out.getvalue(), err.getvalue()
+
+    def test_file_replacement_preserves_existing_parent_permissions_and_ownership(self):
+        for uid, gid in ((0, 0), (1000, 1000)):
+            for mode in (0o700, 0o750):
+                with self.subTest(uid=uid, mode=oct(mode)):
+                    parent = self.root / f'existing-{uid}-{mode}'
+                    parent.mkdir(mode=mode)
+                    parent.chmod(mode)
+                    before = parent.stat()
+                    destination = parent / 'secret'
+                    destination.write_bytes(b'old content')
+                    destination.chmod(0o644)
+                    with patch.object(MODULE['os'], 'chown') as chown, \
+                         patch.object(MODULE['os'], 'fchown') as fchown:
+                        MODULE['install_file'](destination, b'new content', uid, gid)
+                    after = parent.stat()
+                    self.assertEqual((after.st_mode, after.st_uid, after.st_gid),
+                                     (before.st_mode, before.st_uid, before.st_gid))
+                    chown.assert_not_called()
+                    self.assertEqual(fchown.call_args.args[1:], (uid, gid))
+                    self.assertEqual(destination.read_bytes(), b'new content')
+                    self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+                    self.assertEqual(list(parent.iterdir()), [destination])
+
+    def test_missing_parent_directories_get_selected_owner_and_modes(self):
+        for uid, gid, mode in ((0, 0, 0o755), (1000, 1000, 0o700)):
+            with self.subTest(uid=uid):
+                first = self.root / f'missing-{uid}'
+                parent = first / 'nested'
+                destination = parent / 'secret'
+                before = self.root.stat()
+                old_umask = os.umask(0o077)
+                try:
+                    with patch.object(MODULE['os'], 'chown') as chown, \
+                         patch.object(MODULE['os'], 'fchown') as fchown:
+                        MODULE['install_file'](destination, b'new content', uid, gid)
+                finally:
+                    os.umask(old_umask)
+                self.assertEqual(chown.call_args_list, [call(first, uid, gid), call(parent, uid, gid)])
+                self.assertEqual(fchown.call_args.args[1:], (uid, gid))
+                for directory in (first, parent):
+                    self.assertEqual(directory.stat().st_mode & 0o777, mode)
+                after = self.root.stat()
+                self.assertEqual((after.st_mode, after.st_uid, after.st_gid),
+                                 (before.st_mode, before.st_uid, before.st_gid))
+                self.assertEqual(destination.read_bytes(), b'new content')
+                self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+
+    def test_failed_replacement_preserves_existing_file_and_parent(self):
+        parent = self.root / 'private'
+        parent.mkdir(mode=0o700)
+        destination = parent / 'secret'
+        destination.write_bytes(b'old content')
+        destination.chmod(0o640)
+        before = parent.stat()
+        with patch.object(MODULE['os'], 'chown') as chown, \
+             patch.object(MODULE['os'], 'fchown'), \
+             patch.object(MODULE['os'], 'replace', side_effect=PermissionError('fixture')):
+            with self.assertRaises(PermissionError):
+                MODULE['install_file'](destination, b'new content', 0, 0)
+        chown.assert_not_called()
+        after = parent.stat()
+        self.assertEqual((after.st_mode, after.st_uid, after.st_gid),
+                         (before.st_mode, before.st_uid, before.st_gid))
+        self.assertEqual(destination.read_bytes(), b'old content')
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o640)
+        self.assertEqual(list(parent.iterdir()), [destination])
 
     def test_dry_run_equals_and_interleaved_options_no_effects(self):
         with patch.object(MODULE['os'], 'execvp', side_effect=AssertionError('sudo')):
