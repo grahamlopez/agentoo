@@ -97,6 +97,7 @@ class CliTest(unittest.TestCase):
         result = self.run_cli('display', 'off')
         self.assertEqual(result.returncode, 1)
         self.assertIn('invalid dispatcher', result.stderr)
+        self.assertNotIn('usage:', result.stderr)
         call.unlink()
         result = self.run_cli('display', 'invalid')
         self.assertEqual(result.returncode, 2)
@@ -166,6 +167,31 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn('invalid choice', result.stderr)
         self.assertNotIn('requesting sudo', result.stderr)
+
+    def test_argument_errors_print_diagnostic_then_contextual_help(self):
+        cases = [
+            (('powre',), (), 'unknown command'),
+            (('power', '--unknown'), ('power',), 'unrecognized arguments'),
+            (('display', 'invalid'), ('display',), 'invalid choice'),
+            (('display', 'backlight'), ('display', 'backlight'), 'required'),
+            (('display', 'backlight', 'sideways'), ('display', 'backlight'), 'invalid choice'),
+            (('display', 'backlight', 'up', '--unknown'), ('display', 'backlight'), 'unrecognized arguments'),
+            (('kernel', 'build', '--label'), ('kernel', 'build'), 'expected one argument'),
+            (('display', 'external', 'brightness', '--bus', 'invalid'),
+             ('display', 'external', 'brightness'), 'nonnegative decimal'),
+            (('screenshot', 'region', '--no-input'), ('screenshot',), 'interactive selection'),
+        ]
+        for arguments, context, diagnostic in cases:
+            with self.subTest(arguments=arguments):
+                result = self.run_cli(*arguments)
+                help_result = self.run_cli(*context, '--help')
+                self.assertEqual(help_result.returncode, 0, help_result.stderr)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stdout, '')
+                prefix, help_text = result.stderr.split('\n\n', 1)
+                self.assertIn(diagnostic, prefix)
+                self.assertEqual(help_text, help_result.stdout)
+                self.assertNotIn('requesting sudo', result.stderr)
 
     def test_completion_never_dispatches_operations(self):
         commands = self.root / 'completion-commands'

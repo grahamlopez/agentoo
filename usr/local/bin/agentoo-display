@@ -30,6 +30,11 @@ def main():
         return display_backlight.run(args, parser)
     if args.action == 'external':
         return display_external.run(args, parser)
+    # Run in the desktop user's Hyprland session. Wait for the triggering key to
+    # be released so keyboard wake doesn't immediately negate a power off, then
+    # blank all outputs through DPMS without locking or suspending. Keyboard
+    # input wakes them because /etc/xdg/hypr/agentoo.lua sets
+    # key_press_enables_dpms = true.
     time.sleep(1)
     result = hyprctl('eval', 'hl.dispatch(hl.dsp.dpms({ action = "off" }))')
     # Lua errors may be reported on stdout even when hyprctl exits successfully.

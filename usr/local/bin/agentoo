@@ -22,14 +22,14 @@ spec.loader.exec_module(completion)
 COMMANDS = completion.COMMANDS
 
 
-def usage():
-    print('Usage: agentoo <command> [options]\n')
-    print('Manage Agentoo system configuration and desktop utilities.\n')
+def usage(file=None):
+    print('Usage: agentoo <command> [options]\n', file=file)
+    print('Manage Agentoo system configuration and desktop utilities.\n', file=file)
     for name, description in COMMANDS.items():
-        print(f'  {name:<12} {description}')
-    print("\nExamples:\n  agentoo power\n  agentoo fonts doctor\n  agentoo git status")
-    print("\nRun 'agentoo help COMMAND [SUBCOMMAND]' for details.")
-    print('Documentation: /usr/local/share/agentoo/docs/')
+        print(f'  {name:<12} {description}', file=file)
+    print("\nExamples:\n  agentoo power\n  agentoo fonts doctor\n  agentoo git status", file=file)
+    print("\nRun 'agentoo help COMMAND [SUBCOMMAND]' for details.", file=file)
+    print('Documentation: /usr/local/share/agentoo/docs/', file=file)
 
 
 def main():
@@ -57,6 +57,8 @@ def main():
         suggestion = difflib.get_close_matches(name, COMMANDS, n=1)
         if suggestion:
             print(f"Did you mean '{suggestion[0]}'?", file=sys.stderr)
+        print(file=sys.stderr)
+        usage(file=sys.stderr)
         raise SystemExit(2)
     executable = BIN / ('agentoo-' + name)
     os.execv(str(executable), [str(executable), *args[1:]])
