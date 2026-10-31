@@ -17,10 +17,10 @@ full functional acceptance have not been recorded here. Do not infer these
 additional checks from boot success alone.
 
 The unsuccessful `docs/kernel-build.md` runbook has been removed. The replacement
-[distribution-config build notes](../../docs/kernel-baseline-build.md) record a
+[historical distribution-config build notes](../../docs/history/kernel-baseline-build.md) record a
 different starting point: rebuild from the distribution kernel configuration,
 use genkernel for the initramfs, and approach removal of modules separately.
-Those notes capture the replacement approach and remain work in progress;
+Those notes capture the replacement experiment and are now archived;
 operator-confirmed boot success does not establish that every documented step
 or all original single-binary requirements have been validated. This closes the defconfig-first
 experiment rather than prescribing it for subsequent work.

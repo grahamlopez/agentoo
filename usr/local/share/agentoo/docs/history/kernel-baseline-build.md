@@ -1,6 +1,20 @@
+# Historical kernel baseline and Secure Boot experiments
+
+Archived: 2026-10-31. These are development notes, **not maintained operating
+instructions**. Use the [current kernel guide](../kernel.md) and
+[command implementation](../../../../bin/agentoo-kernel) for the supported
+workflow and its native operations.
+
+The original notes below retain machine-specific UUIDs, source versions, disk
+paths and working-directory assumptions. Their direct module/ESP writes bypass
+the current host specialization, validation and paired replacement safeguards.
+The Secure Boot experiment is also unvalidated historical material; preserve
+its signing, recovery-image and key-enrollment ideas without treating the example
+commands as a current runbook.
 
 
-# Starting from distribution kernel
+
+## Starting from distribution kernel
 
 
 ## set up user-owned kernel build environment

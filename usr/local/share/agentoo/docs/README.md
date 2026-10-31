@@ -19,7 +19,6 @@ Kernel
 - [Firmware maintenance and diagnostics](firmware.md)
 - [Custom kernel rebuild commands](kernel.md)
 - [Minimal initramfs building and smoke checks](../initramfs/README.md)
-- [Manual kernel baseline build notes](kernel-baseline-build.md)
 
 User facing tools and configuration
 

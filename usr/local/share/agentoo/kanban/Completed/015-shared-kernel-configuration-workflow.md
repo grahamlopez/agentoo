@@ -64,8 +64,9 @@ may record the choices needed by subsequent steps.
 The command, help/completion and focused verification are implemented, and the
 operator accepted the Thinktop build/install/boot path described above. Automated
 checks use disposable tools and files; live acceptance is scoped separately.
-The [manual build notes](../../docs/kernel-baseline-build.md) supply the starting
-procedure; the decisions below supersede conflicting older proposals.
+The [historical manual build notes](../../docs/history/kernel-baseline-build.md)
+record the starting experiment; the [current kernel guide](../../docs/kernel.md)
+and implementation supersede them and conflicting older proposals below.
 
 Builds run locally for the machine that will use the kernel. Cross-compilation
 and producing CPU-portable binaries for other machines are outside this scope.

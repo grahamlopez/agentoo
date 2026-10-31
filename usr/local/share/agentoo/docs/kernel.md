@@ -281,6 +281,17 @@ Creation uses a child-process umask of `022` so a restrictive inherited umask
 does not remove the read permissions requested by efibootmgr. An existing
 root-only variable is not automatically chmodded by registration.
 
+## Secure Boot
+
+The kernel command does not sign images or enroll firmware keys. Signing and
+firmware trust remain separate operator steps; a successful installation does
+not establish that Secure Boot will accept the image.
+
+[Historical baseline and Secure Boot experiments](history/kernel-baseline-build.md#signing-images-for-secure-boot)
+preserve earlier notes on separate signed custom images, a distribution-kernel
+UKI, key backups/enrollment, and testing both boot paths. Those machine-specific
+notes are unvalidated historical evidence, not a maintained signing procedure.
+
 ## Interaction and results
 
 Each stage displays its selected inputs before confirmation. `--yes` accepts its
