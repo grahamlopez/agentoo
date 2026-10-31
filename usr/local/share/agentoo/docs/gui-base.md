@@ -25,12 +25,14 @@ The drop-in is local setup state, excluded from Git, and reruns accept matching
 content but reject conflicting custom configuration. Existing installations
 moving from the formerly tracked drop-in should rerun 002 to establish it locally.
 
-`/etc/zsh/zprofile` launches Hyprland only for
+`/etc/zsh/zlogin` registers a one-time launch before the first prompt, only for
 graham (UID 1000), in an interactive login shell on tty1, with no existing
-Wayland or X display. It calls the launcher without `exec`: when it returns,
+Wayland or X display. The desktop inherits Gentoo's environment, shared `zshrc`
+defaults, and changes from personal `.zprofile`, `.zshrc`, and `.zlogin` files.
+The first-prompt hook removes itself before checking the opt-out and
+calling the launcher without `exec`: when it returns,
 including after a startup failure, a shell remains available. There is no retry
 loop. Logging out of that shell starts a fresh autologin and desktop attempt.
-Personal Zsh startup files still run after the system login profile.
 
 `/etc/systemd/system/getty.target.d/50-recovery-console.conf` requests a separate
 normal password login on tty2. It needs no enablement symlink. After deploying,
@@ -56,7 +58,7 @@ touch ~/.disable-hyprland-autostart
 Remove that file to restore startup. Manual `start-hyprland` remains available.
 If autologin itself fails, tty2 still provides a normal login prompt. To remove
 autologin permanently, remove the tty1 drop-in and run `systemctl daemon-reload`;
-also disable the profile's automatic desktop launch if a manual tty1 login
+also disable the login file's automatic desktop launch if a manual tty1 login
 should remain a console.
 
 For boot recovery, append `systemd.unit=rescue.target` to the kernel command

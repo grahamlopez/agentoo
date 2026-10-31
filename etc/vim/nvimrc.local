@@ -1,0 +1,2 @@
+" Gentoo sysinit.vim loads this; user init.lua/init.vim loads afterward.
+lua dofile("/etc/xdg/nvim/agentoo.lua")

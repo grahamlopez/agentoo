@@ -559,24 +559,11 @@ vim.api.nvim_create_autocmd("BufReadPost", {
 -- }}}
 
 
--- Gentoo ebuilds and eclasses use literal tabs, independently of shell defaults.
+-- Gentoo's sysinit.vim supplies ebuild indentation; keep soft tabs consistent.
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   group = vim.api.nvim_create_augroup("agentoo_gentoo_files", { clear = true }),
   pattern = { "*.ebuild", "*.eclass" },
   callback = function()
-    vim.b.is_bash = 1
-    vim.bo.tabstop = 4
-    vim.bo.shiftwidth = 4
     vim.bo.softtabstop = 0
-    vim.bo.expandtab = false
-  end,
-})
-
--- Preserve crontab inode/ownership when the editor writes its temporary file.
-vim.api.nvim_create_autocmd("FileType", {
-  group = vim.api.nvim_create_augroup("agentoo_crontab", { clear = true }),
-  pattern = "crontab",
-  callback = function()
-    vim.bo.backupcopy = "yes"
   end,
 })

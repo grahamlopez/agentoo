@@ -6,6 +6,11 @@
 __pycache__/
 *.py[cod]
 
+# Portage owns native shell/editor entry files; track only their extensions.
+/etc/zsh/zprofile
+/etc/vim/vimrc
+/etc/vim/sysinit.vim
+
 # ssh: track only the shared config; never keys or machine-local includes
 .ssh/*
 !.ssh/config
