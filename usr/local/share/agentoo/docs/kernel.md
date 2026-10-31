@@ -226,22 +226,42 @@ After confirmation, the command mounts `/boot` through its existing mount
 configuration if necessary, then checks that the destination is on a mounted
 FAT GPT EFI System Partition.
 
-If an image already exists at the destination, installation shows its backup
-path and asks explicitly before backing up and replacing it. Backups have unique
-timestamped names beside the image. Once all confirmations and ESP checks pass,
-install copies the validated staged module tree into `/lib/modules/<release>`
-as root and runs `depmod -a <release>` with umask `022` so generated indexes
-remain readable even with a restrictive caller umask. This includes built-in metadata with
-`CONFIG_MODULES=n`. It does not rerun make or require the original sources.
-Existing files not present in the staged tree, including separately installed
-external modules, are retained; external-module rebuilding remains manual.
-Do not reuse a running module-enabled kernel's release for a different candidate.
+An installation is identified by kernel version plus label. Reusing both
+replaces that installation, including a changed build; a different version or
+label installs alongside it. If the image or module tree already exists, install
+shows its backup path and asks explicitly before replacement. Image and module
+backups use the same timestamp beside their respective live paths.
 
-Only after module installation and depmod succeed does install back up and
-replace the EFI image. The new image is copied to a temporary name on the ESP
-and renamed into place after copying. A module-copy or depmod failure leaves the
-EFI image unchanged, but may leave partially updated system module files; fix
-the error and retry installation.
+Install copies the validated staged module tree into a temporary root under
+`/lib/modules`, then runs native `depmod --basedir <temporary-root> -a <release>`
+with umask `022`. This produces readable indexes before changing the installed
+tree, including built-in metadata with `CONFIG_MODULES=n`. It does not rerun make
+or require the original sources. The image is also copied to a temporary name
+on the ESP before activation.
+
+The complete module tree replaces `/lib/modules/<release>`; files absent from
+the build, including separately installed external modules, are removed from
+the live tree. Rebuild required external modules manually for the new build.
+Install refuses to change the running module-enabled kernel's release, even if
+no modules are currently loaded or its module directory is missing. Boot another
+release and retry the same version and label. Replacing a running module-free
+kernel is allowed because it does not load modules from that tree.
+
+After staging succeeds, install backs up the old image, renames the old module
+tree to its backup, moves the new complete tree into place, and finally renames
+the staged image into place. A command failure or cancellation before image
+activation restores the previous module tree; a failed first installation
+removes its new tree. If rollback also fails, the error identifies the retained
+recovery paths. Once the image rename succeeds, the new pair stays installed.
+Temporary staging files are cleaned up; cleanup errors report their paths.
+
+These renames span two filesystems and are not a power-loss transaction. Power
+loss, SIGKILL, or a system crash during activation can leave an incomplete pair.
+Retain a working recovery kernel. Before booting the affected release after such
+an interruption, inspect both live paths and either retry the complete install
+or restore **both** matching timestamped backups; restoring only the old image
+can leave it with the new build's modules. Successful replacement retains the
+backup pair until you remove it manually.
 
 By default installation prints an `efibootmgr` registration command for manual
 use. To register and put the candidate first immediately:

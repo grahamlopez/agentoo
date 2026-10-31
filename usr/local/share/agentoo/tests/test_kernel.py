@@ -90,7 +90,9 @@ os.execvp(a[0], a)
 import json, os, pathlib, sys
 with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['depmod', *sys.argv[1:]]) + '\\n')
 if os.environ.get('FAIL_DEPMOD'): sys.exit(1)
-(pathlib.Path(os.environ['TEST_MODULES_ROOT']) / sys.argv[-1] / 'modules.builtin.bin').write_text('index')
+a = sys.argv[1:]
+root = pathlib.Path(a[a.index('--basedir') + 1]) / 'lib/modules' if '--basedir' in a else pathlib.Path(os.environ['TEST_MODULES_ROOT'])
+(root / a[-1] / 'modules.builtin.bin').write_text('index')
 ''')
         modules_root = patch.object(kernel, 'MODULES_ROOT', self.root / 'system-modules')
         modules_root.start()
@@ -174,6 +176,20 @@ p.write_text(text)
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
+
+    def prepare_install(self, *, existing=False):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        destination = self.fake_esp()
+        image = destination / 'kernel-6.18.57-test.efi'
+        installed = kernel.MODULES_ROOT / '6.18.57-test'
+        if existing:
+            destination.mkdir(parents=True)
+            image.write_text('working image')
+            installed.mkdir(parents=True)
+            (installed / 'old.ko').write_text('working modules')
+        args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
+        return args, image, installed
 
     def test_sudo_waits_for_readiness_before_authenticating(self):
         tty_in, tty_out = io.StringIO('\n'), io.StringIO()
@@ -510,7 +526,9 @@ sys.exit(2)
         self.assertEqual(os.readlink(installed / 'build'), os.readlink(modules / 'build'))
         calls = self.calls()[start:]
         self.assertFalse(any(call[0] == 'make' for call in calls))
-        self.assertIn(['depmod', '-a', data['release']], calls)
+        depmod = next(call for call in calls if call[0] == 'depmod')
+        self.assertEqual(depmod[-2:], ['-a', data['release']])
+        self.assertIn('--basedir', depmod)
         self.assertLess(next(i for i, call in enumerate(calls) if call[0] == 'depmod'),
                         next(i for i, call in enumerate(calls) if call[0] == 'sudo' and 'mv' in call))
 
@@ -547,19 +565,205 @@ sys.exit(2)
         with self.assertRaisesRegex(RuntimeError, 'missing modules.builtin'):
             kernel.load(self.work, 'test', completed=True)
 
-    def test_depmod_failure_leaves_efi_image_unchanged(self):
+    def test_install_replaces_exact_tree_and_keeps_matching_backups(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+        destination = self.fake_esp()
+        self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        image = destination / 'kernel-6.18.57-test.efi'
+        old_image = image.read_bytes()
+        installed = kernel.MODULES_ROOT / '6.18.57-test'
+        (installed / 'kernel/drivers/removed.ko').write_text('obsolete driver')
+        # A changed build with the same version and label replaces the whole tree.
+        output, _ = kernel.paths(self.work, kernel.load(self.work, 'test'))
+        config = output / '.config'
+        config.write_text(config.read_text().replace('CONFIG_MODULES=y', '# CONFIG_MODULES is not set'))
+        self.invoke('build', '--label', 'test', '--yes')
+        self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        self.assertFalse((installed / 'kernel').exists())
+        image_backup = next(destination.glob('*.bak'))
+        stamp = image_backup.name.removeprefix(image.name).removesuffix('.bak')
+        modules_backup = installed.with_name(installed.name + stamp + '.bak')
+        self.assertEqual(image_backup.read_bytes(), old_image)
+        self.assertEqual((modules_backup / 'kernel/drivers/removed.ko').read_text(), 'obsolete driver')
+        self.assertNotEqual(image.read_bytes(), old_image)
+        # Repeating installation is safe and never resurrects removed drivers.
+        self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        self.assertFalse((installed / 'kernel').exists())
+        self.assertFalse(list(kernel.MODULES_ROOT.glob('.agentoo-*')))
+        self.assertFalse(list(destination.glob('.*.tmp')))
+
+    def test_other_versions_and_labels_install_alongside(self):
+        host_tools = {name: (self.bin / name).read_text() for name in ('findmnt', 'lsblk')}
         self.prepare()
         self.invoke('build', '--label', 'test', '--yes')
         destination = self.fake_esp()
-        destination.mkdir(parents=True)
-        image = destination / 'kernel-6.18.57-test.efi'
-        image.write_text('working image')
-        args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
+        self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        original_image = (destination / 'kernel-6.18.57-test.efi').read_bytes()
+        for version, label in (('6.18.57', 'other'), ('6.18.58', 'test')):
+            with self.subTest(version=version, label=label):
+                if version == '6.18.58':
+                    makefile = self.sources / 'Makefile'
+                    makefile.write_text(makefile.read_text().replace('SUBLEVEL = 57', 'SUBLEVEL = 58'))
+                    make_tool = self.bin / 'make'
+                    make_tool.write_text(make_tool.read_text().replace("'6.18.57' + label", "'6.18.58' + label"))
+                for name, text in host_tools.items():
+                    (self.bin / name).write_text(text)
+                work = self.root / f'{version}-{label}'
+                self.invoke('config', '--label', label, '--build-dir', str(work), '--config', str(self.start),
+                            '--sources', str(self.sources), '--accept-defaults', '--yes')
+                self.invoke('build', '--label', label, '--build-dir', str(work), '--yes')
+                self.fake_esp()
+                self.invoke('install', '--label', label, '--build-dir', str(work), '--dest', str(destination), '--yes')
+                self.assertTrue((destination / f'kernel-{version}-{label}.efi').is_file())
+                self.assertTrue((kernel.MODULES_ROOT / f'{version}-{label}/modules.builtin').is_file())
+                self.assertEqual((destination / 'kernel-6.18.57-test.efi').read_bytes(), original_image)
+        self.assertFalse(list(destination.glob('*.bak')))
+        self.assertFalse(list(kernel.MODULES_ROOT.glob('*.bak')))
+
+    def test_depmod_failure_leaves_existing_image_and_modules_unchanged(self):
+        args, image, installed = self.prepare_install(existing=True)
+        destination = image.parent
         with patch.dict(os.environ, FAIL_DEPMOD='1'), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
             with self.assertRaisesRegex(RuntimeError, 'depmod.*exited 1'):
                 kernel.install(args)
         self.assertEqual(image.read_text(), 'working image')
+        self.assertEqual([p.name for p in installed.iterdir()], ['old.ko'])
         self.assertFalse(list(destination.glob('*.bak')))
+        self.assertFalse(list(kernel.MODULES_ROOT.glob('.agentoo-*')))
+
+    def test_activation_failures_restore_previous_module_tree(self):
+        args, image, installed = self.prepare_install(existing=True)
+        destination = image.parent
+        original_run = kernel.run
+        for operation in ('old modules', 'new modules', 'image'):
+            with self.subTest(operation=operation):
+                failed = False
+                def run(command, **options):
+                    nonlocal failed
+                    if command[0] == 'mv' and not failed:
+                        source, target = map(Path, command[-2:])
+                        selected = ((operation == 'old modules' and source == installed) or
+                                    (operation == 'new modules' and target == installed) or
+                                    (operation == 'image' and target == image))
+                        if selected:
+                            failed = True
+                            raise RuntimeError('injected activation failure')
+                    return original_run(command, **options)
+                with patch.object(kernel, 'run', side_effect=run), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+                    with self.assertRaisesRegex(RuntimeError, 'injected activation failure'):
+                        kernel.install(args)
+                self.assertTrue(failed)
+                self.assertEqual(image.read_text(), 'working image')
+                self.assertEqual([p.name for p in installed.iterdir()], ['old.ko'])
+                self.assertFalse(list(kernel.MODULES_ROOT.glob('.agentoo-*')))
+                self.assertFalse(list(destination.glob('.*.tmp')))
+
+    def test_failed_initial_image_activation_removes_new_module_tree(self):
+        args, image, installed = self.prepare_install()
+        original_run = kernel.run
+        def run(command, **options):
+            if command[0] == 'mv' and Path(command[-1]) == image:
+                raise RuntimeError('injected image failure')
+            return original_run(command, **options)
+        with patch.object(kernel, 'run', side_effect=run), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'injected image failure'):
+                kernel.install(args)
+        self.assertFalse(image.exists())
+        self.assertFalse(installed.exists())
+        self.assertFalse(list(kernel.MODULES_ROOT.glob('.agentoo-*')))
+
+    def test_interruption_after_rename_observes_actual_artifact_state(self):
+        args, image, installed = self.prepare_install(existing=True)
+        destination = image.parent
+        original_run = kernel.run
+        for operation in ('old modules', 'new modules', 'image'):
+            with self.subTest(operation=operation):
+                interrupted = False
+                def run(command, **options):
+                    nonlocal interrupted
+                    result = original_run(command, **options)
+                    if command[0] == 'mv' and not interrupted:
+                        source, target = map(Path, command[-2:])
+                        if ((operation == 'old modules' and source == installed) or
+                                (operation == 'new modules' and target == installed) or
+                                (operation == 'image' and target == image)):
+                            interrupted = True
+                            raise KeyboardInterrupt()
+                    return result
+                with patch.object(kernel, 'run', side_effect=run), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+                    with self.assertRaises(KeyboardInterrupt):
+                        kernel.install(args)
+                if operation == 'image':
+                    self.assertIn('CONFIG_LOCALVERSION="-test"', image.read_text())
+                    self.assertFalse((installed / 'old.ko').exists())
+                    self.assertTrue((installed / 'modules.builtin').is_file())
+                else:
+                    self.assertEqual(image.read_text(), 'working image')
+                    self.assertEqual([p.name for p in installed.iterdir()], ['old.ko'])
+
+    def test_rollback_failure_reports_retained_recovery_paths(self):
+        args, image, installed = self.prepare_install(existing=True)
+        destination = image.parent
+        original_run = kernel.run
+        def run(command, **options):
+            if command[0] == 'mv' and (Path(command[-1]) == image or str(command[-2]).endswith('.bak')):
+                raise RuntimeError('injected rename failure')
+            return original_run(command, **options)
+        with patch.object(kernel, 'run', side_effect=run), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'module rollback failed.*previous modules:.*previous image:'):
+                kernel.install(args)
+        self.assertEqual(image.read_text(), 'working image')
+        backup = next(kernel.MODULES_ROOT.glob('*.bak'))
+        self.assertEqual((backup / 'old.ko').read_text(), 'working modules')
+        self.assertEqual(next(destination.glob('*.bak')).read_text(), 'working image')
+
+    def test_cleanup_failure_preserves_rollback_error_and_recovery_paths(self):
+        args, image, installed = self.prepare_install(existing=True)
+        original_run = kernel.run
+        def run(command, **options):
+            if command[0] == 'mv' and (Path(command[-1]) == image or str(command[-2]).endswith('.bak')):
+                raise RuntimeError('injected rename failure')
+            if command[0] == 'rm' and Path(command[-1]).name.startswith('.agentoo-'):
+                raise RuntimeError('injected cleanup failure')
+            return original_run(command, **options)
+        with patch.object(kernel, 'run', side_effect=run), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'module rollback failed.*previous modules:.*previous image:'):
+                kernel.install(args)
+            errors.seek(0)
+            self.assertIn('Cleanup failed: injected cleanup failure', errors.read())
+        self.assertEqual(next(kernel.MODULES_ROOT.glob('*.bak')).joinpath('old.ko').read_text(), 'working modules')
+        self.assertEqual(image.read_text(), 'working image')
+
+    def test_running_modular_release_is_protected_even_without_installed_tree(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        destination = self.fake_esp()
+        args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
+        original_exists = Path.exists
+        def exists(path):
+            return True if path == Path('/proc/modules') else original_exists(path)
+        with patch.object(kernel.platform, 'release', return_value='6.18.57-test'), \
+                patch.object(kernel.Path, 'exists', exists), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'running module-enabled kernel'):
+                kernel.install(args)
+        self.assertFalse(kernel.MODULES_ROOT.exists())
+        self.assertFalse(destination.exists())
+
+    def test_running_module_free_release_can_be_replaced(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        destination = self.fake_esp()
+        original_exists = Path.exists
+        def exists(path):
+            return False if path == Path('/proc/modules') else original_exists(path)
+        with patch.object(kernel.platform, 'release', return_value='6.18.57-test'), \
+                patch.object(kernel.Path, 'exists', exists):
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        self.assertTrue((destination / 'kernel-6.18.57-test.efi').is_file())
+        self.assertTrue((kernel.MODULES_ROOT / '6.18.57-test/modules.builtin').is_file())
 
     def test_install_backs_up_existing_image_and_prints_registration(self):
         self.prepare()
