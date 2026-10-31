@@ -1,16 +1,6 @@
 -- Requires Neovim 0.11 or newer and Markdown Tree-sitter parsers.
 -- Undo, caches, and history use writable per-user storage.
 -- Agentoo Neovim defaults, adapted from dots/.config/nvim/init.lua.
--- TODO: list {{{
---  better highlighting/colors for listchars
---  fuzzy searching: buffer, file, grep, help pages
---  lsp-autocompletion
---    https://www.reddit.com/r/neovim/comments/1pig7ed/does_anyone_have_working_code_for_builtin/
---    'ins-autocompletion', 'autocomplete', 'complete', 'completeopt'
---  cmdline-autocompletion
---  undo-tree
--- }}}
-
 -- Keybindings, Abbreviations {{{
 -- For modes, see `:help map-modes`
 --     To see mappings:
@@ -84,10 +74,8 @@ vim.cmd("cabbrev vh vert help")
 vim.opt.autoindent = true                             -- Copy indent from current line
 vim.opt.autoread = true
 vim.opt.autowrite = true                              -- Auto-write before running commands
--- vim.opt.backup = false -- No backup files
 vim.opt.breakindent = true                            -- Maintain indent when wrapping
 vim.opt.clipboard:append { "unnamed", "unnamedplus" } -- requires wl-clipboard
--- vim.opt.cmdheight = 0 -- docs say "experimental" - causes hit_enter events e.g. with :Todos
 vim.opt.colorcolumn = ""
 vim.cmd.colorscheme('default')
 vim.opt.cursorline = true
@@ -113,7 +101,6 @@ vim.g.loaded_python3_provider = 0
 vim.g.loaded_ruby_provider = 0 -- Disable some providers for faster startup
 vim.loader.enable()            -- Enable faster Lua module loading
 vim.opt.number = false
--- vim.opt.mouse = "nv" -- Disable mouse for speed
 vim.opt.pumblend = 10  -- Popup menu transparency
 vim.opt.pumheight = 15 -- Maximum items in popup menu
 vim.opt.relativenumber = false
@@ -134,7 +121,6 @@ vim.fn.mkdir(spell_dir, "p")
 vim.opt.spellfile = spell_dir .. "/en.utf-8.add"
 vim.opt.splitbelow = true
 vim.opt.splitright = true
--- vim.opt.swapfile = false
 vim.opt.tabstop = 2                    -- Tab width
 vim.opt.termguicolors = true
 vim.opt.textwidth = 80                 -- Text width for formatting
@@ -151,77 +137,9 @@ vim.opt.winminheight = 5
 vim.opt.winminwidth = 5
 vim.opt.winwidth = 5
 vim.opt.wrap = true -- visually wrap lines when needed
--- vim.opt.writebackup = false -- No backup before overwriting
--- proposed removal: WSL clipboard and Windows theme workarounds do not belong in the initial Gentoo defaults.
--- -- Configure clipboard for different environments {{{
--- if vim.fn.has("wsl") == 1 then
---   vim.g.clipboard = {
---     name = "WslClipboard",
---     copy = {
---       ["+"] = "clip.exe",
---       ["*"] = "clip.exe",
---     },
---     paste = {
---       ["+"] = 'powershell.exe -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
---       ["*"] = 'powershell.exe -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
---     },
---     cache_enabled = 0,
---   }
--- end
--- -- }}}
--- -- WSL2/tmux terminal background detection fix {{{
--- if vim.fn.has("wsl") == 1 then
---   -- Query Windows registry for current theme (light=1, dark=0)
---   local is_dark = vim.fn.system(
---         "powershell.exe -NoProfile -Command '[int](Get-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\" -Name AppsUseLightTheme).AppsUseLightTheme'")
---       :match("0")
---   vim.o.background = is_dark == "0" and "dark" or "light"
--- end
--- -- }}}
--- -- }}}
--- -- }}}
--- 
--- proposed removal: Lua language server and diagnostics are deferred until development tooling is selected.
--- -- LSP, diagnostics, completion {{{
--- -- see lsp-quickstart, lsp-config, lsp-defaults
--- vim.lsp.config['lua_ls'] = {
---   -- Command and arguments to start the server.
---   cmd = { 'lua-language-server' },
---   -- Filetypes to automatically attach to.
---   filetypes = { 'lua' },
---   root_markers = { { '.luarc.json', '.luarc.jsonc' }, '.git' },
---   -- Specific settings to send to the server. The schema is server-defined.
---   -- Example: https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json
---   settings = {
---     Lua = {
---       runtime = {
---         version = 'LuaJIT',
---       },
---       workspace = {
---         library = { vim.env.VIMRUNTIME }, -- Expose Neovim runtime API
---         checkThirdParty = false,          -- Skip third-party checks
---       },
---     }
---   }
--- }
--- vim.lsp.enable({ 'lua_ls' })
--- -- Configure diagnostic display - see diagnostic-quickstart
--- vim.diagnostic.config({
---   virtual_text = {
---     prefix = '●',
---     source = "if_many",
---   },
---   float = {
---     source = true,
---     border = "rounded",
---   },
---   signs = false,
---   underline = true,
---   update_in_insert = false,
---   severity_sort = true,
--- })
--- -- }}}
--- 
+-- }}}
+-- }}}
+
 -- Utilities (lightweight plugins) {{{
 -- fuzzy-file-picker and TODO: live-grep {{{
 local filescache = {} -- Files cache (per-process)
@@ -269,7 +187,6 @@ if vim.fn.executable('rg') == 1 then
 end
 vim.api.nvim_create_user_command("Todos", function()
   vim.cmd.vimgrep({ '/\\(TODO\\|FIXME\\|IDEA\\|TRACK\\):/', '**/*' })
-  --vim.cmd.copen()
   vim.cmd("CopenSmart 25")
 end, { desc = "vimgrep TODO and friends to quickfix", nargs = 0 })
 
@@ -336,8 +253,6 @@ local groups = {
   'FloatBorder',
   'SignColumn',
   'WinSeparator',
-  -- 'Folded',
-  -- 'FoldColumn',
 }
 local function save_backgrounds()
   for _, name in ipairs(groups) do
@@ -404,22 +319,8 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 })
 apply_appearance_defaults()
 -- }}}
--- proposed removal: External Glow viewer is deferred.
--- -- Glow markdown viewer {{{
--- vim.api.nvim_create_user_command("Glow", function()
---   local cols = math.max(vim.api.nvim_win_get_width(0) - 2, 20)
---   local file = vim.fn.expand("%:p")
--- 
---   if file == "" then
---     vim.notify("Glow: current buffer has no file name", vim.log.levels.WARN)
---     return
---   end
--- 
---   vim.cmd("terminal glow -w " .. cols .. " " .. vim.fn.fnameescape(file))
--- end, {})
--- -- }}}
--- -- }}}
--- 
+-- }}}
+
 -- Filetype specifics {{{
 -- Preserve comment indentation after fold markers; use the built-in indenter
 -- for other lines. A native expression keeps v:lnum in its evaluation context.
@@ -439,118 +340,6 @@ vim.api.nvim_create_autocmd("BufReadPost", {
   end,
 })
 -- }}}
-
--- big markdown ideas list {{{
---
---    - https://github.com/iwe-org/iwe
---    - https://github.com/jakewvincent/mkdnflow.nvim
---    - https://github.com/YousefHadder/markdown-plus.nvim
---    - https://github.com/OXY2DEV/markview.nvim?tab=readme-ov-file
---    - previewing:
---      - synced external preview
---    - table of contents: markdown-toc, https://youtu.be/BVyrXsZ_ViA
---      - use TOC to jump/navigate
---    - table input and manipulation
---    - image support
---    - A couple of videos to start ideas:
---      - <https://www.youtube.com/watch?v=DgKI4hZ4EEI>
---      - <https://linkarzu.com/posts/neovim/markdown-setup-2025/>
---    - other ideas:
---      - easier bolding etc. with mini.surround and/or keymaps
---      - better bullet lists: https://github.com/bullets-vim/bullets.vim
---      - https://mambusskruj.github.io/posts/pub-neovim-for-markdown
--- }}}
-
--- big nvim ideas list from previous config {{{
---
---  ## folding list:
---    toggle with <cr>
---    better navigation (zk, zj, [z, ]z)
---    - relative fold labeling for jumping with e.g. '<num>zj'
---      (this is already kinda there with foldcolumn=1 enabled
---    preserve folds across sessions
---    "focused folded" mode where I navigate to a location (via 'n/N' scrolling through
---      search results, pufo preview, from a picker grep, etc.) and that location is
---      unfolded, but everything else remains folded or is refolded as needed
---    lua block comments
---    what can be done about fold debugging e.g. showing fold locations, etc.?
---    remove need to close+re-open file when folds get messed up from just normal editing
---    e.g. subheadings get messed up when removing list items from top-level heading in markdown files
---
---  ## For writing mode
---
---  - some vibecoded authoring ideas:
---        - https://hughhowey.com/neo/
---        - Jason Fried "Write_On": https://www.linkedin.com/posts/jason-fried_for-years-maybe-a-decade-ive-wanted-to-activity-7511470985133379584-KEgk
---  - <https://trebaud.github.io/posts/neovim-for-writers/>
---  - <https://miragiancycle.github.io/OVIWrite/>
---  - <https://bhupesh.me/writing-like-a-pro-with-vale-and-neovim/>
---  - <https://www.reddit.com/r/neovim/comments/z26vhz/how_could_i_use_neovim_for_general_writing_and/>
---  - focus/zen modes tuned for writing
---  - comments, sidebar, etc.
---  - can a proportional font be used?
---  - I started a config at .config/nvim.writing - see hash 2c5f0eb for latest
---
---  ## PKM / logseq reproduction
---
---  - markdown is lingua-franca; no need yet to swim upstream on this one
---  - linking, backlinking, tagging (check out markdown-oxide lsp)
---  - autocompletion creates local file links
---  - how much of logseq to bring forward?
---  - comprehensive mouse support
---  - todo workflow with automatic and hidden timestamps
---  - linkarzu's workflow: <https://youtu.be/59hvZl077hM>
---    - fast link navigation
---  - follow local file links with shortcut
---  - use pickers
---  - show all in quick/loc list
---
---  ## Custom theming
---
---  <https://github.com/rktjmp/lush.nvim>
---  <https://github.com/roobert/palette.nvim>
---  <https://vimcolors.org/>
---  <https://nvimcolors.com/>
---
--- }}}
-
--- Archived info {{{
---
---  Keymap reminders
---    ctrl-w_] --> mostly like :lua vim.lsp.buf.definition() 
---    i_ctrl-u --> useful for unwanted auto-inserted comment
---
---  Minimal setup
---    why I got rid of all my neovim plugins
---      https://yobibyte.github.io/vim.html
---    vanilla neovim setup, no plugins, telescope-like functionality
---      https://www.youtube.com/watch?v=mQ9gmHHe-nI)
---
---  Maintainer dotfiles
---    justinMk
---      https://github.com/justinmk/config/blob/master/.config/nvim/init.lua
---    MariaSolOs
---      https://github.com/MariaSolOs/dotfiles/blob/main/.config/nvim/init.lua
---    echasnovski
---      https://github.com/echasnovski/nvim/blob/master/init.lua
---
---  Improving vimgrep+quickfix workflow
---    https://gist.github.com/romainl/56f0c28ef953ffc157f36cc495947ab3
---
---  TRACK: g-<c-g> to output word/line count in visual mode
---    not an issue with 0.11.4. --clean -u NORC doesn't help
---    WAR: use :1messages to get the text from g-<c-g>
---
---  TRACK: To fix folded code blocks in markdown files completely disappearing,
---  we need to disable the 'conceal_lines' on the fenced_code_block delimiters.
---  According to
---  https://www.reddit.com/r/neovim/comments/1jo6d1n/how_do_i_override_treesitter_conceal_lines/
---  we really only have 2 options at the moment:
---  1. copy share/nvim/runtime/queries/markdown/highlights.scm to
---  .config/nvim/queries/markdown and remove those lines (and without ';; extends')
---  2. remove the lines directly from the runtime highlights.scm file itself
--- }}}
-
 
 -- Gentoo's sysinit.vim supplies ebuild indentation; keep soft tabs consistent.
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {

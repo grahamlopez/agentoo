@@ -302,17 +302,8 @@ zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
   ACYAN=$'\e[0;36m'
   APURPLE=$'\e[0;35m'
 
-# for git repo information. Prefer the copy shipped with git (so it updates
-# when git does), falling back to the vendored one on machines whose packaging
-# omits it. Paths differ by distro; first readable hit wins.
-for _gp in /usr/share/git/git-prompt.sh \
-           /usr/share/git-core/contrib/completion/git-prompt.sh \
-           /usr/share/git/completion/git-prompt.sh \
-           /usr/lib/git-core/git-sh-prompt \
-           /usr/local/share/agentoo/shell/git-prompt.sh; do
-  [[ -r $_gp ]] && source $_gp && break
-done
-unset _gp
+# Gentoo's Git package supplies the prompt helper with its own updates.
+[[ -r /usr/share/git/git-prompt.sh ]] && source /usr/share/git/git-prompt.sh
 setopt prompt_subst
 
 export GIT_PS1_SHOWDIRTYSTATE=true
