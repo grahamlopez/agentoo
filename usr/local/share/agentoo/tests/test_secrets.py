@@ -76,11 +76,20 @@ if sys.argv[1] == 'item':
         self.assertFalse(self.log.exists())
 
     def test_provider_environment_and_diagnostics(self):
-        env = MODULE['proton_environment'](self.root / 'session')
+        work = self.root / 'work'
+        work.mkdir()
+        environments = []
+        def provider(args, env, **kwargs):
+            environments.append(env.copy())
+        with patch.object(MODULE['tempfile'], 'mkdtemp', return_value=str(work)), \
+             patch.dict(MODULE['perform'].__globals__, run_proton=provider), \
+             contextlib.redirect_stderr(io.StringIO()):
+            MODULE['perform'](None, [])
+        env = environments[0]
         self.assertEqual({key for key in env if key.startswith('PROTON_PASS_')},
                          {'PROTON_PASS_SESSION_DIR', 'PROTON_PASS_KEY_PROVIDER', 'PROTON_PASS_NO_UPDATE_CHECK'})
         self.assertEqual(env['PROTON_PASS_KEY_PROVIDER'], 'fs')
-        self.assertEqual(env['PROTON_PASS_SESSION_DIR'], str(self.root / 'session'))
+        self.assertEqual(env['PROTON_PASS_SESSION_DIR'], str(work / 'session'))
         with patch.dict(env, FAKE_FAIL='1'):
             with self.assertRaisesRegex(ValueError, 'Proton Pass item failed') as result:
                 MODULE['run_proton'](['item', 'view', 'pass://fake'], env)
@@ -129,7 +138,7 @@ if sys.argv[1] == 'item':
                     status, out, _ = self.main(['ssh', '--yes'])
                 self.assertEqual(status, 130 if cancelled else 0)
                 self.assertEqual(out, '')
-                temporary.assert_called_once_with(prefix='agentoo-secrets.', dir='/run')
+                temporary.assert_called_once_with(None, 'agentoo-secrets.', '/run')
                 self.assertEqual([call[0] for call in calls],
                                  [['login', '--interactive'], ['item', 'view', 'pass://vault/ssh/private key'], ['logout']])
                 self.assertEqual(calls[0][1]['PROTON_PASS_SESSION_DIR'], str(work / 'session'))
@@ -140,6 +149,22 @@ if sys.argv[1] == 'item':
                 if writes:
                     self.assertEqual(writes[0], (str(self.destination), b'fake secret bytes',
                                                 pwd.getpwnam(self.user).pw_uid, pwd.getpwnam(self.user).pw_gid))
+
+    def test_failed_logout_still_removes_the_local_session(self):
+        work = self.root / 'work'
+        work.mkdir()
+        (work / 'session').mkdir()
+        (work / 'session/token').write_text('fake token')
+        def provider(args, env, **kwargs):
+            if args == ['logout']:
+                raise ValueError('logout failed')
+        errors = io.StringIO()
+        with patch.object(MODULE['tempfile'], 'mkdtemp', return_value=str(work)), \
+             patch.dict(MODULE['perform'].__globals__, run_proton=provider), \
+             contextlib.redirect_stderr(errors):
+            MODULE['perform'](None, [])
+        self.assertFalse(work.exists())
+        self.assertIn('temporary Proton logout failed', errors.getvalue())
 
     def test_home_and_github_configuration_preserved(self):
         self.profile.write_text('ssh user HOME/.ssh/id_test field pass://vault/ssh/private key\n')
