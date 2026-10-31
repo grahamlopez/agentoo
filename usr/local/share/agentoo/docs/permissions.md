@@ -57,7 +57,10 @@ exist with the expected type; missing paths fail validation. Removed inherited
 files and their otherwise unused parent directories drop out automatically once
 removed from Git's index. Update or remove stale exact rules when deleting or
 moving their paths. The Git index is authoritative, including staged additions,
-moves, and removals; unstaged deletions of tracked files remain errors.
+moves, and removals; unstaged deletions of tracked files remain errors. Files marked skip-worktree
+by Git's sparse checkout still require policy coverage, but are excluded from
+permission checks and repairs, including exact `file` rules. Explicit tree roots
+and `dir` rules remain required.
 
 On managed systems the tool uses `/var/lib/agentoo/repository.git` with the
 target root as its work tree. In a development checkout or temporary test

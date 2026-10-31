@@ -99,8 +99,9 @@ def tracked_files(root):
         command = ["git", "-C", str(root)]
     else:
         raise ValueError("tracked permission rules require the agentoo Git repository")
-    result = subprocess.run(command + ["ls-files", "-z"], check=True, stdout=subprocess.PIPE)
-    paths = set(os.fsdecode(result.stdout).split("\0")) - {""}
+    result = subprocess.run(command + ["ls-files", "-t", "-z"], check=True, stdout=subprocess.PIPE)
+    paths = {record[2:]: record.startswith("S ")
+             for record in os.fsdecode(result.stdout).split("\0") if record}
     for path in paths:
         validate_relative(path)
     return paths
@@ -109,6 +110,8 @@ def tracked_files(root):
 def managed_entries(rules, tracked):
     entries = {}
     for kind, relative in rules:
+        if kind == "file" and tracked.get(relative, False):
+            continue
         if kind != "tree":
             entries[(relative, kind == "dir")] = resolve_rule(rules, relative, kind == "dir")
         else:
@@ -118,6 +121,8 @@ def managed_entries(rules, tracked):
         expected = resolve_rule(rules, relative)
         if expected is None:
             problems.append(f"no permission policy for tracked file: /{relative}")
+            continue
+        if tracked[relative]:
             continue
         entries[(relative, False)] = expected
         for parent in PurePosixPath(relative).parents:

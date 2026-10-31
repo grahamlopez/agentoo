@@ -1378,6 +1378,9 @@ EOF
 # make private parents readable, so shared system configuration needs 0755 dirs.
 # Existing private directories (notably /root and the FAT-masked ESP) stay private.
 checkout_configuration() {
+  printf '%s\n' '/*' '!/README.md' '!/AGENTS.md' | run_privileged \
+    /bin/bash -c 'umask 022; exec git "$@"' "$PROGRAM-checkout" \
+    --git-dir="$1" --work-tree="$2" sparse-checkout set --no-cone --stdin
   run_privileged /bin/bash -c 'umask 022; exec git "$@"' "$PROGRAM-checkout" \
     --git-dir="$1" --work-tree="$2" checkout --force "$CONFIG_BRANCH"
 }
@@ -1422,6 +1425,7 @@ git --git-dir=/var/lib/agentoo/repository.git config pull.rebase true
 git --git-dir=/var/lib/agentoo/repository.git config remote.origin.fetch +refs/heads/main:refs/remotes/origin/main
 git --git-dir=/var/lib/agentoo/repository.git config branch.main.remote origin
 git --git-dir=/var/lib/agentoo/repository.git config branch.main.merge refs/heads/main
+printf '%s\n' '/*' '!/README.md' '!/AGENTS.md' | git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ sparse-checkout set --no-cone --stdin
 git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ checkout --force main
 printf '%s\n' 'GENTOO_TARGET_HOST="qemu"' >/etc/agentoo/target-host
 

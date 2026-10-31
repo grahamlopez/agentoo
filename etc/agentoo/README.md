@@ -3,7 +3,9 @@
 This repository is designed to be checked out with `/` as its Git work tree on
 every managed host. Files at their normal system paths are therefore both live
 configuration and ordinary tracked files; there is no separate deployment or
-synchronization step.
+synchronization step. The installed repository uses Git's non-cone sparse checkout
+to omit the root `README.md` and `AGENTS.md`; ordinary development clones include
+both files.
 
 Universal policy belongs in native common fragments. Host-specific policy
 belongs in a native fragment named for the host and is selected through

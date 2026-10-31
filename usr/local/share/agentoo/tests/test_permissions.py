@@ -146,6 +146,30 @@ class PermissionsTest(unittest.TestCase):
             f'file share/stale {self.uid} {self.gid} 0700\n'))
         self.assertEqual(self.repair()[0], 1)
 
+    def test_sparse_checkout_excludes_exact_and_inherited_files(self):
+        self.write('README.md')
+        self.write('share/excluded')
+        self.write('share/retained')
+        self.write('etc/agentoo/permissions.conf', self.policy(
+            f'file README.md {self.uid} {self.gid} 0644\n'))
+        self.git('add', '.')
+        self.git('-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                 'commit', '-qm', 'fixture')
+        self.git('sparse-checkout', 'set', '--no-cone',
+                 '/*', '!/README.md', '!/share/excluded')
+        self.assertFalse((self.root / 'README.md').exists())
+        self.assertFalse((self.root / 'share/excluded').exists())
+        entries, problems = self.entries()
+        self.assertFalse(problems)
+        self.assertNotIn(('README.md', False), entries)
+        self.assertNotIn(('share/excluded', False), entries)
+        self.assertEqual(self.repair()[0], 0)
+        self.assertEqual(self.git('status', '--porcelain'), b'')
+        self.git('sparse-checkout', 'disable')
+        self.assertTrue((self.root / 'README.md').exists())
+        self.assertIn(('README.md', False), self.entries()[0])
+        self.assertEqual(self.repair()[0], 0)
+
     def test_installed_repository_discovery(self):
         repo = self.root / 'var/lib/agentoo/repository.git'
         repo.parent.mkdir(parents=True)
