@@ -26,8 +26,10 @@ Code design
   edge cases. Preserve checks that prevent data loss or changes to the wrong target.
 - Prefer a few consistent, composable mechanisms over special cases and new
   concepts. Prefer the simplest coherent solution over the smallest diff.
-- When changing behavior, remove superseded code and configuration rather than
-  adding compatibility layers or fallback paths unless explicitly required.
+- Agentoo is pre-alpha; backward compatibility is not a requirement. Change
+  interfaces directly and remove superseded code, aliases, and configuration.
+  Update in-repository callers, tests, and documentation together; do not add
+  compatibility layers or migration paths unless explicitly requested.
 
 See [configuration philosophy and guides](usr/local/share/agentoo/docs/README.md)
 for project details.

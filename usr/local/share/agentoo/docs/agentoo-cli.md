@@ -159,8 +159,8 @@ Mapped Dell U5226KW controls include `layout [MODE]`, `pip-position next`,
 decodes the mute flag and retains the speaker state.
 See [display control and setup](displays.md#external-monitor-controls-ddcci)
 for dependencies, selectors, and current Dell investigation limits.
-The existing `agentoo-backlight` and `agentoo-screenshot` names remain supported.
-Screenshot files go to `~/Downloads/Screenshots`.
+Screenshots use `agentoo screenshot full|region` or the standalone
+`agentoo-screenshot` command. Files go to `~/Downloads/Screenshots`.
 
 ## Verification
 

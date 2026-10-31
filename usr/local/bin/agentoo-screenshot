@@ -52,11 +52,15 @@ def main():
     args = parser.parse_args()
     if args.no_input and args.capture == 'region':
         parser.error('region requires interactive selection; use full without interaction')
+    # Run in the desktop user's Wayland session: grim captures outputs, and
+    # slurp supplies the rectangle for an interactive region capture.
     for tool in ('grim', 'slurp') if args.capture == 'region' else ('grim',):
         if not shutil.which(tool):
             raise RuntimeError(f'Install @gui-desktop for {tool}')
     geometry = None
     if args.capture == 'region':
+        # Select before creating a file. Cancellation or empty geometry must
+        # stop here; proceeding without a region would capture all outputs.
         selected = capture_process(['slurp'], output=True)
         if selected.returncode:
             return status(selected.returncode)
@@ -66,6 +70,8 @@ def main():
     home = os.environ.get('HOME')
     if not home:
         raise RuntimeError('HOME is required')
+    # Create private directories and reserve a unique owner-only file, avoiding
+    # collisions even when several screenshots are taken in the same second.
     os.umask(0o077)
     directory = Path(home) / 'Downloads/Screenshots'
     directory.mkdir(parents=True, exist_ok=True)
@@ -73,12 +79,15 @@ def main():
     os.close(descriptor)
     saved = False
     try:
+        # Without -g, grim captures all outputs. Otherwise pass slurp's geometry
+        # as one argument, preserving its spaces and any negative coordinates.
         command = ['grim'] + (['-g', geometry] if geometry is not None else []) + [output]
         result = capture_process(command)
         if result.returncode:
             return status(result.returncode)
         saved = True
     finally:
+        # Failed or interrupted captures must not leave an empty or partial PNG.
         if not saved:
             Path(output).unlink(missing_ok=True)
     print(output)

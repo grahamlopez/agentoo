@@ -17,7 +17,7 @@ class CliTest(unittest.TestCase):
         self.entry = self.root / 'agentoo'
         self.entry.write_text(ENTRY.read_text().replace(
             "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(COMMANDS.parent)!r})"))
-        for name in ('power', 'fonts', 'permissions', 'backlight', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage', 'kernel'):
+        for name in ('power', 'fonts', 'permissions', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage', 'kernel'):
             (self.root / ('agentoo-' + name)).symlink_to(ENTRY.with_name('agentoo-' + name))
         checkpoint = self.root / 'agentoo-checkpoint'
         if checkpoint.is_symlink():

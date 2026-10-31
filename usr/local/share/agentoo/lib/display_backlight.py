@@ -3,7 +3,6 @@
 from argparse import RawDescriptionHelpFormatter
 import os
 from pathlib import Path
-from cli import ArgumentParser
 
 
 def configure_parser(parser):
@@ -14,10 +13,6 @@ def configure_parser(parser):
     parser.add_argument('direction', choices=('up', 'down'))
     parser.add_argument('controller', nargs='?', help='Required when multiple display backlights exist').completion = 'controllers'
     return parser
-
-
-def build_parser():
-    return configure_parser(ArgumentParser(prog='agentoo display backlight'))
 
 
 def run(args, parser):
@@ -41,8 +36,3 @@ def run(args, parser):
     # Pass that controller to xbacklight for a 5% perceived-brightness adjustment.
     os.execvp('xbacklight', ['xbacklight', '-ctrl', controller, '-perceived',
                            '-inc' if args.direction == 'up' else '-dec', '5'])
-
-
-def main():
-    parser = build_parser()
-    return run(parser.parse_args(), parser)
