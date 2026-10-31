@@ -1,7 +1,8 @@
 # Decide whether pCloud should manage only service-owned processes
 
 Created: 2026-10-30
-Status: Backlog
+Status: Completed
+Completed: 2026-10-31
 
 Investigation, not an established obsolete-code removal. In
 `usr/local/bin/agentoo-cloud-storage`, `stop_unmanaged` maintains a separate
@@ -20,3 +21,11 @@ Complete with an explicit scope decision. If narrowing behavior, update help,
 guides, and tests together; verify managed start/stop, unmanaged-instance
 detection, and the chosen manual quit guidance. If retaining both paths,
 record the continuing requirement without creating a replacement framework.
+
+## Scope decision
+
+The operator confirmed that cloud-storage scope stays as-is: both service-owned
+and manually launched pCloud instances remain supported. Retain unmanaged
+process identification, signalling, and waiting. Updated the implementation
+comment to describe this continuing requirement rather than migration-only
+support. No functionality was removed and no new mechanism was added.

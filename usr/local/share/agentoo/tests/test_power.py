@@ -27,6 +27,26 @@ class PowerTest(unittest.TestCase):
     def test_current_fallback(self):
         self.assertEqual(self.check_values(dict(status='Discharging', current_now=2000000,
             voltage_now=12000000, charge_now=6000000)), (24, 3, None))
+        self.assertEqual(self.check_values(dict(status='Discharging', current_now=2000000,
+            voltage_now=12000000, charge_now=6000000, charge_full=8000000,
+            charge_full_design=10000000)), (24, 3, 80))
+
+    def test_power_and_runtime_use_the_same_current_measurement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            device = Path(directory)
+            for name, value in dict(status='Discharging', current_now=2000000,
+                                    voltage_now=12000000, charge_now=6000000).items():
+                (device / name).write_text(str(value))
+            original_number = values.__globals__['number']
+
+            def changing_measurement(path):
+                value = original_number(path)
+                if path.name == 'current_now':
+                    path.write_text('9000000')
+                return value
+
+            with patch.dict(values.__globals__, number=changing_measurement):
+                self.assertEqual(values(device), (24, 3, None))
 
     def test_charging_has_no_discharge_runtime(self):
         self.assertEqual(self.check_values(dict(status='Charging', power_now=10000000,
@@ -39,17 +59,32 @@ class PowerTest(unittest.TestCase):
 
     def test_brief_format(self):
         with tempfile.TemporaryDirectory() as directory:
-            device = Path(directory)
-            fields = dict(capacity=97, status='Discharging', power_now=4800000,
+            root = Path(directory)
+            device = root / 'sys/class/power_supply/BAT0'
+            device.mkdir(parents=True)
+            fields = dict(type='Battery', capacity=97, status='Discharging', power_now=4800000,
                           energy_now=88480000)
             for name, value in fields.items():
                 (device / name).write_text(str(value))
-            self.assertEqual(module['brief'](device), '97% | 4.8 W | ~18h 26m')
-            (device / 'status').write_text('Charging')
-            self.assertEqual(module['brief'](device), '97% | 4.8 W | charging')
-            for path in device.iterdir():
-                path.unlink()
-            self.assertEqual(module['brief'](device), 'unavailable | unavailable | unavailable')
+            main = module['main']
+            with patch.dict(main.__globals__, Path=lambda path: root / str(path).lstrip('/')), \
+                    patch('sys.argv', ['agentoo-power']):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    main()
+                self.assertEqual(output.getvalue(), '97% | 4.8 W | ~18h 26m\n')
+                (device / 'status').write_text('Charging')
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    main()
+                self.assertEqual(output.getvalue(), '97% | 4.8 W | charging\n')
+                for path in device.iterdir():
+                    if path.name != 'type':
+                        path.unlink()
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    main()
+                self.assertEqual(output.getvalue(), 'unavailable | unavailable | unavailable\n')
 
     def test_json_partial_report_and_units(self):
         with tempfile.TemporaryDirectory() as directory:

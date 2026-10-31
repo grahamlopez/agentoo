@@ -373,17 +373,24 @@ class ReposTests(unittest.TestCase):
 
 
 class ColorsTests(unittest.TestCase):
+    def render(self, width):
+        output = io.StringIO()
+        with patch.object(colors.shutil, 'get_terminal_size', return_value=os.terminal_size((width, 24))), \
+                patch('sys.argv', ['agentoo-term-colors', '--force']), contextlib.redirect_stdout(output):
+            self.assertEqual(colors.main(), 0)
+        return output.getvalue()
+
     def test_hex_labels_match_standard_palette_and_truecolor(self):
         for index, rgb in ((16, (0, 0, 0)), (21, (0, 0, 255)),
                            (231, (255, 255, 255)), (232, (8, 8, 8)), (255, (238, 238, 238))):
             self.assertEqual(colors.indexed_rgb(index), rgb)
         self.assertIsNone(colors.indexed_rgb(1))
-        output = colors.chart(80)
+        output = self.render(80)
         self.assertIn('#0000ff', output)
         self.assertIn('#ff8000 → RGB(255, 128, 0)', output)
 
     def test_all_palette_indices_rgb_endpoints_and_resets(self):
-        output = colors.chart(80)
+        output = self.render(80)
         indices = set(map(int, re.findall(r'\x1b\[0;38;2;(?:0;0;0|255;255;255);48;5;(\d+)m', output)))
         self.assertEqual(indices, set(range(256)))
         for rgb in ('255;0;0', '0;255;0', '0;0;255', '255;255;255', '0;0;0'):
@@ -394,7 +401,7 @@ class ColorsTests(unittest.TestCase):
 
     def test_chart_rows_fit_normal_and_narrow_terminals(self):
         for width in (9, 20, 40, 80):
-            text = re.sub(r'\x1b\[[0-9;]*m', '', colors.chart(width))
+            text = re.sub(r'\x1b\[[0-9;]*m', '', self.render(width))
             for line in text.splitlines():
                 if re.match(r'^\s*\d+(?:/| )', line) or (line and not line.strip()):
                     self.assertLessEqual(len(line), width)
@@ -404,7 +411,7 @@ class ColorsTests(unittest.TestCase):
         self.assertEqual(colors.swatch_foreground(21), '255;255;255')
         self.assertEqual(colors.swatch_foreground(226), '0;0;0')
         self.assertEqual(colors.swatch_foreground(231), '0;0;0')
-        lines = colors.chart(9).splitlines()
+        lines = self.render(9).splitlines()
         slot = '\x1b[0;38;2;255;255;255;48;5;21m'
         row = next(i for i, line in enumerate(lines) if line.startswith(slot))
         plain = lambda line: re.sub(r'\x1b\[[0-9;]*m', '', line)

@@ -96,8 +96,9 @@ def pcloud_mains():
 
 
 def stop_unmanaged():
-    # Migration from bare pcloud/app autostart. pidfds prevent a PID-reuse race;
-    # repeat identity checks after opening each descriptor before signalling.
+    # Native/menu launches remain supported alongside service management.
+    # pidfds prevent a PID-reuse race; repeat identity checks after opening each
+    # descriptor before signalling.
     descriptors = []
     try:
         for pid in pcloud_mains():
