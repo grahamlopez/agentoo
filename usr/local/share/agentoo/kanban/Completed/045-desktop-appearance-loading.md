@@ -19,7 +19,7 @@ JSON, all confirmed adjustments, partial imports, authored defaults, reset,
 conflict checks, and failure recovery. The previous `desktop-lua` branch did not
 demonstrate a simpler replacement; consult that evidence before repeating it.
 Keep the native animation-model question in
-[card 046](../Backlog/046-native-animation-model.md).
+[card 046](046-native-animation-model.md).
 
 Complete when the options and native constraints are recorded and a bounded
 prototype demonstrates fewer concepts and less repeated machinery, or explains
