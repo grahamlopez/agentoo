@@ -1,7 +1,7 @@
 # Exclude local host and boot identity from Git
 
 Created: 2026-10-31
-Status: Backlog
+Status: Completed
 Priority: Medium
 
 The [shared ignore policy](../../../../../../etc/agentoo/gitignore) omits these
@@ -26,3 +26,17 @@ The retired `hyprland-host.lua` exclusion is also relevant to cleanup in
 Complete when disposable Git checks cover the local identity exclusions while
 tracked host fragments remain addable. No live selector or boot identity needs
 to be modified for validation.
+
+## Implementation and validation
+
+Completed 2026-10-31. The shared Git exclusion policy now names the selector,
+local fstab and kernel boot inputs. Native savedconfig patterns exclude only
+linux-firmware inputs and versioned snapshots, in plain or triplet directories.
+Tracked host firmware lists and configuration fragments remain eligible for Git.
+The unused hyprland-host.lua exclusion was removed, and the onboarding inventory
+now includes the distribution kernel's local ESP UUID input.
+
+Disposable native Git checks passed for ten excluded paths and eight addable
+controls, including existing secret exclusions, the tracked QEMU secret profile,
+Hyprland/Kitty/kernel/Portage host fragments, and unrelated savedconfig packages.
+`git diff --check` passed. No live host identity or Git configuration was changed.

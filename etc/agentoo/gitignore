@@ -1,6 +1,4 @@
 # Global excludes (git core.excludesFile).
-# Explicit local Hyprland host selection, independent of the common defaults.
-/etc/agentoo/hyprland-host.lua
 # Also guards the $HOME-as-work-tree dotfile repos (dgit/ggit/agit) against
 # accidentally committing secrets via `add -A`.
 
@@ -23,3 +21,11 @@ __pycache__/
 
 # Created locally by user setup after Graham exists.
 /etc/systemd/system/getty@tty1.service.d/autologin.conf
+
+# Machine-local host selection, storage identity, and native firmware state.
+/etc/agentoo/target-host
+/etc/fstab
+/etc/kernel/cmdline
+/etc/kernel/gentoo-dist-esp.uuid
+/etc/portage/savedconfig/**/sys-kernel/linux-firmware
+/etc/portage/savedconfig/**/sys-kernel/linux-firmware-*

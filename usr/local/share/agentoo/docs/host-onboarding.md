@@ -92,7 +92,8 @@ from another host into Git.
 - [ ] **`/etc/agentoo/target-host`** — installer-written
   `GENTOO_TARGET_HOST="<host>"`; selects Portage, kernel, firmware and desktop
   fragments independently of the hostname.
-- [ ] **`/etc/kernel/cmdline`** and **`/etc/fstab`** — local
+- [ ] **`/etc/kernel/cmdline`**, **`/etc/kernel/gentoo-dist-esp.uuid`** and
+  **`/etc/fstab`** — local
   storage/boot identity. Custom kernel configuration validates the actual layout
   against local boot arguments; tracked host profiles contain no disk UUIDs.
 - [ ] **`/etc/portage/savedconfig/sys-kernel/linux-firmware`** and matching
