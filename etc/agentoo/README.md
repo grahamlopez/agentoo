@@ -180,12 +180,13 @@ Graham login and `sudo -k; sudo -i` before closing the root console.
 `agentoo git br` and `agentoo git --no-pager log -5` work like their Git
 equivalents. `setup-hooks` and `enable-write` are Agentoo helper commands.
 
-Commands run as root; invoking the wrapper as an ordinary user requests sudo
-authorization automatically. Git identity, configuration, and SSH access then
-come from root's context.
+Forwarded Git commands run as the invoking user. Use `sudo agentoo git ...`
+for protected system repository operations, including reads that need root.
+Only `setup-hooks` and `enable-write` request sudo authorization automatically.
+Root invocations use root's Git configuration and SSH access.
 If identity setup was skipped, configure it with
-`agentoo git config --local user.name "Your Name"` and
-`agentoo git config --local user.email "you@example.com"` before committing.
+`sudo agentoo git config --local user.name "Your Name"` and
+`sudo agentoo git config --local user.email "you@example.com"` before committing.
 
 The shared Git configuration trusts `/var/db/repos/gentoo`, matching the entry
 Portage adds for its Git repository backend.

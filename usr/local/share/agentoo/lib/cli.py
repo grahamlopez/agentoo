@@ -10,8 +10,7 @@ progress, warnings, and operational summaries go to stderr. Argument errors
 print the diagnostic followed by contextual help to stderr and exit 2. Document
 stable machine output and exit semantics where useful. Commands supporting --no-input
 must never prompt, including for privileges or authentication. Respect XDG,
-redirection, terminal capabilities, and NO_COLOR where applicable. Prefer
-additive changes and document deliberate exceptions. New surface requires
+redirection, terminal capabilities, and NO_COLOR where applicable. New surface requires
 implementation, help/completion, policy exceptions, and focused verification
 together. Tests cannot discover every undeclared behavior.
 

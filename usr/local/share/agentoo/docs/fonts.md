@@ -205,7 +205,7 @@ The useful JSON fields are:
 
 Optional command failures can appear as an `{"error": "..."}` object instead of
 command output. Missing required fontconfig tools or a fatal error produce a
-nonzero exit status and stderr. Check the exit status before parsing stdout;
+exit status 1 and stderr; malformed arguments exit 2. Check the exit status before parsing stdout;
 do not interpret an unavailable diagnostic as missing glyph coverage.
 
 Distinguish these three evidence levels when reporting a finding:
