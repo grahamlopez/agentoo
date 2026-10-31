@@ -1,5 +1,7 @@
 """Exercise native savedconfig application with disposable files and fake emerge."""
 from contextlib import redirect_stdout
+from importlib.machinery import SourceFileLoader
+import importlib.util
 import gzip
 import io
 import os
@@ -13,6 +15,11 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import kernel_firmware as firmware
+
+ENTRY = Path(__file__).resolve().parents[3] / 'bin/agentoo-kernel'
+spec = importlib.util.spec_from_loader('firmware_cli', SourceFileLoader('firmware_cli', str(ENTRY)))
+cli = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cli)
 
 
 class FirmwareTests(unittest.TestCase):
@@ -101,9 +108,10 @@ class FirmwareTests(unittest.TestCase):
     def test_status_is_read_only_and_reports_policy_precedence_and_embedded_names(self):
         before = {path: path.read_bytes() for path in self.inputs}
         output = io.StringIO()
-        with redirect_stdout(output):
-            firmware.command(SimpleNamespace(firmware_operation=None), run=lambda *a, **k: self.fail('status ran a command'),
-                             confirm=lambda *a: self.fail('status confirmed'), notice=self.messages.append)
+        with redirect_stdout(output), patch.object(cli.sys, 'argv', [str(ENTRY), 'firmware']), \
+                patch.object(cli, 'run', side_effect=AssertionError('status ran a command')), \
+                patch.object(cli, 'confirm', side_effect=AssertionError('status confirmed')):
+            self.assertEqual(cli.main(), 0)
         text = output.getvalue()
         for expected in ('Target host: flattop', 'Configured USE: savedconfig', 'Installed package savedconfig: disabled',
                          str(self.inputs[0]), '[first match]', '0 missing, 1 extra', 'microcode: 0x1234',
@@ -111,6 +119,17 @@ class FirmwareTests(unittest.TestCase):
             self.assertIn(expected, text)
         self.assertEqual({path: path.read_bytes() for path in self.inputs}, before)
         self.assertEqual(self.calls, [])
+
+    def test_cli_apply_runs_the_native_application_procedure(self):
+        with patch.object(cli.sys, 'argv', [str(ENTRY), 'firmware', 'apply', '--yes']), \
+                patch.object(cli, 'run', side_effect=self.run_command), \
+                patch.object(cli, 'confirm', side_effect=self.confirm), \
+                patch.object(cli, 'notice', side_effect=self.messages.append), \
+                patch.object(firmware.shutil, 'which', return_value='/test/tool'):
+            self.assertEqual(cli.main(), 0)
+        self.assertEqual(self.inputs[-1].read_text(), self.list.read_text())
+        self.assertTrue(any(command[0] == 'emerge' and '--pretend' not in command for command, _ in self.calls))
+        self.assertTrue(any('Applied 2 paths' in message for message in self.messages))
 
     def test_precedence_matches_revision_version_target_build_and_native_empty_target(self):
         paths = firmware.candidates(self.package)
@@ -126,8 +145,8 @@ class FirmwareTests(unittest.TestCase):
         lower = firmware.SAVED / 'build-triplet/sys-kernel/linux-firmware'
         lower.parent.mkdir(parents=True)
         lower.write_text('lower.bin\n')
-        _, retired = firmware.plan(firmware.inspect())
-        self.assertNotIn(lower, [item['path'] for item in retired])
+        self.apply()
+        self.assertEqual(lower.read_text(), 'lower.bin\n')
 
     def test_dry_run_never_confirms_mounts_sudos_or_changes_files(self):
         self.args.dry_run = True
@@ -271,7 +290,7 @@ class FirmwareTests(unittest.TestCase):
         state = firmware.inspect()
         state['inputs'][0] = item
         with self.assertRaisesRegex(RuntimeError, 'readable regular files'):
-            firmware.plan(state)
+            firmware.apply(self.args, state, run=self.run_command, confirm=self.confirm, notice=self.messages.append)
 
     def test_triplet_cannot_escape_native_savedconfig_directory(self):
         self.package['ctarget'] = '../outside'

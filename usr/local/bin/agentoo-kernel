@@ -626,7 +626,11 @@ def main():
             parser.error('--initramfs conflicts with --genkernel')
     try:
         if args.operation == 'firmware':
-            kernel_firmware.command(args, run=run, confirm=confirm, notice=notice)
+            state = kernel_firmware.inspect()
+            if args.firmware_operation == 'apply':
+                kernel_firmware.apply(args, state, run=run, confirm=confirm, notice=notice)
+            else:
+                kernel_firmware.show_status(state)
             return 0
         if platform.machine() not in ('x86_64', 'amd64'):
             raise RuntimeError('this workflow currently supports local x86_64 EFI kernels')

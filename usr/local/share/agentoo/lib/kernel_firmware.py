@@ -235,7 +235,7 @@ def show_status(state):
     print('Runtime load diagnostics: journalctl -k -b --no-pager --grep="firmware|microcode"')
 
 
-def plan(state):
+def apply(args, state, *, run, confirm, notice):
     desired, package = state['desired'], state['package']
     if desired['entries'] is None:
         raise RuntimeError(f'{desired["path"]}: {desired["error"] or "no reviewed host list; deploy it first"}')
@@ -255,13 +255,6 @@ def plan(state):
         path = item['path']
         if item['exists'] and (path.is_symlink() or not path.is_file() or item['error']):
             raise RuntimeError(f'{path}: apply supports readable regular files, not symlinks/directories')
-    return selected, overrides
-
-
-def apply(args, state, *, run, confirm, notice):
-    selected, overrides = plan(state)
-    package, desired = state['package'], state['desired']
-    durable = state['durable']['path']
     # Omit *pkgonly entirely: some Portage resolver paths test option presence,
     # even when its parsed value is False. Ignore defaults instead of negating
     # a potentially inherited binary-only option.
@@ -317,11 +310,3 @@ def apply(args, state, *, run, confirm, notice):
         if backup is not None:
             notice(f'Apply interrupted/failed; configuration may already be updated. Backups: {backup}. No automatic rollback was performed.')
         raise
-
-
-def command(args, *, run, confirm, notice):
-    state = inspect()
-    if args.firmware_operation == 'apply':
-        apply(args, state, run=run, confirm=confirm, notice=notice)
-    else:
-        show_status(state)
