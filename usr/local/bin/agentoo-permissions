@@ -112,10 +112,8 @@ def managed_entries(rules, tracked):
     for kind, relative in rules:
         if kind == "file" and tracked.get(relative, False):
             continue
-        if kind != "tree":
-            entries[(relative, kind == "dir")] = resolve_rule(rules, relative, kind == "dir")
-        else:
-            entries[(relative, True)] = resolve_rule(rules, relative, True)
+        directory = kind != "file"
+        entries[(relative, directory)] = resolve_rule(rules, relative, directory)
     problems = []
     for relative in sorted(tracked):
         expected = resolve_rule(rules, relative)
@@ -164,17 +162,13 @@ def main():
         parser.print_help()
         return 0
     args = parser.parse_args()
-    args.fix = args.operation == 'fix'
-    if args.fix and args.json:
+    fix = args.operation == 'fix'
+    if fix and args.json:
         parser.error('--json applies only to check')
-    return operate(parser, args)
-
-
-def operate(parser, args):
     root = Path(args.root).resolve(strict=True)
     if not root.is_dir():
         parser.error("target root must be a directory")
-    if args.fix and os.geteuid() != 0:
+    if fix and os.geteuid() != 0:
         elevate()
     rules = load_policy(root)
     entries, problems = managed_entries(rules, tracked_files(root))
@@ -196,7 +190,7 @@ def operate(parser, args):
                 if not args.json:
                     print(f"MISMATCH /{relative}: {actual[0]}:{actual[1]} {actual[2]:04o}"
                       f" -> {expected[0]}:{expected[1]} {expected[2]:04o}",
-                          file=sys.stderr if args.fix else sys.stdout)
+                          file=sys.stderr if fix else sys.stdout)
         except PermissionError:
             if os.geteuid() != 0:
                 elevate()
@@ -210,7 +204,7 @@ def operate(parser, args):
             print(f"ERROR {problem}", file=sys.stderr)
         print("No permissions changed: resolve policy/path errors first.", file=sys.stderr)
         return 1
-    if args.fix:
+    if fix:
         for relative, directory, (uid, gid, mode), identity in changes:
             fd = open_path(root, relative, directory)
             try:
