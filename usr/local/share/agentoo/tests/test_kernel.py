@@ -152,6 +152,13 @@ p.write_text(text)
         path.write_text('#!/usr/bin/env python3\n' + text)
         path.chmod(0o755)
 
+    def fake_esp(self, *, fstype='vfat', parttype='c12a7328-f81f-11d2-ba4b-00a0c93ec93b'):
+        mount = self.root / 'esp'
+        mount.mkdir(exist_ok=True)
+        self.tool('findmnt', f'print({json.dumps({"filesystems": [{"source": "/dev/test1", "target": str(mount), "fstype": fstype}]})!r})')
+        self.tool('lsblk', f'print({json.dumps({"blockdevices": [{"pkname": "/dev/test", "partn": 1, "partuuid": "uuid", "parttype": parttype}]})!r})')
+        return mount / 'EFI/Gentoo'
+
     def invoke(self, *arguments):
         stdout = io.StringIO()
         with tempfile.TemporaryFile(mode='w+') as stderr:
@@ -202,7 +209,7 @@ p.write_text(text)
         self.assertEqual(data['host'], 'testhost')
         self.assertEqual(values['CONFIG_LOCALVERSION'], '"-test"')
         self.assertEqual(values['CONFIG_IKCONFIG_PROC'], 'y')
-        self.assertEqual(kernel.version(self.sources), ('6.18.57', ''))
+        self.assertIn('EXTRAVERSION = \n', (self.sources / 'Makefile').read_text())
         self.assertTrue(list(self.sources.glob('Makefile.agentoo-*.bak')))
         with self.assertRaisesRegex(RuntimeError, 'empty or absent'):
             kernel.configure(kernel.build_parser().parse_args(['config', '--label', 'test', '--config', str(self.start), '--sources', str(self.sources), '--accept-defaults', '--yes']))
@@ -212,13 +219,14 @@ p.write_text(text)
                   'CONFIG_MODULES': 'n', 'CONFIG_REMOVED': 'n'}
         after = {'CONFIG_CMDLINE': '"root=new ro"', 'CONFIG_EXTRA_FIRMWARE': '"new.bin common.bin"',
                  'CONFIG_MODULES': 'y'}
-        errors = io.StringIO()
-        with redirect_stderr(errors):
-            kernel.show_diff(before, after)
-        self.assertIn('CONFIG_CMDLINE:\n    before: "root=old ro"\n    after:  "root=new ro"', errors.getvalue())
-        self.assertIn('CONFIG_EXTRA_FIRMWARE:\n    before: "old.bin common.bin"\n    after:  "new.bin common.bin"', errors.getvalue())
-        self.assertIn('CONFIG_MODULES: n -> y', errors.getvalue())
-        self.assertIn('CONFIG_REMOVED: n -> <absent>', errors.getvalue())
+        self.start.write_text('\n'.join(f'{key}={value}' for key, value in before.items()) + '\n')
+        with patch.object(kernel, 'check_config', return_value=after):
+            _, errors = self.invoke('config', '--label', 'test', '--config', str(self.start),
+                                    '--sources', str(self.sources), '--accept-defaults', '--yes')
+        self.assertIn('CONFIG_CMDLINE:\n    before: "root=old ro"\n    after:  "root=new ro"', errors)
+        self.assertIn('CONFIG_EXTRA_FIRMWARE:\n    before: "old.bin common.bin"\n    after:  "new.bin common.bin"', errors)
+        self.assertIn('CONFIG_MODULES: n -> y', errors)
+        self.assertIn('CONFIG_REMOVED: n -> <absent>', errors)
 
     def test_build_keeps_initramfs_policy_during_both_resolution_passes(self):
         with self.start.open('a') as stream:
@@ -268,7 +276,7 @@ p.write_text(text)
             kernel.kernel_host.CMDLINE.write_text(original.replace(before, after))
             with self.assertRaises(RuntimeError):
                 kernel.kernel_host.resolve_identity(kernel.run)
-        self.assertEqual(kernel.version(self.sources), ('6.18.57', '-gentoo'))
+        self.assertIn('EXTRAVERSION = -gentoo\n', (self.sources / 'Makefile').read_text())
         self.assertFalse(self.work.exists())
 
     def test_profile_overrides_are_frozen_and_enforced_during_build(self):
@@ -494,10 +502,8 @@ sys.exit(2)
         import shutil
         shutil.rmtree(self.sources)
         start = len(self.calls())
-        destination = self.root / 'esp/EFI/Gentoo'
-        device = dict(pkname='/dev/test', partn=1, partuuid='test')
-        with patch.object(kernel, 'esp_details', return_value=(device, 'loader')):
-            self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        destination = self.fake_esp()
+        self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
         installed = kernel.MODULES_ROOT / data['release']
         self.assertEqual((installed / 'kernel/drivers/example.ko').read_text(), 'compiled module')
         self.assertEqual((installed / 'modules.builtin').read_bytes(), (modules / 'modules.builtin').read_bytes())
@@ -520,10 +526,8 @@ sys.exit(2)
                 if not path.is_symlink():
                     self.assertEqual(path.stat().st_mode & 0o777,
                                      0o755 if path.is_dir() else 0o644, str(path))
-            destination = self.root / 'esp/EFI/Gentoo'
-            device = dict(pkname='/dev/test', partn=1, partuuid='test')
-            with patch.object(kernel, 'esp_details', return_value=(device, 'loader')):
-                self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+            destination = self.fake_esp()
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
             installed = kernel.MODULES_ROOT / data['release']
             for name in ('modules.builtin', 'modules.builtin.modinfo', 'modules.builtin.bin',
                          'kernel/drivers/example.ko'):
@@ -546,14 +550,12 @@ sys.exit(2)
     def test_depmod_failure_leaves_efi_image_unchanged(self):
         self.prepare()
         self.invoke('build', '--label', 'test', '--yes')
-        destination = self.root / 'esp/EFI/Gentoo'
+        destination = self.fake_esp()
         destination.mkdir(parents=True)
         image = destination / 'kernel-6.18.57-test.efi'
         image.write_text('working image')
         args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
-        device = dict(pkname='/dev/test', partn=1, partuuid='test')
-        with patch.object(kernel, 'esp_details', return_value=(device, 'loader')), \
-                patch.dict(os.environ, FAIL_DEPMOD='1'), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+        with patch.dict(os.environ, FAIL_DEPMOD='1'), tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
             with self.assertRaisesRegex(RuntimeError, 'depmod.*exited 1'):
                 kernel.install(args)
         self.assertEqual(image.read_text(), 'working image')
@@ -562,13 +564,11 @@ sys.exit(2)
     def test_install_backs_up_existing_image_and_prints_registration(self):
         self.prepare()
         self.invoke('build', '--label', 'test', '--yes')
-        destination = self.root / 'esp/EFI/Gentoo'
+        destination = self.fake_esp()
         destination.mkdir(parents=True)
         image = destination / 'kernel-6.18.57-test.efi'
         image.write_text('known previous image')
-        device = dict(pkname='/dev/test', partn=1, partuuid='test')
-        with patch.object(kernel, 'esp_details', return_value=(device, r'\EFI\Gentoo\kernel-6.18.57-test.efi')):
-            stdout, stderr = self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        stdout, stderr = self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
         self.assertEqual(next(destination.glob('*.bak')).read_text(), 'known previous image')
         self.assertIn('CONFIG_LOCALVERSION="-test"', image.read_text())
         self.assertIn('efibootmgr', stdout)
@@ -586,18 +586,47 @@ sys.exit(2)
         with self.assertRaisesRegex(RuntimeError, 'source Makefile changed'):
             kernel.load(self.work, 'test')
 
+    def test_install_rejects_non_efi_storage_before_writing(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        for options, message in (({'fstype': 'btrfs'}, 'expected a mounted FAT'),
+                                 ({'parttype': 'not-esp'}, 'not a GPT EFI')):
+            destination = self.fake_esp(**options)
+            args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
+            with self.subTest(options=options), redirect_stderr(io.StringIO()), self.assertRaisesRegex(RuntimeError, message):
+                kernel.install(args)
+            self.assertFalse(kernel.MODULES_ROOT.exists())
+            self.assertFalse(destination.exists())
+
     def test_firmware_registration_preserves_other_entry_order(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        destination = self.fake_esp()
+        self.tool('efibootmgr', 'raise AssertionError("firmware calls must be intercepted")')
         before = 'BootOrder: 0003,0001\nBoot0001* Windows\nBoot0003* Prior kernel\n'
         after = before.replace('BootOrder: 0003,0001', 'BootOrder: 0004,0003,0001') + 'Boot0004* New kernel\n'
-        with patch.object(kernel, 'run', side_effect=[before, '', after, '', after]) as run, redirect_stdout(io.StringIO()):
-            kernel.register_entry(['efibootmgr', '--create'], dict(partn=1, partuuid='uuid'), r'\EFI\Gentoo\new.efi')
-        self.assertEqual(run.call_args_list[1].args[0], ['efibootmgr', '--create'])
-        self.assertEqual(run.call_args_list[1].kwargs['umask'], 0o022)
-        self.assertEqual(run.call_args_list[-2].args[0], ['efibootmgr', '--bootorder', '0004,0003,0001'])
-        existing = before + 'Boot0004* New kernel\tHD(1,GPT,uuid,0x800,0x200000)/\\EFI\\Gentoo\\new.efi\n'
-        with patch.object(kernel, 'run', side_effect=[existing, '', existing]) as run, redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            kernel.register_entry(['efibootmgr', '--create'], dict(partn=1, partuuid='uuid'), r'\EFI\Gentoo\new.efi')
-        self.assertFalse(any('--create' in call.args[0] for call in run.call_args_list))
+        reports = iter((before, after, after))
+        commands = []
+        original_run = kernel.run
+        def run(command, **options):
+            if command[0] == 'efibootmgr':
+                commands.append((command, options))
+                return next(reports) if '-u' in command else ''
+            return original_run(command, **options)
+        with patch.object(kernel, 'run', side_effect=run):
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--efi-add-entry', '--yes')
+        creation, options = next((command, options) for command, options in commands if '--create' in command)
+        self.assertEqual(options['umask'], 0o022)
+        self.assertIn(['efibootmgr', '--bootorder', '0004,0003,0001'], [command for command, _ in commands])
+        loader = creation[creation.index('--loader') + 1]
+        self.assertEqual(loader, r'\EFI\Gentoo\kernel-6.18.57-test.efi')
+        existing = before + 'Boot0004* New kernel\tHD(1,GPT,uuid,0x800,0x200000)/' + loader + '\n'
+        reports = iter((existing, existing))
+        commands.clear()
+        with patch.object(kernel, 'run', side_effect=run):
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--efi-add-entry', '--yes')
+        self.assertFalse(any('--create' in command for command, _ in commands))
+        self.assertIn(['efibootmgr', '--bootorder', '0004,0003,0001'], [command for command, _ in commands])
 
 
 if __name__ == '__main__':

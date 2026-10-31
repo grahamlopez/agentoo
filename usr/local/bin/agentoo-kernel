@@ -151,20 +151,6 @@ def parse_config(text):
     return values
 
 
-def show_diff(before, after):
-    notice('Changes from starting config:')
-    changes = []
-    for key in sorted(before.keys() | after.keys()):
-        if before.get(key) == after.get(key):
-            continue
-        old, new = before.get(key, '<absent>'), after.get(key, '<absent>')
-        if key in ('CONFIG_CMDLINE', 'CONFIG_EXTRA_FIRMWARE'):
-            changes.append(f'  {key}:\n    before: {old}\n    after:  {new}')
-        else:
-            changes.append(f'  {key}: {old} -> {new}')
-    notice('\n'.join(changes) if changes else '  none')
-
-
 def empty_initramfs(work):
     # Keep INITRAMFS_SOURCE nonempty so Kconfig retains its dependent policy.
     # Kernel's directory input is valid even before a real archive is generated.
@@ -175,16 +161,6 @@ def empty_initramfs(work):
     if any(directory.iterdir()):
         raise RuntimeError(f'{directory}: placeholder must remain empty')
     return directory
-
-
-def version(sources):
-    text = (sources / 'Makefile').read_text()
-    fields = dict(re.findall(r'^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION)[ \t]*=[ \t]*([^\n]*)$', text, re.M))
-    if not all(fields.get(key, '').isdigit() for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL')):
-        raise RuntimeError(f'cannot read kernel version from {sources}/Makefile')
-    extra = fields.get('EXTRAVERSION', '').strip()
-    base = '.'.join(fields[key] for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL'))
-    return base, extra
 
 
 def paths(work, data):
@@ -316,7 +292,12 @@ def configure(args):
     sources = Path(args.sources).expanduser().resolve()
     if not (sources / 'scripts/config').is_file():
         raise RuntimeError(f'{sources}: not a kernel source tree (scripts/config missing)')
-    base, extra = version(sources)
+    text = (sources / 'Makefile').read_text()
+    fields = dict(re.findall(r'^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION)[ \t]*=[ \t]*([^\n]*)$', text, re.M))
+    if not all(fields.get(key, '').isdigit() for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL')):
+        raise RuntimeError(f'cannot read kernel version from {sources}/Makefile')
+    extra = fields.get('EXTRAVERSION', '').strip()
+    base = '.'.join(fields[key] for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL'))
     # Genkernel reads EXTRAVERSION directly from the source Makefile, even when
     # include/config/kernel.release exists. A make-only override is insufficient.
     upstream_extra = re.sub(r'-gentoo.*$', '', extra)
@@ -389,7 +370,18 @@ def configure(args):
     make(work, data, 'olddefconfig' if args.accept_defaults else 'oldconfig')
     values = check_config(work, data)
     validate_inputs(work, data)
-    show_diff(read_config(work / 'config.original'), values)
+    before, after = read_config(work / 'config.original'), values
+    notice('Changes from starting config:')
+    changes = []
+    for key in sorted(before.keys() | after.keys()):
+        if before.get(key) == after.get(key):
+            continue
+        old, new = before.get(key, '<absent>'), after.get(key, '<absent>')
+        if key in ('CONFIG_CMDLINE', 'CONFIG_EXTRA_FIRMWARE'):
+            changes.append(f'  {key}:\n    before: {old}\n    after:  {new}')
+        else:
+            changes.append(f'  {key}: {old} -> {new}')
+    notice('\n'.join(changes) if changes else '  none')
     data.update(configured=True, source_makefile_sha256=digest(sources / 'Makefile'))
     save(work, data)
     notice(f'Configured: {release}')
@@ -491,55 +483,10 @@ def build(args):
     print(image)
 
 
-def esp_details(destination):
-    ancestor = destination
-    while not ancestor.exists():
-        ancestor = ancestor.parent
-    mounts = json.loads(run(['findmnt', '--json', '--output', 'SOURCE,TARGET,FSTYPE', '--target', ancestor], capture=True))['filesystems']
-    mount = mounts[0]
-    if mount['fstype'] not in ('vfat', 'fat', 'msdos'):
-        raise RuntimeError(f'{destination}: expected a mounted FAT EFI System Partition, got {mount["target"]} ({mount["fstype"]})')
-    source = mount['source']
-    device = json.loads(run(['lsblk', '--json', '--paths', '--nodeps', '--output', 'PATH,PKNAME,PARTN,PARTUUID,PARTTYPE', source], capture=True))['blockdevices'][0]
-    if str(device.get('parttype', '')).lower() != 'c12a7328-f81f-11d2-ba4b-00a0c93ec93b':
-        raise RuntimeError(f'{source}: not a GPT EFI System Partition')
-    if not device.get('pkname') or not device.get('partn') or not device.get('partuuid'):
-        raise RuntimeError(f'cannot determine EFI disk/partition identity for {source}')
-    relative = destination.relative_to(Path(mount['target']))
-    loader = '\\' + str(relative).replace('/', '\\')
-    return device, loader
-
-
 def efi_entries(report):
     order = re.search(r'^BootOrder:[ \t]*([^\n]*)$', report, re.M)
     entries = dict(re.findall(r'^Boot([0-9A-Fa-f]{4})\*?\s+(.*)$', report, re.M))
     return (order[1].upper().split(',') if order and order[1].strip() else []), {key.upper(): value for key, value in entries.items()}
-
-
-def register_entry(command, device, loader):
-    before = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
-    order, entries = efi_entries(before)
-    identity = f'HD({device["partn"]},GPT,{device["partuuid"]},'.lower()
-    # efibootmgr versions print either /File(\EFI\...) or /\EFI\....
-    loader_pattern = re.compile(r'(?:File\(' + re.escape(loader) + r'\)|/' + re.escape(loader) + r'(?:\s|$))', re.I)
-    matching = [key for key in [*order, *entries] if key in entries
-                and identity in entries[key].lower()
-                and loader_pattern.search(entries[key])]
-    if matching:
-        entry = matching[0]
-        notice(f'Reusing Boot{entry}')
-    else:
-        # efibootmgr requests 0644; don't let an inherited 0077 umask turn a
-        # new efivarfs entry into a root-only file.
-        run(command, root=True, umask=0o022)
-        after = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
-        _, updated = efi_entries(after)
-        added = updated.keys() - entries.keys()
-        if len(added) != 1:
-            raise RuntimeError('cannot identify the created EFI entry; inspect sudo efibootmgr -u (creation may already have changed BootOrder)')
-        entry = added.pop()
-    run(['efibootmgr', '--bootorder', ','.join([entry, *(item for item in order if item != entry)])], root=True)
-    print(run(['efibootmgr', '-u'], capture=True, root=True))
 
 
 def install(args):
@@ -557,7 +504,22 @@ def install(args):
     confirm('Proceed', args.yes)
     if mount_boot:
         run(['mount', '/boot'], root=True)
-    device, loader = esp_details(destination)
+    # Resolve the mounted ESP before changing installed modules or images.
+    ancestor = destination
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+    mounts = json.loads(run(['findmnt', '--json', '--output', 'SOURCE,TARGET,FSTYPE', '--target', ancestor], capture=True))['filesystems']
+    mount = mounts[0]
+    if mount['fstype'] not in ('vfat', 'fat', 'msdos'):
+        raise RuntimeError(f'{destination}: expected a mounted FAT EFI System Partition, got {mount["target"]} ({mount["fstype"]})')
+    source = mount['source']
+    device = json.loads(run(['lsblk', '--json', '--paths', '--nodeps', '--output', 'PATH,PKNAME,PARTN,PARTUUID,PARTTYPE', source], capture=True))['blockdevices'][0]
+    if str(device.get('parttype', '')).lower() != 'c12a7328-f81f-11d2-ba4b-00a0c93ec93b':
+        raise RuntimeError(f'{source}: not a GPT EFI System Partition')
+    if not device.get('pkname') or not device.get('partn') or not device.get('partuuid'):
+        raise RuntimeError(f'cannot determine EFI disk/partition identity for {source}')
+    relative = destination.relative_to(Path(mount['target']))
+    loader = '\\' + str(relative).replace('/', '\\')
     backup = None
     if destination.exists():
         backup = destination.with_name(destination.name + f'.{time.time_ns()}.bak')
@@ -574,7 +536,29 @@ def install(args):
     command = ['efibootmgr', '--create', '--disk', device['pkname'], '--part', str(device['partn']),
                '--label', f'{data["label"]}-{data["release"].removesuffix("-" + data["label"])}', '--loader', loader]
     if args.efi_add_entry:
-        register_entry(command, device, loader)
+        before = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
+        order, entries = efi_entries(before)
+        identity = f'HD({device["partn"]},GPT,{device["partuuid"]},'.lower()
+        # efibootmgr versions print either /File(\EFI\...) or /\EFI\....
+        loader_pattern = re.compile(r'(?:File\(' + re.escape(loader) + r'\)|/' + re.escape(loader) + r'(?:\s|$))', re.I)
+        matching = [key for key in [*order, *entries] if key in entries
+                    and identity in entries[key].lower()
+                    and loader_pattern.search(entries[key])]
+        if matching:
+            entry = matching[0]
+            notice(f'Reusing Boot{entry}')
+        else:
+            # efibootmgr requests 0644; don't let an inherited 0077 umask turn a
+            # new efivarfs entry into a root-only file.
+            run(command, root=True, umask=0o022)
+            after = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
+            _, updated = efi_entries(after)
+            added = updated.keys() - entries.keys()
+            if len(added) != 1:
+                raise RuntimeError('cannot identify the created EFI entry; inspect sudo efibootmgr -u (creation may already have changed BootOrder)')
+            entry = added.pop()
+        run(['efibootmgr', '--bootorder', ','.join([entry, *(item for item in order if item != entry)])], root=True)
+        print(run(['efibootmgr', '-u'], capture=True, root=True))
     else:
         notice('Register manually (creates the entry and places it first in BootOrder):')
         print(shlex.join(['sudo', *command]))
