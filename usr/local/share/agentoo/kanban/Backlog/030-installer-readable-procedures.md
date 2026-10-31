@@ -29,7 +29,13 @@ The user agreed to begin this bounded installer pilot after context compaction.
 No installer changes have started. Read AGENTS.md and check the current work
 tree before proceeding; it was clean at implementation commit `58b13a8`.
 
-The command review is complete. Commits simplified fonts, secrets, permissions,
+The initial command review pass is complete. A subsequent critical review found
+further non-installer issues, preserved in backlog cards
+[036](036-kernel-installed-module-consistency.md) through
+[044](044-retire-inactive-configuration-and-fallbacks.md). Those findings supersede
+the earlier assessment that no further command work was apparent.
+
+Commits simplified fonts, secrets, permissions,
 kernel procedures, and desktop dependencies; fixed Git's SSH push transition;
 corrected command guidance; and completed cards 031–035. All previously confirmed
 command features remain required. Screenshot implementation remains deliberately
