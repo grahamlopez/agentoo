@@ -28,4 +28,4 @@ Complete when active configuration presents the supported behavior directly,
 without changing retained features. Run relevant native shell/editor/tmux syntax
 or startup checks and confirm the Git prompt still works with packaged support.
 Coordinate ignore-policy edits with
-[card 039](039-ignore-local-host-and-boot-identity.md).
+[card 039](../Completed/039-ignore-local-host-and-boot-identity.md).

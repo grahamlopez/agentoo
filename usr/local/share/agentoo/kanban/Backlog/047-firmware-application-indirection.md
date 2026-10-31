@@ -21,7 +21,7 @@ injection mechanism, or broader module reorganization.
 Preserve status/apply scope, native savedconfig precedence, validation before
 writes, dry-run behavior, confirmation and sudo boundaries, backups, source
 rebuild policy, and installed-result checks. The module/image installation
-defect in [card 036](036-kernel-installed-module-consistency.md) is separate work.
+defect in [card 036](../Completed/036-kernel-installed-module-consistency.md) is separate work.
 
 Complete when the firmware application reads as a more direct procedure with
 superseded wrappers removed. Run the focused disposable firmware tests and

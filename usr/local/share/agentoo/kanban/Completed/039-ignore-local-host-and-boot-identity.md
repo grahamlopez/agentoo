@@ -21,7 +21,7 @@ Add explicit exclusions in the authoritative shared policy. Review the related
 [local-state inventory](../../docs/host-onboarding.md) for the same bounded gap;
 do not replace this with a broad filesystem allowlist or another policy loader.
 The retired `hyprland-host.lua` exclusion is also relevant to cleanup in
-[card 044](044-retire-inactive-configuration-and-fallbacks.md).
+[card 044](../Backlog/044-retire-inactive-configuration-and-fallbacks.md).
 
 Complete when disposable Git checks cover the local identity exclusions while
 tracked host fragments remain addable. No live selector or boot identity needs

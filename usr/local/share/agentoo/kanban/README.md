@@ -13,8 +13,8 @@ or apply them automatically. Tracking a card does not authorize its implementati
 ## Review handoff, 2026-10-31
 
 The user agreed to the coordinated sequence below for non-installer cards
-036–048. Execution has not started; resume after context compaction when the user
-asks to continue. Check AGENTS.md, Git status, and the current cards first.
+036–048. The first batch is integrated; the second batch is in progress.
+Check AGENTS.md, Git status, and the current cards before continuing.
 This sequence supersedes the immediate installer-next plan in card 030.
 
 Use up to three worker agents, with the primary agent reviewing proposals and
@@ -24,14 +24,14 @@ short proposal: preserved requirements, native alternatives, intended changes,
 and verification. Review proposals internally before implementation. Integrate
 completed changes sequentially, with useful commits and evidence in each card.
 
-First parallel batch:
+First parallel batch (completed):
 
-- Worker A: [036, kernel installation consistency](Backlog/036-kernel-installed-module-consistency.md).
-- Worker B: [037, secret destination directories](Backlog/037-secrets-parent-directory-policy.md).
-- Worker C: [039, local identity exclusions](Backlog/039-ignore-local-host-and-boot-identity.md),
-  then [048, derived compiler settings](Backlog/048-derived-portage-compiler-settings.md).
+- Worker A: [036, kernel installation consistency](Completed/036-kernel-installed-module-consistency.md).
+- Worker B: [037, secret destination directories](Completed/037-secrets-parent-directory-policy.md).
+- Worker C: [039, local identity exclusions](Completed/039-ignore-local-host-and-boot-identity.md),
+  then [048, derived compiler settings](Completed/048-derived-portage-compiler-settings.md).
 
-Next parallel batch:
+Second parallel batch:
 
 - Worker A: [047, firmware indirection](Backlog/047-firmware-application-indirection.md),
   then [041, kernel documentation](Backlog/041-kernel-manual-guide-authority.md),
