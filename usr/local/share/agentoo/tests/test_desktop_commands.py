@@ -23,13 +23,12 @@ def load(name):
 class DesktopCommands(unittest.TestCase):
     def test_nested_backlight_preserves_adjustment(self):
         display = load('display')
-        backlight = display.display_backlight
         for direction, option in [('up', '-inc'), ('down', '-dec')]:
             with self.subTest(direction=direction), \
                     patch.object(display.sys, 'argv', ['agentoo-display', 'backlight', direction]), \
-                    patch.object(backlight.Path, 'glob', return_value=[Path('/sys/class/backlight/panel')]), \
-                    patch.object(backlight.Path, 'is_dir', return_value=True), \
-                    patch.object(backlight.os, 'execvp') as execute, \
+                    patch.object(display.Path, 'glob', return_value=[Path('/sys/class/backlight/panel')]), \
+                    patch.object(display.Path, 'is_dir', return_value=True), \
+                    patch.object(display.os, 'execvp') as execute, \
                     patch.object(display, 'hyprctl') as compositor, \
                     patch.object(display.time, 'sleep') as delay:
                 display.main()

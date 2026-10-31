@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Manage display output, laptop backlights, and external monitor controls."""
+from argparse import RawDescriptionHelpFormatter
+import os
 from pathlib import Path
 import sys
 import time
@@ -8,7 +10,6 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
 from desktop.common import hyprctl
-import display_backlight
 import display_external
 
 
@@ -18,7 +19,13 @@ def build_parser():
     sub.add_parser('off', help='Turn off all displays without locking',
                    description='Waits one second for key release, then turns off all displays through DPMS. '
                                'Keyboard input wakes them with Agentoo defaults.')
-    display_backlight.configure_parser(sub.add_parser('backlight', help='Adjust display brightness'))
+    backlight = sub.add_parser('backlight', help='Adjust display brightness',
+        description='Adjust display backlights only; never fall back to keyboard LEDs.',
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog='Changes perceived brightness by 5%; never switches the panel off.\n'
+               'With no display backlight, automatic selection succeeds without action.')
+    backlight.add_argument('direction', choices=('up', 'down'))
+    backlight.add_argument('controller', nargs='?', help='Required when multiple display backlights exist').completion = 'controllers'
     display_external.configure_parser(sub.add_parser('external', help='Inspect and control external monitors through DDC/CI'))
     return parser
 
@@ -27,7 +34,26 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
     if args.action == 'backlight':
-        return display_backlight.run(args, parser)
+        # Select a display controller from sysfs; keyboard LEDs live elsewhere.
+        # Without an explicit controller, no backlight means no action, and several
+        # require a choice rather than adjusting an arbitrary panel.
+        directory = Path('/sys/class/backlight')
+        if args.controller is not None:
+            if not args.controller or '/' in args.controller or args.controller in ('.', '..'):
+                parser.error('invalid backlight controller')
+            if not (directory / args.controller).is_dir():
+                raise RuntimeError(f'No display backlight: {args.controller}')
+            controller = args.controller
+        else:
+            controllers = sorted(path.name for path in directory.glob('*') if path.is_dir())
+            if not controllers:
+                return 0
+            if len(controllers) > 1:
+                raise RuntimeError('Multiple display backlights; select a controller in host bindings')
+            controller = controllers[0]
+        # Pass that controller to xbacklight for a 5% perceived-brightness adjustment.
+        return os.execvp('xbacklight', ['xbacklight', '-ctrl', controller, '-perceived',
+                                      '-inc' if args.direction == 'up' else '-dec', '5'])
     if args.action == 'external':
         return display_external.run(args, parser)
     # Run in the desktop user's Hyprland session. Wait for the triggering key to
