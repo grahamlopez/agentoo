@@ -3,9 +3,9 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 
+from host_selection import SELECTOR, read_host
 from xdg import xdg_directory
 
 # Keep categories aligned with /etc/xdg/hypr/window-classes.lua.
@@ -53,13 +53,14 @@ def window_option(parser, *, child=False):
 
 def authored_hypr_paths():
     paths = []
-    selector = Path('/etc/agentoo/target-host')
-    if selector.exists():
-        selected = re.fullmatch(r'\s*GENTOO_TARGET_HOST\s*=\s*"([\w-]+)"\s*', selector.read_text(), re.ASCII)
-        if selected:
-            host = Path('/etc/xdg/hypr/hosts') / (selected[1] + '.lua')
-            if host.is_file():
-                paths.append(host)
+    try:
+        selected = read_host(SELECTOR)
+    except FileNotFoundError:
+        pass
+    else:
+        host = Path('/etc/xdg/hypr/hosts') / (selected + '.lua')
+        if host.is_file():
+            paths.append(host)
     root = xdg_directory('XDG_CONFIG_HOME', '.config') / 'hypr'
     if root.exists():
         paths.extend(path for path in sorted(root.rglob('*'))

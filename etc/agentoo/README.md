@@ -32,6 +32,13 @@ local state because its value differs between installations. Portage's
 selector, then `/etc/portage/make.conf.d/90-${GENTOO_TARGET_HOST}`. All host
 fragments remain visible on every host.
 
+Use one double-quoted assignment, with no spaces around `=`. Host names start
+with an ASCII letter or digit and contain only letters, digits, `_`, and `-`.
+Python and Lua consumers read this assignment as data; malformed selectors
+are errors. A missing selector leaves desktop defaults in effect. Kernel
+configuration requires the selector or an explicit `--host`; firmware commands
+require the selector.
+
 Startop matches Thinktop's shared-memory build directory and twelve-job build
 limit, while retaining universal CPU flags until its hardware is identified.
 The installer prints

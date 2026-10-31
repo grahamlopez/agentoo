@@ -8,7 +8,8 @@ import re
 import shlex
 import uuid
 
-SELECTOR = Path('/etc/agentoo/target-host')
+from host_selection import HOST_NAME, SELECTOR, read_host
+
 HOSTS = Path('/etc/agentoo/kernel/hosts')
 CMDLINE = Path('/etc/kernel/cmdline')
 KEYMAP = '/usr/share/keymaps/i386/qwerty/us-caps.map.gz'
@@ -17,11 +18,8 @@ SYS_BLOCK = Path('/sys/class/block')
 
 def selected_host(host=None):
     if host is None:
-        match = re.fullmatch(r'\s*GENTOO_TARGET_HOST="([a-zA-Z0-9_-]+)"\s*', SELECTOR.read_text())
-        if not match:
-            raise ValueError(f'{SELECTOR}: expected GENTOO_TARGET_HOST="name"')
-        host = match[1]
-    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*', host):
+        return read_host(SELECTOR)
+    if not re.fullmatch(HOST_NAME, host):
         raise ValueError('invalid host name')
     return host
 

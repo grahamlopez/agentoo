@@ -31,7 +31,7 @@ local file, message, code = io.open(selector, "r")
 if file then
     local contents = file:read("*a")
     file:close()
-    local host = contents:match('^%s*GENTOO_TARGET_HOST%s*=%s*"([%w_-]+)"%s*$')
+    local host = contents:match('^%s*GENTOO_TARGET_HOST="([%w][%w_-]*)"%s*$')
     assert(host, selector .. ': expected GENTOO_TARGET_HOST="name"')
     include_optional("/etc/xdg/hypr/hosts/" .. host .. ".lua")
 elseif code ~= 2 then
