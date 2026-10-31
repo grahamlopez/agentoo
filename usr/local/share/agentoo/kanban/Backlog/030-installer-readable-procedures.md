@@ -32,7 +32,7 @@ tree before proceeding; it was clean at implementation commit `58b13a8`.
 The initial command review pass is complete. A subsequent critical review found
 further non-installer issues, preserved in backlog cards
 [036](../Completed/036-kernel-installed-module-consistency.md) through
-[044](044-retire-inactive-configuration-and-fallbacks.md). Those findings supersede
+[044](../Completed/044-retire-inactive-configuration-and-fallbacks.md). Those findings supersede
 the earlier assessment that no further command work was apparent.
 
 Commits simplified fonts, secrets, permissions,

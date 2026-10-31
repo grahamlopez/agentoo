@@ -55,4 +55,4 @@ ebuild/crontab behavior. Zsh checks cover the paired startup ordering change.
 Disposable Git checks also confirm the three vendor exclusions and that native
 project extensions remain eligible for staging.
 The separate appearance precedence issue remains in
-[card 042](../Backlog/042-neovim-local-override-precedence.md).
+[card 042](042-neovim-local-override-precedence.md).
