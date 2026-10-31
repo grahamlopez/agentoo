@@ -50,20 +50,20 @@ end, { desc = "convert raw url to title markdown link", nargs = 0 })
 -- Enhance 'gf' to follow Markdown link from label/brackets/parentheses
 vim.keymap.set("n", "gf", function()
   local line = vim.api.nvim_get_current_line()
-  local col  = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1‑based
-  -- Find the nearest "(" after any "[" on the line
-  local open_paren = line:find("%b[]%b()", 1) and line:find("%(", col) or nil
-  if not open_paren then
-    -- fallback: just try <cfile> under cursor (e.g. bare paths)
-    local file = vim.fn.expand("<cfile>")
-    if file ~= "" then
-      vim.cmd.edit(file)
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local offset = 1
+  while true do
+    local first, last, label = line:find("(%b[])%b()", offset)
+    if not first then break end
+    if col + 1 >= first and col + 1 <= last then
+      -- The destination starts after the label and opening parenthesis.
+      vim.api.nvim_win_set_cursor(0, { row, first + #label })
+      break
     end
-    return
+    offset = last + 1
   end
-  -- Move cursor to just after "(" and use gf logic there
-  vim.api.nvim_win_set_cursor(0, { vim.api.nvim_win_get_cursor(0)[1], open_paren })
-  vim.cmd.normal({ args = { "gf" }, bang = false })
+  -- Native resolution keeps document-relative paths, counts, and missing-file errors.
+  vim.cmd.normal({ args = { vim.v.count1 .. "gf" }, bang = true })
 end, { buffer = true })
 
 -- Strawman keymapping for markdown list items
