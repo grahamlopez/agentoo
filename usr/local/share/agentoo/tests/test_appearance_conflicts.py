@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from desktop_fixtures import appearance_loader
+
 SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
 HYPR = ROOT / 'etc/xdg/hypr'
@@ -62,7 +64,7 @@ class ActiveRuleTests(unittest.TestCase):
         for name in ('transparency', 'blur'):
             module = self.root / f'{name}.lua'
             source = (HYPR / f'{name}.lua').read_text().replace(
-                f'/usr/local/share/agentoo/lib/desktop/{name}.py', str(SHARE / f'lib/desktop/{name}.py'))
+                '/etc/xdg/hypr/appearance.lua', str(appearance_loader(self.root)))
             for dependency in ('appearance-rules', 'window-classes'):
                 source = source.replace(f'/etc/xdg/hypr/{dependency}.lua', str(HYPR / f'{dependency}.lua'))
             module.write_text(source)

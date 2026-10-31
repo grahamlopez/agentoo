@@ -6,17 +6,13 @@ local context = setmetatable({
         if path == "/etc/xdg/hypr/appearance-rules.lua" then
             return { window_rule = function(rule) rules[#rules + 1] = rule end, check = function() end }
         end
+        if path == "/etc/xdg/hypr/appearance.lua" then
+            return { transparency = "all\tfocused\t5\nkitty\tfocused\t5\nbrowser\tfocused\t0\nother\tfocused\t20\n" }
+        end
         assert(path == "/etc/xdg/hypr/window-classes.lua")
         return dofile("etc/xdg/hypr/window-classes.lua")
     end,
     hl = { window_rule = function(rule) rules[#rules + 1] = rule end },
-    io = { popen = function(command, mode)
-        assert(command:match("lib/desktop/transparency.py rules$") and mode == "r")
-        return {
-            read = function() return "all\tfocused\t5\nkitty\tfocused\t5\nbrowser\tfocused\t0\nother\tfocused\t20\nend\n" end,
-            close = function() return true end,
-        }
-    end },
 }, { __index = _G })
 local chunk = assert(loadfile(source, "t", context))
 if setfenv then setfenv(chunk, context) end

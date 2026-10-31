@@ -1,7 +1,6 @@
 """Personal desktop effects for Hyprland 0.56.2; no operations on import.
 
-One parser supplies help, completion and saved-value validation. The private
-settings entry point emits tab-separated data for effects.lua, never user code.
+One parser supplies help, completion and saved-value validation.
 """
 import argparse
 import json
@@ -9,13 +8,9 @@ import math
 import os
 import re
 import sys
-from pathlib import Path
 
-sys.dont_write_bytecode = True
-if __name__ == '__main__':
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cli import ArgumentParser
-from desktop.common import file_option, hyprctl, read, state_path
+from desktop.common import file_option, hyprctl, read
 
 COMMANDS = ('corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')
 WINDOW_STYLES = ('slide', 'popin', 'gnome', 'gnomed')
@@ -255,22 +250,3 @@ def reload_settings():
     errors = hyprctl('configerrors')
     if errors:
         raise RuntimeError('Hyprland configuration errors: ' + errors)
-
-
-def settings():
-    data = read_state(state_path())
-    lines = []
-    for group, values in data.items():
-        for key, value in values.items():
-            lines.append(f'{group}\t{key}\t{value}')
-    print('\n'.join([*lines, 'end']))
-
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1:] != ['settings']:
-            raise RuntimeError('Private helper: expected settings')
-        settings()
-    except (OSError, RuntimeError) as error:
-        print(f'agentoo desktop: {error}', file=sys.stderr)
-        raise SystemExit(1)

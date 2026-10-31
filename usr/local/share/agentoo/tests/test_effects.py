@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from desktop_fixtures import appearance_loader
+
 SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
 sys.path.insert(0, str(SHARE / 'lib'))
@@ -142,7 +144,7 @@ class EffectsTest(unittest.TestCase):
         self.directory.mkdir()
         module = self.root / 'effects.lua'
         module.write_text((ROOT / 'etc/xdg/hypr/effects.lua').read_text().replace(
-            '/usr/local/share/agentoo/lib/desktop/effects.py', str(SHARE / 'lib/desktop/effects.py')))
+            '/etc/xdg/hypr/appearance.lua', str(appearance_loader(self.root))))
         env = dict(os.environ, XDG_STATE_HOME=str(self.root))
         cases = [({}, ''), ({
             'corners': {'radius': 10, 'power': 4}, 'gaps': {'inner': 3, 'outer': 9},

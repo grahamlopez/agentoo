@@ -1,13 +1,8 @@
 -- Loaded after host/personal settings. JSON remains the only saved authority.
 -- The helper emits group/state/percentage records, never executable Lua.
 local appearance = require("/etc/xdg/hypr/appearance-rules.lua")
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/transparency.py rules", "r"))
-local contents = stream:read("*a")
--- Hyprland's SIGCHLD handler can reap popen's child before pclose, which then
--- reports ECHILD even for a successful helper. Require its completion record.
-stream:close()
-assert(contents:sub(-4) == "end\n", "Cannot load Agentoo transparency state; see session stderr")
-if contents ~= "end\n" then appearance.check("transparency") end
+local contents = require("/etc/xdg/hypr/appearance.lua").transparency
+if contents ~= "" then appearance.check("transparency") end
 
 local families = require("/etc/xdg/hypr/window-classes.lua")
 local classes = { all = "negative:" .. families.kitty, kitty = families.kitty, browser = families.browser, other = families.other }

@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from desktop_fixtures import appearance_loader
+
 SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
 sys.path.insert(0, str(SHARE / 'lib'))
@@ -209,13 +211,82 @@ class DesktopStateTest(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
         self.assertFalse(self.directory.exists())
 
+    def test_config_transport_includes_all_validated_sections(self):
+        data = {'transparency': {'all': {'focused': 5}, 'kitty': {'focused': 20}},
+                'blur': {'kitty': {'unfocused': True}, 'strength': {'size': 3}},
+                'corners': {'radius': 8}, 'animations': {'windows': 'slide'}}
+        self.directory.mkdir()
+        self.path.write_text(json.dumps(data))
+        result = subprocess.run([sys.executable, str(SHARE / 'lib/desktop/state.py'), 'settings'],
+                                text=True, capture_output=True, env=os.environ)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        for record in ('transparency\tall\tfocused\t5', 'transparency\tkitty\tfocused\t20',
+                       'transparency\tbrowser\tfocused\t5', 'transparency\tother\tfocused\t5',
+                       'blur\tkitty\tunfocused\ton', 'blur\tstrength\tsize\t3',
+                       'blur\trevision\t' + blur.revision(data['blur']),
+                       'effects\tcorners\tradius\t8', 'effects\tanimations\twindows\tslide'):
+            self.assertIn(record, lines)
+        self.assertEqual(lines[-1], 'end')
+
+    def test_config_transport_rejects_malformed_state_without_partial_records(self):
+        self.directory.mkdir()
+        for contents in ('{', '{"gaps":{"inner":4},"blur":{"kitty":{"focused":"on"}}}',
+                         '{"transparency":{"all":{"focused":4}},"corners":{"radius":100}}',
+                         '{"unknown":{}}'):
+            self.path.write_text(contents)
+            result = subprocess.run([sys.executable, str(SHARE / 'lib/desktop/state.py'), 'settings'],
+                                    text=True, capture_output=True, env=os.environ)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('agentoo desktop:', result.stderr)
+            self.assertEqual(self.path.read_text(), contents)
+
+    @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
+    def test_native_integrations_share_snapshot_and_next_load_reads_fresh_state(self):
+        self.directory.mkdir()
+        initial = {'transparency': {'all': {'focused': 5}},
+                   'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}},
+                   'corners': {'radius': 8}}
+        changed = {'transparency': {'all': {'focused': 20}}, 'corners': {'radius': 12}}
+        self.path.write_text(json.dumps(initial))
+        appearance_loader(self.root)
+        for name in ('appearance-rules', 'window-classes', 'transparency', 'blur', 'effects'):
+            source = (ROOT / f'etc/xdg/hypr/{name}.lua').read_text()
+            (self.root / f'{name}.lua').write_text(source.replace('/etc/xdg/hypr/', str(self.root) + '/'))
+        config = self.root / 'hyprland.lua'
+        for expected in (initial, changed, {}):
+            if not expected:
+                self.path.unlink()
+            radius = expected.get('corners', {}).get('radius', 6)
+            size = expected.get('blur', {}).get('strength', {}).get('size', 8)
+            engine = str(bool(expected.get('blur', {}).get('kitty', {}).get('focused'))).lower()
+            config.write_text(
+                'hl.config({decoration={rounding=6,blur={enabled=false,size=8,passes=1}}})\n'
+                'local count=0\nlocal popen=io.popen\nio.popen=function(...) count=count+1; return popen(...) end\n'
+                'require(' + json.dumps(str(self.root / 'transparency.lua')) + ')\n'
+                # Changing the saved file mid-load must not split the active snapshot.
+                'local file=assert(io.open(' + json.dumps(str(self.path)) + ',"w"))\n'
+                'file:write(' + json.dumps(json.dumps(changed)) + ')\nfile:close()\n'
+                'require(' + json.dumps(str(self.root / 'blur.lua')) + ')\n'
+                'require(' + json.dumps(str(self.root / 'effects.lua')) + ')\n'
+                'assert(count == 1, "one appearance helper per config load")\n'
+                f'assert(hl.get_config("decoration.rounding") == {radius})\n'
+                f'assert(hl.get_config("decoration.blur.size") == {size})\n'
+                f'assert(hl.get_config("decoration.blur.enabled") == {engine})\n'
+                'assert(agentoo_blur_report():find(' + json.dumps('revision\t' + blur.revision(expected.get('blur', {}))) + '))\n'
+                'assert(agentoo_transparency_loaded and agentoo_effects_report)\n')
+            result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],
+                                    text=True, capture_output=True, env=os.environ, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')
     def test_portable_animation_preferences_use_each_desktops_authored_settings(self):
         self.directory.mkdir()
         self.path.write_text(json.dumps({'animations': {'windows': 'popin', 'window_size': 80}}))
         module = self.root / 'effects.lua'
         module.write_text((ROOT / 'etc/xdg/hypr/effects.lua').read_text().replace(
-            '/usr/local/share/agentoo/lib/desktop/effects.py', str(SHARE / 'lib/desktop/effects.py')))
+            '/etc/xdg/hypr/appearance.lua', str(appearance_loader(self.root))))
         capture = (ROOT / 'etc/xdg/hypr/hyprland.lua').read_text().split('-- Hyprland discovers', 1)[0]
         for speed in (3, 7):
             config = self.root / 'hyprland.lua'

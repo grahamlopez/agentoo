@@ -1,6 +1,5 @@
 """Blur preferences and read-only diagnostics for Hyprland 0.56.2.
 
-The private `rules` entry point emits validated data, never executable Lua.
 Saved choices are distinct from the compositor's authored defaults.
 """
 import argparse
@@ -8,14 +7,10 @@ import hashlib
 import json
 import os
 import sys
-from pathlib import Path
 import time
 
-sys.dont_write_bytecode = True
-if __name__ == '__main__':
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop.common import (window_rule_conflicts, effective, file_option, hyprctl, read,
-                            state_path, window_option, WINDOW_GROUPS as GROUPS)
+                            window_option, WINDOW_GROUPS as GROUPS)
 STATES = ('focused', 'unfocused')
 LIMITS = {'size': 40, 'passes': 10}
 
@@ -273,24 +268,3 @@ def query(path, window):
         for location in window_rule_conflicts('blur'):
             print(f'agentoo desktop: warning: blur rule may conflict: {location}', file=sys.stderr)
     return 0
-
-
-def rules():
-    data = read_state(state_path())
-    for group in GROUPS:
-        for focus, value in data.get(group, {}).items():
-            print(group, focus, 'on' if value else 'off', sep='\t')
-    for name, value in data.get('strength', {}).items():
-        print('strength', name, value, sep='\t')
-    print('revision', revision(data), sep='\t')
-    print('end')
-
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1:] != ['rules']:
-            raise RuntimeError('Private helper: expected rules')
-        rules()
-    except (OSError, RuntimeError) as error:
-        print(f'agentoo desktop: {error}', file=sys.stderr)
-        raise SystemExit(1)

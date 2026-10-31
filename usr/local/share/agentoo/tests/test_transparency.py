@@ -14,6 +14,8 @@ from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from desktop_fixtures import appearance_loader
+
 SHARE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SHARE / 'lib'))
 from desktop import transparency
@@ -84,9 +86,7 @@ class Transparency(unittest.TestCase):
         self.assertIn('10% (configured default)', output.getvalue())
         self.assertFalse(self.directory.exists())
 
-    def test_state_validation_and_relative_xdg_fallback(self):
-        with patch.dict(os.environ, XDG_STATE_HOME='relative'):
-            self.assertEqual(transparency.state_path(), self.root / '.local/state/agentoo/appearance.json')
+    def test_state_validation(self):
         path = self.root / 'invalid.json'
         for contents in ('[]', '{"all":{"focused":true}}', '{"all":{"focused":NaN}}',
                          '{"unknown":{}}', '{"kitty":{"focused":91}}', 'invalid'):
@@ -176,7 +176,7 @@ class Transparency(unittest.TestCase):
         repository = SHARE.parents[3]
         module = self.root / 'transparency.lua'
         module.write_text((repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(
-            '/usr/local/share/agentoo/lib/desktop/transparency.py', str(SHARE / 'lib/desktop/transparency.py')).replace(
+            '/etc/xdg/hypr/appearance.lua', str(appearance_loader(self.root))).replace(
             '/etc/xdg/hypr/window-classes.lua', str(repository / 'etc/xdg/hypr/window-classes.lua')).replace(
             '/etc/xdg/hypr/appearance-rules.lua', str(repository / 'etc/xdg/hypr/appearance-rules.lua')))
         config = self.root / 'hyprland.lua'

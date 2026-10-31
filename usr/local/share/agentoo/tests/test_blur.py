@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from desktop_fixtures import appearance_loader
+
 SHARE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SHARE / 'lib'))
 from desktop import blur
@@ -103,9 +105,7 @@ class Blur(unittest.TestCase):
         self.assertFalse(sentinel.exists())
         self.assertFalse(self.directory.exists())
 
-    def test_bad_saved_state_and_relative_xdg(self):
-        with patch.dict(os.environ, XDG_STATE_HOME='relative'):
-            self.assertEqual(blur.state_path(), self.root / '.local/state/agentoo/appearance.json')
+    def test_bad_saved_state(self):
         path = self.root / 'invalid.json'
         for contents in ('[]', '{"unknown":{}}', '{"all":{"focused":"on"}}', '{"kitty":{"focused":1}}',
                          '{"strength":{"passes":true}}', '{"strength":{"size":1.5}}',
@@ -305,8 +305,8 @@ class Blur(unittest.TestCase):
         self.directory.mkdir(parents=True)
         source = SHARE.parents[3] / 'etc/xdg/hypr/blur.lua'
         module = self.root / 'blur.lua'
-        module.write_text(source.read_text().replace('/usr/local/share/agentoo/lib/desktop/blur.py',
-                                                   str(SHARE / 'lib/desktop/blur.py')).replace(
+        module.write_text(source.read_text().replace('/etc/xdg/hypr/appearance.lua',
+                                                   str(appearance_loader(self.root))).replace(
             '/etc/xdg/hypr/window-classes.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/window-classes.lua')).replace(
             '/etc/xdg/hypr/appearance-rules.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/appearance-rules.lua')))
         for data, baseline, expected_engine in (

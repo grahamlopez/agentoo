@@ -102,7 +102,7 @@ Transparency occupies the `transparency` section of the shared
 `~/.local/state/agentoo/appearance.json`); relative XDG paths are ignored.
 This is personal, untracked state. Updates use a private directory, atomic
 replacement, and the shared `appearance.lock`.
-Hyprland reads the JSON through a validating Python helper at startup and every
+Hyprland reads and validates the shared JSON once at startup and every
 configuration reload; there is no separate restore command or generated config
 to keep in sync. Updates require the shared integration in a running Hyprland
 session, reload configuration without reconfiguring monitors, and restore the
@@ -402,7 +402,9 @@ are atomic. Changes require the running shared integration. Reload uses
 `hyprctl reload config-only`, retaining monitor configuration. A reported reload
 failure restores the previous saved state and attempts to reload it. No daemon,
 new configuration scanner, or generated configuration file is involved. Hyprland reads
-validated data through `lib/desktop/effects.py settings` at startup and reload.
+one validated snapshot through `lib/desktop/state.py settings` at startup and
+reload. The shared `appearance.lua` loader supplies transparency, blur and effects
+from that snapshot; the next configuration load reads saved preferences afresh.
 
 Malformed values are reported clearly. `clear` can recover a malformed command
 section without discarding other effects; malformed JSON itself requires repairing

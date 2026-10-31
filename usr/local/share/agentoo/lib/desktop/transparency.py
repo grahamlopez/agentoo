@@ -1,7 +1,6 @@
 """Transparency state and CLI operations; imported without effects for completion.
 
-The private `rules` entry point supplies validated numeric data to Hyprland.
-It is not a public Agentoo command. JSON is the only authoritative saved state.
+JSON is the only authoritative saved state.
 """
 import argparse
 import json
@@ -9,11 +8,8 @@ import math
 import os
 import subprocess
 import sys
-from pathlib import Path
-sys.dont_write_bytecode = True
-if __name__ == '__main__':
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.common import (window_rule_conflicts, effective, hyprctl, read, state_path,
+
+from desktop.common import (window_rule_conflicts, effective, hyprctl, read,
                             WINDOW_GROUPS as GROUPS)
 STATES = ('focused', 'unfocused')
 
@@ -113,23 +109,3 @@ def show(data, selected):
     if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
         for location in window_rule_conflicts('transparency'):
             print(f'agentoo desktop: warning: transparency rule may conflict: {location}', file=sys.stderr)
-
-
-def rules():
-    data = read_state(state_path())
-    for group in GROUPS:
-        for focus in STATES:
-            value = effective(data, group, focus)
-            if value is not None:
-                print(group, focus, f'{value:g}', sep='\t')
-    print('end')
-
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1:] != ['rules']:
-            raise RuntimeError('Private helper: expected rules')
-        rules()
-    except (OSError, RuntimeError) as error:
-        print(f'agentoo desktop: {error}', file=sys.stderr)
-        raise SystemExit(1)

@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 import sys
 
+if __name__ == '__main__':
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from desktop import blur, effects, transparency
 from desktop.common import (atomic_write, effective, read, read_json,
                             window_rule_conflicts, WINDOW_GROUPS)
@@ -134,3 +138,31 @@ def update(args, path, parser=None):
             message += ' Blur remains off; enable it with --focused on and/or --unfocused on.'
     print(message, file=sys.stderr)
     return 0
+
+
+if __name__ == '__main__':
+    try:
+        if sys.argv[1:] != ['settings']:
+            raise RuntimeError('Private helper: expected settings')
+        # One validated snapshot for all three Hyprland appearance integrations.
+        data = validate_sections(read())
+        lines = []
+        for group in WINDOW_GROUPS:
+            for focus in transparency.STATES:
+                value = effective(data.get('transparency', {}), group, focus)
+                if value is not None:
+                    lines.append(f'transparency\t{group}\t{focus}\t{value:g}')
+        saved_blur = data.get('blur', {})
+        for group in WINDOW_GROUPS:
+            for focus, value in saved_blur.get(group, {}).items():
+                lines.append(f'blur\t{group}\t{focus}\t' + ('on' if value else 'off'))
+        for name, value in saved_blur.get('strength', {}).items():
+            lines.append(f'blur\tstrength\t{name}\t{value}')
+        lines.append('blur\trevision\t' + blur.revision(saved_blur))
+        for group in effects.COMMANDS:
+            for key, value in data.get(group, {}).items():
+                lines.append(f'effects\t{group}\t{key}\t{value}')
+        print('\n'.join([*lines, 'end']))
+    except (OSError, RuntimeError) as error:
+        print(f'agentoo desktop: {error}', file=sys.stderr)
+        raise SystemExit(1)

@@ -1,10 +1,7 @@
 -- Saved global preferences follow authored defaults. Python validates values;
 -- this file only translates data into native Hyprland configuration calls.
 agentoo_effects_report = nil
-local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/effects.py settings", "r"))
-local contents = stream:read("*a")
-stream:close() -- Hyprland may reap popen's child before pclose.
-assert(contents:sub(-4) == "end\n", "Cannot load Agentoo effects state; see session stderr")
+local contents = require("/etc/xdg/hypr/appearance.lua").effects
 
 local options = {
     corners = { radius = "decoration.rounding", power = "decoration.rounding_power" },
@@ -19,11 +16,9 @@ local function color(value)
     return (#value == 7 and "rgb(" or "rgba(") .. value:sub(2) .. ")"
 end
 for line in contents:gmatch("([^\n]+)\n") do
-    if line ~= "end" then
-        local group, key, value = line:match("^(%a+)\t([%w_]+)\t(.*)$")
-        saved[group] = saved[group] or {}
-        saved[group][key] = value
-    end
+    local group, key, value = line:match("^(%a+)\t([%w_]+)\t(.*)$")
+    saved[group] = saved[group] or {}
+    saved[group][key] = value
 end
 local animation = saved.animations or {}
 local parents = {

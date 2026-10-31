@@ -11,6 +11,9 @@ local function run(records, baseline)
             if path == "/etc/xdg/hypr/appearance-rules.lua" then
                 return { window_rule = function(rule) rules[#rules + 1] = rule end, check = function() end }
             end
+            if path == "/etc/xdg/hypr/appearance.lua" then
+                return { blur = records .. "revision\t" .. string.rep("a", 64) .. "\n" }
+            end
             assert(path == "/etc/xdg/hypr/window-classes.lua")
             return dofile("etc/xdg/hypr/window-classes.lua")
         end,
@@ -24,12 +27,6 @@ local function run(records, baseline)
             end,
             window_rule = function(rule) rules[#rules + 1] = rule end,
         },
-        io = { popen = function()
-            return {
-                read = function() return records .. "revision\t" .. string.rep("a", 64) .. "\nend\n" end,
-                close = function() return nil, "No child processes", 10 end,
-            }
-        end },
     }, { __index = _G })
     local chunk = assert(loadfile("etc/xdg/hypr/blur.lua", "t", context))
     if setfenv then setfenv(chunk, context) end
