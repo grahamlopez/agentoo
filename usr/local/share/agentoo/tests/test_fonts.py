@@ -40,6 +40,16 @@ class FontsTest(unittest.TestCase):
         with patch.dict(output.__globals__, run=lambda *args, **kwargs: type('Result', (), {'stdout': str(kwargs)})()):
             self.assertIn("'timeout': 15", output('fc-list'))
 
+    def test_operational_failure_exits_one_without_argument_help(self):
+        errors = io.StringIO()
+        with patch('sys.argv', ['agentoo-fonts', 'set', '--font', 'Example', '--no-input']), \
+             patch('subprocess.run', side_effect=FileNotFoundError('fc-list')), \
+             contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as result:
+            runpy.run_path(str(Path(__file__).resolve().parents[3] / 'bin/agentoo-fonts'), run_name='__main__')
+        self.assertEqual(result.exception.code, 1)
+        self.assertIn('agentoo fonts:', errors.getvalue())
+        self.assertNotIn('Usage:', errors.getvalue())
+
     def test_abbreviations_rejected(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             MODULE['build_parser']().parse_args(['doctor', '--js'])

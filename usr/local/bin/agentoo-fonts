@@ -76,21 +76,13 @@ def write(path, text):
     finally:
         Path(name).unlink(missing_ok=True)
 
-def config_home():
-    return xdg_directory('XDG_CONFIG_HOME', '.config')
-
-def shell(*args):
-    return shlex.join([str(x) for x in args])
-
-def undo(*args):
-    print('To revert: ' + shell('agentoo', 'fonts', *args), file=sys.stderr)
-
 def samples(suite):
-    data = json.loads((DATA / 'samples.json').read_text())
     if suite == 'width':
-        return {'width': [f'{shutil.get_terminal_size().columns} columns × {shutil.get_terminal_size().lines} rows',
-                          ''.join(str((i+1)//10 % 10) if (i+1)%10 == 0 else str((i+1)%10) for i in range(shutil.get_terminal_size().columns)),
+        width, height = shutil.get_terminal_size()
+        return {'width': [f'{width} columns × {height} rows',
+                          ''.join(str((i+1)//10 % 10) if (i+1)%10 == 0 else str((i+1)%10) for i in range(width)),
                           '|1234567890|abcdefghij|αβγδεζηθικ|中文中文中文中文中文|']}
+    data = json.loads((DATA / 'samples.json').read_text())
     return data if suite == 'all' else {suite: data[suite]}
 
 def terminal_test(a):
@@ -171,7 +163,7 @@ def fontconfig_warnings(names):
 
 
 def kitty_paths():
-    base = config_home() / 'kitty'
+    base = xdg_directory('XDG_CONFIG_HOME', '.config') / 'kitty'
     return base / 'kitty.conf', base / 'agentoo-fonts.conf'
 
 
@@ -279,7 +271,7 @@ def save_selection(text, expected=None):
     print(f'Updated {fragment}', file=sys.stderr)
     if include_missing:
         print(f'Updated {config} (added font fragment include)', file=sys.stderr)
-    undo('set', '--restore', previous)
+    print('To revert: ' + shlex.join(['agentoo', 'fonts', 'set', '--restore', previous]), file=sys.stderr)
     reload_kitties()
 
 
@@ -411,6 +403,14 @@ def query(*args):
         return {'error': str(error)}
 
 
+def charset_ranges(text):
+    ranges = []
+    for value in text.split():
+        bounds = value.split('-')
+        ranges.append((int(bounds[0], 16), int(bounds[-1], 16)))
+    return ranges
+
+
 def installed_faces():
     records = output('fc-list', '--format=%{family}\t%{style}\t%{file}\t%{charset}\n')
     faces = []
@@ -418,11 +418,8 @@ def installed_faces():
         fields = row.split('\t')
         if len(fields) != 4:
             continue
-        ranges = []
-        for value in fields[3].split():
-            bounds = value.split('-')
-            ranges.append((int(bounds[0], 16), int(bounds[-1], 16)))
-        faces.append({'family': fields[0], 'style': fields[1], 'file': fields[2], 'ranges': ranges})
+        faces.append({'family': fields[0], 'style': fields[1], 'file': fields[2],
+                      'ranges': charset_ranges(fields[3])})
     return faces
 
 
@@ -444,10 +441,7 @@ def face_analysis(pattern, suite):
     record = output('fc-match', '--format=%{family}\n%{file}\n%{charset}', pattern).splitlines()
     if len(record) < 3:
         raise ValueError('fontconfig returned no face charset')
-    ranges = []
-    for part in record[2].split():
-        bounds = part.split('-')
-        ranges.append((int(bounds[0], 16), int(bounds[-1], 16)))
+    ranges = charset_ranges(record[2])
     coverage = {}
     for group, rows in samples(suite).items():
         chars = set(''.join(rows)) - set(' \n')
@@ -585,7 +579,8 @@ def print_doctor(report):
 def build_parser():
     parser = ArgumentParser(prog='agentoo fonts', usage='%(prog)s [COMMAND] [options]', description=__doc__,
         epilog='Default: show current Kitty settings and installed families (same as status).\n'
-               'Install and remove fonts with Portage.\n\n'
+               'Install and remove fonts with Portage.\n'
+               'Exit 0: success; 1: operational failure; 2: invalid arguments.\n\n'
                'Examples:\n'
                '  agentoo fonts test --interactive\n'
                '  agentoo fonts set --font \'Liberation Mono\' --size 11\n'
@@ -717,7 +712,7 @@ if __name__ == '__main__':
             main()
     except (ValueError, OSError, subprocess.SubprocessError, KeyError) as error:
         print(f'agentoo fonts: {error}', file=sys.stderr)
-        sys.exit(2)
+        sys.exit(1)
     except KeyboardInterrupt:
         print('\nCancelled.', file=sys.stderr)
         sys.exit(130)

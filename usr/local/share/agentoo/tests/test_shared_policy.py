@@ -45,7 +45,8 @@ class SharedPolicyTests(unittest.TestCase):
                     for key in ('XDG_CONFIG_HOME', 'XDG_CACHE_HOME'):
                         os.environ[key] = str(home / 'custom') if value == 'absolute' else value
                 base = home / 'custom' if value == 'absolute' else home / '.config'
-                self.assertEqual(module['config_home'](), base)
+                self.assertEqual(module['kitty_paths'](),
+                                 (base / 'kitty/kitty.conf', base / 'kitty/agentoo-fonts.conf'))
                 cache = home / 'custom' if value == 'absolute' else home / '.cache'
                 with patch.dict(module['browser_test'].__globals__, output=lambda *args: ''), contextlib.redirect_stdout(io.StringIO()):
                     module['browser_test'](SimpleNamespace(suite='smoke', output=None, no_open=True))
