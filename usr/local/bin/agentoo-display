@@ -26,7 +26,7 @@ def build_parser():
                'With no display backlight, automatic selection succeeds without action.')
     backlight.add_argument('direction', choices=('up', 'down'))
     backlight.add_argument('controller', nargs='?', help='Required when multiple display backlights exist').completion = 'controllers'
-    display_external.configure_parser(sub.add_parser('external', help='Inspect and control external monitors through DDC/CI'))
+    display_external.configure_parser(sub.add_parser('external', help='Inspect and control the Dell U5226KW through DDC/CI'))
     return parser
 
 

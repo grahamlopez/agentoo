@@ -62,8 +62,9 @@ Keep per-display compositor scaling as the default for mixed-density displays.
 
 ## External monitor controls (DDC/CI)
 
-`agentoo display external` runs `ddcutil` as the current user. It does not need
-Hyprland or an X server. Laptop controls remain under `display backlight`.
+`agentoo display external` supports only the Dell U5226KW and runs `ddcutil`
+as the current user. It does not need Hyprland or an X server. Laptop controls
+remain under `display backlight` and support the target hosts' internal panels.
 Read operations do not send Set VCP commands. Help and completion do not probe
 DDC or require privileges.
 
@@ -81,21 +82,22 @@ agentoo display external get E9           # Read an explicit hexadecimal code
 ```
 
 Brightness and volume accept 0..100 or `up`/`down` by five monitor units;
-these are monitor values, not a perceived-brightness curve. Relative adjustment
+these are monitor values, not a perceived-brightness curve. Relative brightness
 uses ddcutil's read/modify/write with clamping to the monitor's reported range.
-For monitors without a model-specific mapping, relative volume first checks
-for a conventional 0..100 response and refuses nonstandard encodings instead
-of calculating an inappropriate write. The Dell mapping below decodes its
-speaker-off flag before adjusting volume.
+Volume decodes the Dell's speaker-off flag before adjusting the level and
+preserves the speaker state, as described below.
 Omit a value to read the setting. Unsupported features fail through ddcutil.
 Monitor modes such as HDR or automatic brightness may restrict manual settings.
 
-Without a selector, the command finds connected external DRM connectors with a
-DDC link in sysfs. Internal eDP/LVDS/DSI panels are excluded. Exactly one connector
-must match, otherwise selection fails before a DDC command runs. Each operation
-except `list` accepts `--output card0-DP-4` or `--bus 16`, mutually exclusively.
-Connector and bus numbers can change after reconnection; no display number or
-bus is saved. `list` delegates to `ddcutil detect` for DDC diagnostics.
+The command selects connected DRM connectors with a DDC link and Dell U5226KW
+EDID manufacturer/product `DEL/439e`. Internal eDP/LVDS/DSI panels and other
+external models are excluded. Exactly one connector must match, otherwise
+selection fails before a DDC command runs. Each operation except `list` accepts
+`--output card0-DP-4` or `--bus 16`, mutually exclusively; neither bypasses the
+model check, including for raw `get` and `set`. Connector and bus numbers can
+change after reconnection; no display number or bus is saved. Completion offers
+only matching Dell connectors. `list` delegates to `ddcutil detect` for DDC
+diagnostics and may show other models; it does not enable control of them.
 
 ```sh
 agentoo display external brightness --output card0-DP-4
@@ -103,8 +105,8 @@ agentoo display external capabilities --bus 16
 agentoo display external input 0x19 --output card0-DP-4
 ```
 
-Input values are monitor-specific: use the capabilities report. Explicit VCP
-access accepts a hexadecimal feature code and a decimal or `0x`-prefixed 16-bit
+Explicit VCP access on the Dell accepts a hexadecimal feature code and a
+decimal or `0x`-prefixed 16-bit
 value, for example `agentoo display external set CODE VALUE --bus NUMBER`.
 Explicit `set` passes `--permit-unknown-feature` to ddcutil so vendor features
 can be addressed. This is an expert interface; it does not establish what
@@ -112,15 +114,17 @@ those features mean.
 Normal writes request ddcutil verification. `input` and `set` accept
 `--no-verify` for operations that disconnect the control path or cannot be read
 back. A successful unverified write only establishes that the command was sent.
-Generic controls preserve ddcutil's output and exit status; this output is not
-a stable Agentoo JSON schema. Named Dell controls and Dell volume provide
+Brightness, mute, input, capabilities, and raw VCP access preserve ddcutil's
+output and exit status; this output is not a stable Agentoo JSON schema.
+Layout, USB, secondary input, audio-source, speakers, and volume provide
 readable results and report failed writes/readback as operational errors.
 Argument errors exit 2; missing dependencies or selection errors exit 1. No automatic sudo, scan of unknown features, or writes on startup.
 
 ### Named Dell U5226KW controls
 
-These commands require a connected monitor with EDID manufacturer/product
-`DEL/439e`; vendor mappings are not sent to other monitor models.
+These operations use the Dell mappings directly; there is no generic-monitor
+fallback or model registry. Adding another model should start from its actual
+requirements and observed behavior.
 
 ```sh
 agentoo display external layout               # Read the mapped layout name
@@ -194,8 +198,8 @@ adjustment data because EDID changed; this is informational when readback
 succeeds. Combined active-layout/input selection still needs physical testing.
 
 `left` aliases `input`, and `right` aliases `sub-input`. Names are case-insensitive:
-`thunderbolt`, `hdmi1`, `hdmi2`, `dp1`, and `dp2`. Named inputs require the Dell
-model check; generic numeric `input` values remain available for other monitors.
+`thunderbolt`, `hdmi1`, `hdmi2`, `dp1`, and `dp2`. Numeric `input` values are raw
+VCP 60 values on the same identified Dell, not a way to select another model.
 Numeric secondary values are explicit raw VCP E8 values, not VCP 60 input IDs.
 For PbP, main is left and secondary is right; in PiP these mean main and inset.
 

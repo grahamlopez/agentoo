@@ -1,4 +1,4 @@
-"""Control external monitors through ddcutil, independently of laptop backlights."""
+"""Control the Dell U5226KW through ddcutil; laptop backlights are separate."""
 from pathlib import Path
 import re
 import shutil
@@ -61,11 +61,7 @@ def input_value(value):
 
 
 def secondary_value(value):
-    if value in DELL_MAIN_INPUTS:
-        if value not in DELL_SECONDARY_INPUTS:
-            raise RuntimeError(f'Secondary input {value} has no verified mapping; no write sent')
-        return DELL_SECONDARY_INPUTS[value]
-    return int(value)
+    return DELL_SECONDARY_INPUTS[value] if value in DELL_MAIN_INPUTS else int(value)
 
 
 def main_value(value):
@@ -92,10 +88,10 @@ def argument_type(function):
 def configure_parser(parser):
     parser.description = __doc__
     parser.epilog = ('Requires ddcutil, i2c-dev and access to the display I2C device. '
-                     'Automatically selects only when one connected external DDC connector exists. '
-                     'Values and feature support depend on the monitor; inspect capabilities first.')
+                     'Selects a connected Dell U5226KW by EDID; no other external model is supported. '
+                     'Use --output or --bus when multiple matching connectors exist.')
     sub = parser.add_subparsers(dest='external_action', required=True)
-    sub.add_parser('list', help='Detect monitors and report DDC access using ddcutil')
+    sub.add_parser('list', help='Detect monitors and report DDC access; only the U5226KW is supported')
     for name, description in (
         ('capabilities', 'Read the monitor-reported feature codes and values'),
         ('brightness', 'Read or change monitor brightness (VCP 10)'),
@@ -163,72 +159,25 @@ def configure_parser(parser):
     return parser
 
 def connected_outputs():
+    """Connected U5226KW DDC connectors, also used by completion without probing."""
     outputs = []
     for path in sorted(DRM.glob('card*-*')):
         if re.match(r'card\d+-(eDP|LVDS|DSI)-', path.name):
             continue
         try:
-            if (path / 'status').read_text().strip() == 'connected' and (path / 'ddc').exists():
-                outputs.append(path)
+            if (path / 'status').read_text().strip() != 'connected' or not (path / 'ddc').exists():
+                continue
+            edid = (path / 'edid').read_bytes()
         except OSError:
             continue
+        # DEL/439e identifies the supported monitor, not a particular cable/bus.
+        if len(edid) >= 128 and edid[8:12] == bytes.fromhex('10ac9e43'):
+            outputs.append(path)
     return outputs
 
-def select_bus(args):
-    if args.bus is not None:
-        return args.bus
-    outputs = connected_outputs()
-    if args.output is not None:
-        outputs = [p for p in outputs if p.name == args.output]
-        if not outputs:
-            raise RuntimeError(f'No connected external DDC output: {args.output}')
-    if not outputs:
-        raise RuntimeError('No connected external DDC output; check the cable or use --bus NUMBER')
-    if len(outputs) != 1:
-        raise RuntimeError('Multiple external outputs; select --output: ' + ', '.join(p.name for p in outputs))
-    name = (outputs[0] / 'ddc').resolve().name
-    if not re.fullmatch(r'i2c-\d+', name):
-        raise RuntimeError(f'Cannot determine I2C bus for {outputs[0].name}; use --bus NUMBER')
-    return int(name[4:])
-
-
-def check_relative_volume(command):
-    encoding, current, maximum = _read_feature(command, '62')
-    # SNC/CNC parsing is shared, but only continuous volume is safe for +/-.
-    if encoding != 'C' or not 0 <= current <= maximum <= 100:
-        raise RuntimeError('Monitor reports a nonstandard volume encoding; relative volume is unavailable. '
-                           'Inspect external get 62 and use the OSD until its encoding is established.')
-
-
-def dell_u5226kw_connected(bus):
-    for output in connected_outputs():
-        if (output / 'ddc').resolve().name != f'i2c-{bus}':
-            continue
-        try:
-            edid = (output / 'edid').read_bytes()
-        except OSError:
-            continue
-        # EDID manufacturer DEL, product 0x439e. Do not apply vendor mappings
-        # to another monitor just because the connector/bus number matches.
-        if len(edid) >= 128 and edid[8:12] == bytes.fromhex('10ac9e43'):
-            return True
-    return False
-
-def require_dell_u5226kw(bus):
-    if dell_u5226kw_connected(bus):
-        return
-    raise RuntimeError('This named control requires a connected Dell U5226KW (EDID DEL/439e); '
-                       'use capabilities and explicit VCP access for other monitors')
 
 def read_feature(command, code, *, maximum=False):
-    _, current, limit = _read_feature(command, code)
-    if maximum and limit is None:
-        raise RuntimeError(f'VCP {code} response does not expose maximum/status bytes')
-    return limit if maximum else current
-
-
-def _read_feature(command, code):
-    """Read once; return (encoding, current, maximum/status or None for SNC)."""
+    """Read a VCP current value, or the maximum/status bytes used by Dell KVM."""
     try:
         result = subprocess.run([*command, 'getvcp', code, '--terse'],
                                 capture_output=True, text=True, check=False, timeout=DDC_TIMEOUT)
@@ -242,15 +191,21 @@ def _read_feature(command, code):
             continue
         try:
             if fields[2] == 'C' and len(fields) == 5:
-                return 'C', int(fields[3]), int(fields[4])
-            if fields[2] == 'SNC' and len(fields) == 4:
-                return 'SNC', int(fields[3].removeprefix('x'), 16), None
-            if fields[2] == 'CNC' and len(fields) == 7:
+                current, limit = int(fields[3]), int(fields[4])
+            elif fields[2] == 'SNC' and len(fields) == 4:
+                current, limit = int(fields[3].removeprefix('x'), 16), None
+            elif fields[2] == 'CNC' and len(fields) == 7:
                 values = [int(field.removeprefix('x'), 16) for field in fields[3:]]
-                return 'CNC', (values[2] << 8) | values[3], (values[0] << 8) | values[1]
+                current, limit = (values[2] << 8) | values[3], (values[0] << 8) | values[1]
+            else:
+                break
         except ValueError:
             break
+        if maximum and limit is None:
+            raise RuntimeError(f'VCP {code} response does not expose maximum/status bytes')
+        return limit if maximum else current
     raise RuntimeError(f'Unexpected response for VCP {code}: {result.stdout.strip()}')
+
 
 def write_switch(command, code, value):
     # Reconfiguration can remove DDC during immediate verification. Never
@@ -279,12 +234,73 @@ def wait_for_feature(command, code, expected, *, maximum=False):
     raise RuntimeError(f'Write sent but settled VCP {code} readback was not confirmed: {detail}. '
                        'No write was retried; inspect the panel before retrying')
 
-def run_dell(args, command, bus):
-    require_dell_u5226kw(bus)
+
+def select_dell_usb(command, value):
+    # E7 current bytes hold the USB/video assignment table. Its MH status byte
+    # identifies the active input; observed 1=Thunderbolt and 4=HDMI1.
+    status = read_feature(command, 'E7', maximum=True)
+    active = status >> 8
+    if value is not None:
+        if active not in DELL_USB_TARGETS.values():
+            raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no switch sent')
+        # This toggle is deliberately restricted to the two mapped hosts.
+        target = (next(value for value in DELL_USB_TARGETS.values() if value != active)
+                  if value == 'next' else DELL_USB_TARGETS[value])
+        if target != active:
+            layout = read_feature(command, 'E9')
+            main = read_feature(command, '60')
+            secondary_raw = read_feature(command, 'E8')
+            secondary = next((DELL_MAIN_INPUTS[name] for name, raw in DELL_SECONDARY_INPUTS.items()
+                              if raw == secondary_raw), None)
+            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != {DELL_MAIN_INPUTS[name] for name in DELL_KVM_INPUTS}:
+                raise RuntimeError('USB switching requires a mapped active two-window layout with '
+                                   'Thunderbolt and HDMI1; no switch sent')
+            write_switch(command, 'E7', DELL_USB_SWITCH)
+            wait_for_feature(command, 'E7', (target << 8) | (status & 0xFF), maximum=True)
+            active = target
+    name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), 'unknown')
+    return name, active
+
+
+def run(args, parser):
+    if args.external_action == 'layout':
+        left = getattr(args, 'layout_input', None)
+        right = getattr(args, 'layout_secondary', None)
+        if (left is not None or right is not None) and args.value is None:
+            parser.error('input options require a layout value')
+        if right is not None and args.value in ('off', '100'):
+            parser.error('--right/--sub-input requires an active PiP/PbP layout')
+        if left == 'active_kvm' and args.value not in ('off', '100'):
+            parser.error('active_kvm requires layout off or layout 100')
+        if right is not None:
+            secondary_value(right)  # Validate before changing layout.
+    if not shutil.which('ddcutil'):
+        raise RuntimeError('ddcutil is not installed; install app-misc/ddcutil (see docs/displays.md)')
     action = args.external_action
+    if action == 'list':
+        # Detection is diagnostic; every controlled operation below selects a Dell.
+        return subprocess.run(['ddcutil', 'detect'], check=False).returncode
+    outputs = connected_outputs()
+    if args.output is not None:
+        outputs = [path for path in outputs if path.name == args.output]
+    if args.bus is not None:
+        outputs = [path for path in outputs if (path / 'ddc').resolve().name == f'i2c-{args.bus}']
+    if not outputs:
+        raise RuntimeError('No connected Dell U5226KW DDC output matches the selection (EDID DEL/439e)')
+    if len(outputs) != 1:
+        raise RuntimeError('Multiple Dell U5226KW outputs; select --output: ' + ', '.join(path.name for path in outputs))
+    name = (outputs[0] / 'ddc').resolve().name
+    if not re.fullmatch(r'i2c-\d+', name):
+        raise RuntimeError(f'Cannot determine I2C bus for {outputs[0].name}')
+    bus = int(name[4:])
+    command = ['ddcutil', '--bus', str(bus)]
     if action == 'layout':
         target = getattr(args, 'layout_input', None)
-        original_kvm = read_kvm_target(command) if args.value is not None else None
+        original_kvm = None
+        if args.value is not None:
+            original_kvm, active = select_dell_usb(command, None)
+            if original_kvm == 'unknown':
+                raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no layout or input write sent')
         if target == 'active_kvm':
             target = original_kvm
         secondary = getattr(args, 'layout_secondary', None)
@@ -325,7 +341,8 @@ def run_dell(args, command, bus):
         write_switch(command, 'E9', DELL_PIP_CYCLE)
         print('PiP position-cycle command sent; position is not readable through the mapped registers.', file=sys.stderr)
     elif action == 'usb':
-        return run_dell_usb(args, command)
+        name, active = select_dell_usb(command, args.value)
+        print(f'{name} (status 0x{active:02X})')
     elif action == 'sub-input':
         if args.value is not None:
             expected = secondary_value(args.value)
@@ -338,7 +355,7 @@ def run_dell(args, command, bus):
             expected = read_feature(command, 'E8')
         name = next((name for name, value in DELL_SECONDARY_INPUTS.items() if value == expected), 'unknown')
         print(f'{name} (0x{expected:04X})')
-    else:
+    elif action in ('audio-source', 'speakers'):
         code, values = (('63', DELL_AUDIO_SOURCES) if action == 'audio-source'
                         else ('8D', DELL_SPEAKER_VALUES))
         if args.value is not None:
@@ -349,143 +366,66 @@ def run_dell(args, command, bus):
             expected = read_feature(command, code)
         name = next((name for name, value in values.items() if value == expected), 'unknown')
         print(f'{name} (0x{expected:02X})')
-    return 0
-
-
-def read_kvm_target(command):
-    active = read_feature(command, 'E7', maximum=True) >> 8
-    name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), None)
-    if name is None:
-        raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no layout or input write sent')
-    return name
-
-
-def select_dell_usb(command, value):
-    # E7 current bytes hold the USB/video assignment table. Its MH status byte
-    # identifies the active input; observed 1=Thunderbolt and 4=HDMI1.
-    status = read_feature(command, 'E7', maximum=True)
-    active = status >> 8
-    if value is not None:
-        if active not in DELL_USB_TARGETS.values():
-            raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no switch sent')
-        # This toggle is deliberately restricted to the two mapped hosts.
-        target = (next(value for value in DELL_USB_TARGETS.values() if value != active)
-                  if value == 'next' else DELL_USB_TARGETS[value])
-        if target != active:
-            layout = read_feature(command, 'E9')
-            main = read_feature(command, '60')
-            secondary_raw = read_feature(command, 'E8')
-            secondary = next((DELL_MAIN_INPUTS[name] for name, raw in DELL_SECONDARY_INPUTS.items()
-                              if raw == secondary_raw), None)
-            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != {DELL_MAIN_INPUTS[name] for name in DELL_KVM_INPUTS}:
-                raise RuntimeError('USB switching requires a mapped active two-window layout with '
-                                   'Thunderbolt and HDMI1; no switch sent')
-            write_switch(command, 'E7', DELL_USB_SWITCH)
-            wait_for_feature(command, 'E7', (target << 8) | (status & 0xFF), maximum=True)
-            active = target
-    name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), 'unknown')
-    return name, active
-
-
-def run_dell_usb(args, command):
-    name, active = select_dell_usb(command, args.value)
-    print(f'{name} (status 0x{active:02X})')
-    return 0
-
-
-def run_dell_volume(args, command):
-    raw = read_feature(command, '62')
-    current = raw & 0x7F
-    speaker_off = bool(raw & 0x80)
-    if raw & ~0xFF or current > 100:
-        raise RuntimeError(f'Unexpected Dell volume encoding: 0x{raw:04X}; no volume write sent')
-    target = current
-    if args.value is not None:
-        if args.value in ('up', 'down'):
-            target = max(0, min(100, current + (5 if args.value == 'up' else -5)))
-        else:
-            target = int(args.value)
-        if target != current:
-            # Dell ignores the mute flag on volume writes and ordinary levels
-            # enable its speakers. Restore the previous Off state in the same
-            # invocation. This cannot promise there is no brief unmuted interval.
-            change = [*command, 'setvcp', '62', str(target)]
-            if speaker_off:
-                change += ['8D', str(DELL_SPEAKER_VALUES['off'])]
-            change += ['--noverify']
-            try:
-                result = subprocess.run(change, check=False, timeout=DDC_TIMEOUT)
-                failure = 'Volume write failed' if result.returncode else None
-            except subprocess.TimeoutExpired:
-                failure = 'Volume write timed out; the panel may have applied it'
-            if failure:
+    elif action == 'volume':
+        raw = read_feature(command, '62')
+        current = raw & 0x7F
+        speaker_off = bool(raw & 0x80)
+        if raw & ~0xFF or current > 100:
+            raise RuntimeError(f'Unexpected Dell volume encoding: 0x{raw:04X}; no volume write sent')
+        target = current
+        if args.value is not None:
+            if args.value in ('up', 'down'):
+                target = max(0, min(100, current + (5 if args.value == 'up' else -5)))
+            else:
+                target = int(args.value)
+            if target != current:
+                # Dell ignores the mute flag on volume writes and ordinary levels
+                # enable its speakers. Restore the previous Off state in the same
+                # invocation. This cannot promise there is no brief unmuted interval.
+                change = [*command, 'setvcp', '62', str(target)]
                 if speaker_off:
-                    # Restore only Speaker Off, never retry the uncertain level write.
-                    try:
-                        restore = subprocess.run([*command, 'setvcp', '8D',
-                                                  str(DELL_SPEAKER_VALUES['off']), '--noverify'],
-                                                 check=False, timeout=DDC_TIMEOUT)
-                        restored = restore.returncode == 0
-                    except subprocess.TimeoutExpired:
-                        restored = False
-                    if not restored:
-                        raise RuntimeError(f'{failure}; Speaker Off could not be restored; speaker state is uncertain; inspect the panel')
-                raise RuntimeError(f'{failure}; no volume write was retried; read the level and speaker state before retrying')
-            wait_for_feature(command, '62', target | (0x80 if speaker_off else 0))
-    print(f'{target}/100 (speakers {"off" if speaker_off else "on"})')
-    return 0
-
-def run(args, parser):
-    if args.external_action == 'layout':
-        left = getattr(args, 'layout_input', None)
-        right = getattr(args, 'layout_secondary', None)
-        if (left is not None or right is not None) and args.value is None:
-            parser.error('input options require a layout value')
-        if right is not None and args.value in ('off', '100'):
-            parser.error('--right/--sub-input requires an active PiP/PbP layout')
-        if left == 'active_kvm' and args.value not in ('off', '100'):
-            parser.error('active_kvm requires layout off or layout 100')
-        if right is not None:
-            secondary_value(right)  # Validate before changing layout.
-    if not shutil.which('ddcutil'):
-        raise RuntimeError('ddcutil is not installed; install app-misc/ddcutil (see docs/displays.md)')
-    command = ['ddcutil']
-    action = args.external_action
-    if action == 'list':
-        command += ['detect']
+                    change += ['8D', str(DELL_SPEAKER_VALUES['off'])]
+                change += ['--noverify']
+                try:
+                    result = subprocess.run(change, check=False, timeout=DDC_TIMEOUT)
+                    failure = 'Volume write failed' if result.returncode else None
+                except subprocess.TimeoutExpired:
+                    failure = 'Volume write timed out; the panel may have applied it'
+                if failure:
+                    if speaker_off:
+                        # Restore only Speaker Off, never retry the uncertain level write.
+                        try:
+                            restore = subprocess.run([*command, 'setvcp', '8D',
+                                                      str(DELL_SPEAKER_VALUES['off']), '--noverify'],
+                                                     check=False, timeout=DDC_TIMEOUT)
+                            restored = restore.returncode == 0
+                        except subprocess.TimeoutExpired:
+                            restored = False
+                        if not restored:
+                            raise RuntimeError(f'{failure}; Speaker Off could not be restored; speaker state is uncertain; inspect the panel')
+                    raise RuntimeError(f'{failure}; no volume write was retried; read the level and speaker state before retrying')
+                wait_for_feature(command, '62', target | (0x80 if speaker_off else 0))
+        print(f'{target}/100 (speakers {"off" if speaker_off else "on"})')
     else:
-        bus = select_bus(args)
-        command += ['--bus', str(bus)]
-        if action == 'volume' and dell_u5226kw_connected(bus):
-            return run_dell_volume(args, command)
-        if action in ('layout', 'pip-position', 'sub-input', 'audio-source', 'speakers', 'usb'):
-            return run_dell(args, command, bus)
-        if action == 'input' and args.value in DELL_MAIN_INPUTS:
-            require_dell_u5226kw(bus)
-            args.value = str(main_value(args.value))
+        # ddcutil handles ordinary VCP access; Dell-specific sequences stay above.
         if action == 'capabilities':
-            command += ['capabilities']
+            command.append('capabilities')
         else:
-            code = {'brightness': '10', 'volume': '62', 'mute': '8D', 'input': '60'}.get(action)
+            code = {'brightness': '10', 'mute': '8D', 'input': '60'}.get(action)
             if code is None:
                 code = args.code
             value = getattr(args, 'value', None)
             if value is None:
                 command += ['getvcp', code]
             else:
-                if action == 'volume' and value in ('up', 'down'):
-                    check_relative_volume(command)
-                if action == 'mute':
+                if action == 'input':
+                    value = str(main_value(value))
+                elif action == 'mute':
                     value = str(MUTE_VALUES[value])
                 command += ['setvcp', code]
-                # Raw set is an explicit request, including unknown vendor codes.
                 command += (['+' if value == 'up' else '-', '5'] if value in ('up', 'down') else [value])
                 if action == 'set':
-                    command += ['--permit-unknown-feature']
-                if getattr(args, 'no_verify', False):
-                    command += ['--noverify']
-                else:
-                    command += ['--verify']
-    # User-requested raw passthrough intentionally has no timeout: preserve
-    # ddcutil's output and exit status. Internal policy reads/writes are bounded.
-    return subprocess.run(command, check=False).returncode
+                    command.append('--permit-unknown-feature')
+                command.append('--noverify' if getattr(args, 'no_verify', False) else '--verify')
+        return subprocess.run(command, check=False).returncode
+    return 0

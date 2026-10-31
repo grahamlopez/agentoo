@@ -150,7 +150,8 @@ for temporary inspection effects and the exact recovery boundaries.
 ## Displays and screenshots
 
 Backlight controls are under `agentoo display backlight up|down [CONTROLLER]`.
-External monitor controls are under `agentoo display external`: `list`,
+The Dell U5226KW is the only supported external monitor. Its controls are under
+`agentoo display external`: `list`,
 `capabilities`, `brightness [0..100|up|down]`, `volume [0..100|up|down]`,
 `mute [on|off]`, `input [VALUE]`, and explicit VCP `get`/`set`.
 Mapped Dell U5226KW controls include `layout [MODE]`, `pip-position next`,
