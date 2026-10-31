@@ -263,6 +263,14 @@ whitespace when writing ebuilds and eclasses. Personal `.vimrc` and Neovim
 `init.lua`/`init.vim` load afterward; filetype-specific overrides can use native
 `after/ftplugin/` files.
 
+Neovim applies shared appearance defaults during initialization and on
+`ColorScheme`, in the native `agentoo_appearance` autocommand group. Personal
+highlight settings survive ordinary option and window changes; register a later
+personal `ColorScheme` callback to retain them across theme changes, or clear
+that group to disable shared theme updates. Window-local keyword matches use
+`agentoo_todo_matches`. `:TransparentToggle` changes backgrounds while preserving
+foregrounds and other styles.
+
 Normal user configs remain local overrides, with no copied or symlinked dotfiles.
 
 - Personal Git identity belongs in user-owned `~/.gitconfig-local`, already

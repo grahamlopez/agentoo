@@ -273,23 +273,25 @@ vim.api.nvim_create_user_command("Todos", function()
   vim.cmd("CopenSmart 25")
 end, { desc = "vimgrep TODO and friends to quickfix", nargs = 0 })
 
--- highlight todo keywords
-vim.api.nvim_create_autocmd({ "ColorScheme", "OptionSet", "VimEnter", "WinNew", "WinEnter" }, {
-  callback = function()
-    vim.api.nvim_set_hl(0, "darkTodoPattern", { fg = "#ffaf00", bold = true })
-    vim.api.nvim_set_hl(0, "lightTodoPattern", { fg = "#cd4848", bold = true })
-    -- Refresh only our keyword matches; preserve user/plugin matches.
-    for _, match in ipairs(vim.fn.getmatches()) do
-      if match.group == "darkTodoPattern" or match.group == "lightTodoPattern" then
-        vim.fn.matchdelete(match.id)
-      end
-    end
-    if vim.o.background == "dark" then
-      vim.fn.matchadd("darkTodoPattern", "\\(TODO\\|FIXME\\|IDEA\\|TRACK\\):")
-    else
-      vim.fn.matchadd("lightTodoPattern", "\\(TODO\\|FIXME\\|IDEA\\|TRACK\\):")
+-- Matches belong to windows; their colors are shared appearance defaults below.
+local function refresh_todo_matches()
+  for _, match in ipairs(vim.fn.getmatches()) do
+    if match.group == "darkTodoPattern" or match.group == "lightTodoPattern" then
+      vim.fn.matchdelete(match.id)
     end
   end
+  local group = vim.o.background == "dark" and "darkTodoPattern" or "lightTodoPattern"
+  vim.fn.matchadd(group, "\\(TODO\\|FIXME\\|IDEA\\|TRACK\\):")
+end
+local todo_matches = vim.api.nvim_create_augroup("agentoo_todo_matches", { clear = true })
+vim.api.nvim_create_autocmd({ "VimEnter", "WinEnter" }, {
+  group = todo_matches,
+  callback = refresh_todo_matches,
+})
+vim.api.nvim_create_autocmd("OptionSet", {
+  group = todo_matches,
+  pattern = "background",
+  callback = refresh_todo_matches,
 })
 
 local function qf_open_smart(max_height, min_height)
@@ -326,7 +328,7 @@ vim.api.nvim_create_autocmd("QuickFixCmdPost", {
 
 -- background transparency {{{
 local transparent_enabled = true  -- startup default
-local saved_hls = {}
+local saved_backgrounds = {}
 local groups = {
   'Normal',
   'NormalNC',
@@ -337,49 +339,35 @@ local groups = {
   -- 'Folded',
   -- 'FoldColumn',
 }
-local function save_current_hls()
+local function save_backgrounds()
   for _, name in ipairs(groups) do
-    -- get current definition from global namespace
-    saved_hls[name] = vim.api.nvim_get_hl(0, { name = name, link = false })
+    local def = vim.api.nvim_get_hl(0, { name = name, link = false })
+    saved_backgrounds[name] = { bg = def.bg, ctermbg = def.ctermbg }
   end
 end
-local function apply_saved_hls()
+local function apply_backgrounds(transparent)
   for _, name in ipairs(groups) do
-    local def = saved_hls[name]
-    if def then
-      vim.api.nvim_set_hl(0, name, def)
+    local def = vim.api.nvim_get_hl(0, { name = name, link = false })
+    if transparent then
+      def.bg, def.ctermbg = nil, nil
+    else
+      def.bg = saved_backgrounds[name].bg
+      def.ctermbg = saved_backgrounds[name].ctermbg
     end
-  end
-end
-local function apply_transparent()
-  for _, name in ipairs(groups) do
-    vim.api.nvim_set_hl(0, name, { bg = 'none' })
+    vim.api.nvim_set_hl(0, name, def)
   end
 end
 function _G.ToggleTransparent()
   if transparent_enabled then
-    apply_saved_hls()
+    apply_backgrounds(false)
     transparent_enabled = false
   else
-    -- on first enable, capture scheme defaults
-    if next(saved_hls) == nil then
-      save_current_hls()
-    end
-    apply_transparent()
+    save_backgrounds()
+    apply_backgrounds(true)
     transparent_enabled = true
   end
 end
 
-vim.api.nvim_create_autocmd({'VimEnter', 'ColorScheme'}, {
-  pattern = '*',
-  callback = function()
-    saved_hls = {} -- clear cache; next toggle will re-save
-    if transparent_enabled then
-      save_current_hls()
-      apply_transparent()
-    end
-  end,
-})
 vim.api.nvim_create_user_command("TransparentToggle", function()
   ToggleTransparent()
 end, { desc = "Toggle background transparency", nargs = 0 })
@@ -398,18 +386,23 @@ vim.opt.listchars = {
   precedes = "◂",
 }
 
--- Color all listchars whitespace
-vim.api.nvim_create_autocmd({ "ColorScheme", "OptionSet", "VimEnter", "WinNew", "WinEnter" }, {
-  callback = function()
-    vim.api.nvim_set_hl(0, "Whitespace", {
-      fg = "#d70000",      -- red visible on dark/light
-      ctermfg = 160,       -- 256‑color terminals
-    })
-    -- Optionally tweak others that may be involved
-    vim.api.nvim_set_hl(0, "NonText",  { fg = "#444444" })
-    vim.api.nvim_set_hl(0, "SpecialKey", { fg = "#5f5f5f" })
+-- Apply before personal init; later personal ColorScheme callbacks can override.
+local function apply_appearance_defaults()
+  vim.api.nvim_set_hl(0, "darkTodoPattern", { fg = "#ffaf00", bold = true })
+  vim.api.nvim_set_hl(0, "lightTodoPattern", { fg = "#cd4848", bold = true })
+  vim.api.nvim_set_hl(0, "Whitespace", { fg = "#d70000", ctermfg = 160 })
+  vim.api.nvim_set_hl(0, "NonText", { fg = "#444444" })
+  vim.api.nvim_set_hl(0, "SpecialKey", { fg = "#5f5f5f" })
+  if transparent_enabled then
+    save_backgrounds()
+    apply_backgrounds(true)
   end
+end
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("agentoo_appearance", { clear = true }),
+  callback = apply_appearance_defaults,
 })
+apply_appearance_defaults()
 -- }}}
 -- proposed removal: External Glow viewer is deferred.
 -- -- Glow markdown viewer {{{
