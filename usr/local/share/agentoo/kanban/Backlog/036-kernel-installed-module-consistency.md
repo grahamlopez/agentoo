@@ -16,11 +16,17 @@ See [the install procedure](../../../../bin/agentoo-kernel) and
 those fixtures with fake build/storage tools and a temporary destination; no
 live modules, ESP, or firmware were changed.
 
-Prefer a simple, explicit release-identity rule: consider requiring a new label
-for changed builds instead of adding a deployment transaction framework. If
-replacement remains supported, define how image/module consistency and failures
-are handled, including a release used by the running kernel. Preserve target
-checks, confirmations, and the existing initramfs choices.
+User requirement clarified on 2026-10-31: reusing `--label` for an installed
+kernel requests replacement; a new label keeps a separate installation.
+Replacement is required, so do not require a new label merely because build
+contents changed. The current artifact identity includes both kernel version
+and label; retain that distinction when identifying the installation to replace.
+
+Find the simplest coherent replacement procedure that keeps the image and its
+module tree consistent, removes obsolete modules, and handles failures explicitly.
+Consider replacement of a release used by the running kernel. Do not assume a
+general deployment transaction framework is needed. Preserve target checks,
+confirmations, safe retries, and the existing initramfs choices.
 
 Complete when a successful installation cannot silently retain obsolete modules
 or present a mixed build as the validated artifact. Add focused coverage for an
