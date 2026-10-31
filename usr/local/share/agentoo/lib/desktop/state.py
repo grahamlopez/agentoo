@@ -1,106 +1,42 @@
 """One appearance file and transaction for desktop commands; wallpaper is separate."""
-import argparse
 import fcntl
 import json
 import os
 from pathlib import Path
 import sys
 
-from desktop.common import atomic_write, WINDOW_GROUPS
-from xdg import xdg_directory
+from desktop import blur, effects, transparency
+from desktop.common import atomic_write, effective, read, read_json
 
-SECTIONS = ('transparency', 'blur', 'corners', 'gaps', 'borders', 'animations', 'shadows', 'dimming')
-
-
-def state_path():
-    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo/appearance.json'
-
-
-def read_json(path):
-    try:
-        data = json.loads(path.read_text())
-    except (ValueError, OSError) as error:
-        raise RuntimeError(f'Cannot read appearance file {path}: {error}') from error
-    if not isinstance(data, dict):
-        raise RuntimeError(f'Appearance file {path} must contain a JSON object')
-    return data
+SECTIONS = ('transparency', 'blur', *effects.COMMANDS)
 
 
 def validate_sections(data, *, partial=False):
-    from desktop import blur as blur
-    from desktop import effects as effects
-    from desktop import transparency as transparency
     unknown = set(data) - set(SECTIONS)
     if unknown:
         raise RuntimeError('Unknown appearance sections: ' + ', '.join(sorted(unknown)))
-    result = {}
+    effect_sections = {name: values for name, values in data.items() if name in effects.COMMANDS}
+    result = effects.validate_sections(effect_sections, partial=partial) if effect_sections else {}
     for name, values in data.items():
         if name == 'blur':
             result[name] = blur.validate_data(values)
         elif name == 'transparency':
             result[name] = transparency.validate_data(values)
-        else:
-            result[name] = effects.validate_sections({name: values}, partial=partial)[name]
     return result
 
 
-def read(path=None):
-    path = state_path() if path is None else Path(path)
-    return read_json(path) if path.exists() else {}
-
-
-def section(name, path=None):
-    return read(path).get(name, {})
-
-
-def file_option(parser, *, required=False):
-    parser.add_argument('--file', dest='appearance_file', metavar='FILE',
-                        required=required,
-                        help='Apply and remember supplied appearance settings from JSON; omitted settings stay unchanged').completion = 'files'
-
-
-def window_option(parser, *, child=False):
-    help_text = 'Window category (default: all). other excludes Kitty and browsers.'
-    if child:
-        help_text += ' --window may also be supplied before the action.'
-    parser.add_argument('--window', choices=WINDOW_GROUPS,
-                        default=argparse.SUPPRESS if child else 'all',
-                        help=help_text)
-
-
-def imported(path, command=None):
-    data = read_json(Path(path))
-    if command:
-        if command not in data:
-            raise RuntimeError(f'Appearance file {path} has no {command} section')
-        data = {command: data[command]}
-    return validate_sections(data, partial=True)
-
-
-def merged(previous, patch):
-    """Partial sections and window groups retain omitted fields."""
-    from desktop.effects import animation_update
-    result = dict(previous)
-    for name, values in patch.items():
-        if name == 'animations':
-            result[name] = animation_update(previous.get(name, {}), values)
-            continue
-        result[name] = {**previous.get(name, {}), **values}
-        if name in ('transparency', 'blur'):
-            for group, fields in values.items():
-                result[name][group] = {**previous.get(name, {}).get(group, {}), **fields}
-    return result
-
-
-def update(args, directory, write=atomic_write, parser=None):
-    from desktop import blur as blur
-    from desktop import effects as effects
-    from desktop import transparency as transparency
-
+def update(args, path, parser=None):
+    directory = path.parent
     command = getattr(args, 'command', None)
     file = getattr(args, 'appearance_file', None)
-    patch = imported(file, command) if file is not None else None
-    if patch is not None:
+    patch = None
+    if file is not None:
+        patch = read_json(Path(file))
+        if command:
+            if command not in patch:
+                raise RuntimeError(f'Appearance file {file} has no {command} section')
+            patch = {command: patch[command]}
+        patch = validate_sections(patch, partial=True)
         changed = set(patch)
     else:
         changed = set(SECTIONS) if command is None else {command}
@@ -119,7 +55,6 @@ def update(args, directory, write=atomic_write, parser=None):
             raise RuntimeError('A running Hyprland session is required to change desktop effects')
         if not clearing and effects.hyprctl('repl', 'return agentoo_effects_report and "ready" or "missing"') != 'ready':
             raise RuntimeError('Load the shared Agentoo effects.lua integration before changing effects')
-    path = directory / 'appearance.json'
     previous_umask = os.umask(0o077)
     try:
         directory.mkdir(parents=True, exist_ok=True)
@@ -136,7 +71,16 @@ def update(args, directory, write=atomic_write, parser=None):
                 else:
                     data.pop(command, None)
             elif patch is not None:
-                data = merged(data, patch)
+                # Partial sections and window groups retain omitted fields.
+                for name, values in patch.items():
+                    previous = data.get(name, {})
+                    if name == 'animations':
+                        data[name] = effects.animation_update(previous, values)
+                        continue
+                    data[name] = {**previous, **values}
+                    if name in ('transparency', 'blur'):
+                        for group, fields in values.items():
+                            data[name][group] = {**previous.get(group, {}), **fields}
             elif command == 'blur':
                 data[command] = blur.adjusted(blur.validate_data(data.get(command, {})), args)
             elif command == 'transparency':
@@ -152,7 +96,7 @@ def update(args, directory, write=atomic_write, parser=None):
                 blur.check_conflicts(data.get('blur', {}))
             if 'transparency' in changed:
                 selected = data.get('transparency', {})
-                if any(transparency.effective(selected, 'kitty', focus) is not None for focus in transparency.STATES):
+                if any(effective(selected, 'kitty', focus) is not None for focus in transparency.STATES):
                     kitty = transparency.kitty_defaults()
                     watcher = str(Path(transparency.__file__).parents[1] / 'kitty/transparency.py')
                     if not kitty or not kitty[1] or watcher not in kitty[2]:
@@ -161,7 +105,7 @@ def update(args, directory, write=atomic_write, parser=None):
             if 'animations' in changed and 'duration' in data.get('animations', {}):
                 if any(branch['bezier'].startswith('spring:') for branch in effects.live_animations().values()):
                     raise RuntimeError('Spring curves control their own timing; configure a bezier curve before using --duration')
-            write(path, json.dumps(data, indent=2, sort_keys=True) + '\n')
+            atomic_write(path, json.dumps(data, indent=2, sort_keys=True) + '\n')
             report = None
             try:
                 if 'blur' in changed:
@@ -172,7 +116,7 @@ def update(args, directory, write=atomic_write, parser=None):
                 if original is None:
                     path.unlink(missing_ok=True)
                 else:
-                    write(path, original)
+                    atomic_write(path, original)
                 try:
                     effects.reload_settings()
                 except RuntimeError as error:

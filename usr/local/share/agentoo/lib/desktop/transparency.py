@@ -14,7 +14,8 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.common import authored_hypr_paths, hyprctl, WINDOW_GROUPS as GROUPS
+from desktop.common import (authored_hypr_paths, effective, hyprctl, read, state_path,
+                            WINDOW_GROUPS as GROUPS)
 STATES = ('focused', 'unfocused')
 
 
@@ -28,14 +29,8 @@ def percentage(value):
     return number
 
 
-def state_path():
-    from desktop.state import state_path as shared_path
-    return shared_path()
-
-
 def read_state(path):
-    from desktop.state import section
-    return validate_data(section('transparency', path))
+    return validate_data(read(path).get('transparency', {}))
 
 
 def validate_data(data):
@@ -48,10 +43,6 @@ def validate_data(data):
             if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 90:
                 raise RuntimeError(f'Invalid transparency percentage in transparency section')
     return data
-
-
-def effective(data, group, focus):
-    return data.get(group, {}).get(focus, data.get('all', {}).get(focus))
 
 
 def adjusted(data, group, focused=None, unfocused=None):

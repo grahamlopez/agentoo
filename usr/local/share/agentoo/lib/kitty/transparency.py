@@ -4,17 +4,15 @@ Uses Kitty's in-process remote-control API. A small timer notices CLI changes
 even when no focus event occurs. No sockets, terminal escapes, or shell code.
 """
 from pathlib import Path
-import runpy
 import sys
 
 _share = str(Path(__file__).resolve().parents[1])
 # Kitty does not add the watcher's parent directory to its Python search path.
-# Allow shared imports while loading and reading state, without changing Kitty's
-# lasting search path. Some state imports are intentionally deferred until read.
+# Load shared readers once, without changing Kitty's lasting search path.
 sys.path.insert(0, _share)
 try:
-    _state = runpy.run_path(str(Path(_share) / 'desktop/transparency.py'),
-                           run_name='agentoo_transparency_state')
+    from desktop.common import effective, state_path
+    from desktop.transparency import read_state
 finally:
     sys.path.remove(_share)
 _applied = {}
@@ -22,23 +20,15 @@ _last_error = None
 _previous_state = None
 
 
-def read_preferences():
-    sys.path.insert(0, _share)
-    try:
-        return _state['read_state'](_state['state_path']())
-    finally:
-        sys.path.remove(_share)
-
-
 def refresh(boss):
     global _last_error, _previous_state
     from kitty.fast_data_types import current_focused_os_window_id, get_options
     from kitty.utils import log_error
     try:
-        data = read_preferences()
+        data = read_state(state_path())
         if _previous_state is not None and data != _previous_state and any(
-            _state['effective'](_previous_state, 'kitty', focus) is not None
-            and _state['effective'](data, 'kitty', focus) is None
+            effective(_previous_state, 'kitty', focus) is not None
+            and effective(data, 'kitty', focus) is None
             for focus in ('focused', 'unfocused')
         ):
             # Reset re-reads authored includes too: ~/.config may have changed
@@ -53,7 +43,7 @@ def refresh(boss):
                 del _applied[identifier]
         for identifier, window in windows.items():
             focus = 'focused' if identifier == focused else 'unfocused'
-            value = _state['effective'](data, 'kitty', focus)
+            value = effective(data, 'kitty', focus)
             managed = value is not None
             if not managed and identifier not in _applied:
                 continue

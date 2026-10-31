@@ -16,7 +16,7 @@ from unittest.mock import patch
 SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
 sys.path.insert(0, str(SHARE / 'lib'))
-from desktop import state
+from desktop import common, state
 from desktop import effects
 from desktop import blur
 from desktop import transparency
@@ -51,7 +51,7 @@ class DesktopStateTest(unittest.TestCase):
     def apply(self, *tokens):
         args = self.parser.parse_args(tokens)
         with contextlib.redirect_stderr(io.StringIO()):
-            return state.update(args, self.directory, desktop.atomic_write, self.parser)
+            return state.update(args, self.path, self.parser)
 
     def save_import(self, data):
         self.file.write_text(json.dumps(data))
@@ -63,11 +63,11 @@ class DesktopStateTest(unittest.TestCase):
         self.save_import({'gaps': {'inner': 6}, 'borders': {'focused': '#abcdef'},
                           'transparency': {'kitty': {'unfocused': 10}},
                           'animations': {'windows': 'popin', 'window_size': 80}})
-        with patch.object(effects, 'reload_settings') as reload, patch.object(desktop, 'atomic_write', wraps=desktop.atomic_write) as write:
+        with patch.object(effects, 'reload_settings') as reload, patch.object(state, 'atomic_write', wraps=state.atomic_write) as write:
             self.apply('set', '--file', str(self.file))
         self.assertEqual(write.call_count, 1)
         self.assertEqual(reload.call_count, 1)
-        data = state.read(self.path)
+        data = common.read(self.path)
         self.assertEqual(data['gaps'], {'inner': 6, 'outer': 8})
         self.assertEqual(data['borders'], {'width': 2, 'focused': '#abcdef'})
         self.assertEqual(data['transparency'], {'kitty': {'focused': 5, 'unfocused': 10}})
@@ -84,7 +84,7 @@ class DesktopStateTest(unittest.TestCase):
     def test_subcommand_reads_only_its_section_and_missing_section_is_an_error(self):
         self.save_import({'borders': {'width': 3}, 'gaps': {'typo': 10}})
         self.apply('borders', 'set', '--file', str(self.file))
-        self.assertEqual(state.read(self.path), {'borders': {'width': 3}})
+        self.assertEqual(common.read(self.path), {'borders': {'width': 3}})
         with self.assertRaisesRegex(RuntimeError, 'no corners section'):
             self.apply('corners', 'set', '--file', str(self.file))
 
@@ -108,10 +108,10 @@ class DesktopStateTest(unittest.TestCase):
         self.apply('set', '--file', str(self.file))
         self.save_import({'animations': {'enabled': 'on'}})
         self.apply('set', '--file', str(self.file))
-        self.assertEqual(state.read(self.path)['animations'], {'enabled': 'on', 'windows': 'popin', 'window_size': 80})
+        self.assertEqual(common.read(self.path)['animations'], {'enabled': 'on', 'windows': 'popin', 'window_size': 80})
         self.save_import({'animations': {'windows': 'slide'}})
         self.apply('set', '--file', str(self.file))
-        self.assertEqual(state.read(self.path)['animations'], {'enabled': 'on', 'windows': 'slide'})
+        self.assertEqual(common.read(self.path)['animations'], {'enabled': 'on', 'windows': 'slide'})
 
     def test_failed_apply_restores_all_sections_and_leaves_import_untouched(self):
         self.directory.mkdir()
@@ -147,11 +147,11 @@ class DesktopStateTest(unittest.TestCase):
         self.run_desktop('transparency', 'set', '--focused', '5')
         self.run_desktop('transparency', 'set', '--window', 'browser', '--unfocused', '20')
         self.run_desktop('transparency', 'clear', '--window', 'browser')
-        self.assertEqual(state.read(self.path), {
+        self.assertEqual(common.read(self.path), {
             'gaps': {'inner': 6, 'outer': 10}, 'transparency': {'all': {'focused': 5}}})
         self.run_desktop('gaps', 'clear')
-        self.assertNotIn('gaps', state.read(self.path))
-        self.assertEqual(state.read(self.path)['transparency'], {'all': {'focused': 5}})
+        self.assertNotIn('gaps', common.read(self.path))
+        self.assertEqual(common.read(self.path)['transparency'], {'all': {'focused': 5}})
 
     def test_public_top_level_set_and_clear_include_wallpaper_only_when_clearing(self):
         self.directory.mkdir()
@@ -162,7 +162,7 @@ class DesktopStateTest(unittest.TestCase):
         self.assertEqual(wallpaper.read_text(), '/remembered/image.png\n')
         with patch.dict(os.environ, XDG_RUNTIME_DIR=str(self.root / 'runtime')):
             self.assertEqual(self.run_desktop('clear'), 0)
-            self.assertEqual(state.read(self.path), {})
+            self.assertEqual(common.read(self.path), {})
             self.assertFalse(wallpaper.exists())
             self.assertEqual(self.run_desktop('clear'), 0)
 

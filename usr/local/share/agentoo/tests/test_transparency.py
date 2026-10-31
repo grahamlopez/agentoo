@@ -93,10 +93,6 @@ class Transparency(unittest.TestCase):
     def args(self, **values):
         return argparse.Namespace(command='transparency', action='set', window='browser', focused=5, unfocused=None, **values)
 
-    @staticmethod
-    def write(path, value):
-        return path.write_bytes(value) if isinstance(value, bytes) else path.write_text(value)
-
     def test_reload_failure_restores_exact_saved_record(self):
         self.directory.mkdir(parents=True)
         path = self.directory / 'appearance.json'
@@ -105,21 +101,21 @@ class Transparency(unittest.TestCase):
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings', side_effect=[RuntimeError('reload failed'), None]) as call:
             with self.assertRaisesRegex(RuntimeError, 'reload failed'):
-                state.update(self.args(), self.directory, self.write)
+                state.update(self.args(), self.directory / 'appearance.json')
         self.assertEqual(path.read_text(), original)
         self.assertEqual(call.call_count, 2)
 
     def test_successful_save_and_full_reset_recover_corrupt_state(self):
         with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings'):
-            state.update(self.args(), self.directory, lambda path, text: path.write_text(text))
+            state.update(self.args(), self.directory / 'appearance.json')
         path = self.directory / 'appearance.json'
         self.assertEqual(json.loads(path.read_text()), {'transparency': {'browser': {'focused': 5}}})
         path.write_text(json.dumps({'transparency': {'bad': True}, 'gaps': {'inner': 4}}))
         args = argparse.Namespace(command='transparency', action='clear', window='all')
         with patch.object(transparency, 'require_integration') as require, \
              patch.object(effects, 'reload_settings'):
-            state.update(args, self.directory, lambda path, text: path.write_text(text))
+            state.update(args, self.directory / 'appearance.json')
         require.assert_called_once_with(recover=True)
         self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
 
@@ -131,7 +127,7 @@ class Transparency(unittest.TestCase):
         self.assertEqual(transparency.conflicts(), [str(rule) + ':2'])
         with patch.object(transparency, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting transparency rules'):
-                state.update(self.args(), self.directory, lambda path, text: path.write_text(text))
+                state.update(self.args(), self.directory / 'appearance.json')
         self.assertFalse(self.directory.exists())
 
     def test_kitty_background_only_focus_live_changes_and_reset(self):
@@ -152,7 +148,7 @@ class Transparency(unittest.TestCase):
                                            SimpleNamespace(id=3, os_window_id=12)],
                                call_remote_control=lambda window, args: calls.append((window.os_window_id, args)),
                                load_config_file=lambda: reloads.append(True))
-        watcher._state['read_state'] = lambda path: json.loads(json.dumps(data))
+        watcher.read_state = lambda path: json.loads(json.dumps(data))
         with patch.dict(sys.modules, {'kitty.fast_data_types': fast, 'kitty.utils': utils}):
             watcher.refresh(boss)
             self.assertEqual(len(calls), 2)  # One call per OS window, not per split/tab.
@@ -193,7 +189,14 @@ class Transparency(unittest.TestCase):
                 'original_path = list(sys.path); '
                 f'm = runpy.run_path({str(SHARE / "lib/kitty/transparency.py")!r}, run_name="agentoo_watcher_check"); '
                 'assert callable(m["on_load"]); '
-                'assert m["read_preferences"]() == {"all": {"focused": 30, "unfocused": 50}}; '
+                'assert m["read_state"](m["state_path"]()) == {"all": {"focused": 30, "unfocused": 50}}; '
+                'assert sys.path == original_path; '
+                'assert "desktop.state" not in sys.modules; '
+                'assert "desktop.effects" not in sys.modules; '
+                'assert "desktop.blur" not in sys.modules; '
+                'path = m["state_path"](); '
+                f'path.write_text({json.dumps({"transparency": {"kitty": {"focused": 0}}})!r}); '
+                'assert m["read_state"](path) == {"kitty": {"focused": 0}}; '
                 'assert sys.path == original_path; print("Watcher reads OK")')
         result = subprocess.run(['kitty', '+runpy', code], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)

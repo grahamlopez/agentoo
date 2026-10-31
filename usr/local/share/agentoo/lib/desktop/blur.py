@@ -15,7 +15,8 @@ import time
 sys.dont_write_bytecode = True
 if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.common import authored_hypr_paths, hyprctl, WINDOW_GROUPS as GROUPS
+from desktop.common import (authored_hypr_paths, effective, file_option, hyprctl, read,
+                            state_path, window_option, WINDOW_GROUPS as GROUPS)
 STATES = ('focused', 'unfocused')
 LIMITS = {'size': 40, 'passes': 10}
 
@@ -50,7 +51,6 @@ def add_parser(commands):
                '  agentoo desktop blur --window kitty\n'
                '  agentoo desktop blur set --window kitty --focused on\n'
                '  agentoo desktop blur clear --window kitty')
-    from desktop.state import file_option, window_option
     window_option(feature)
     feature.add_argument('--diagnose', action='store_true',
                          help='Show version, renderer/GPU, settings, compatibility and conflicts; makes no changes')
@@ -82,14 +82,8 @@ def validate(args, parser):
         parser.error('--size and --passes apply globally; use --window all')
 
 
-def state_path():
-    from desktop.state import state_path as shared_path
-    return shared_path()
-
-
 def read_state(path):
-    from desktop.state import section
-    return validate_data(section('blur', path))
+    return validate_data(read(path).get('blur', {}))
 
 
 def validate_data(data):
@@ -177,7 +171,7 @@ def show(data, selected, report=None):
     for group in GROUPS if selected == 'all' else (selected,):
         cells = []
         for focus in STATES:
-            value = data.get(group, {}).get(focus, data.get('all', {}).get(focus))
+            value = effective(data, group, focus)
             source = 'override' if focus in data.get(group, {}) else 'inherited: all'
             if value is None:
                 source = 'configured default'

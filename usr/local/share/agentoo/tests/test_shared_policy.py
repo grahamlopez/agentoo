@@ -13,7 +13,7 @@ from unittest.mock import patch
 LIB = Path(__file__).resolve().parents[1] / 'lib'
 sys.path.insert(0, str(LIB))
 import completion
-from desktop import blur, common, state, transparency, wallpaper
+from desktop import blur, common, transparency, wallpaper
 from xdg import xdg_directory
 
 
@@ -30,7 +30,7 @@ class SharedPolicyTests(unittest.TestCase):
                     expected = Path('/absolute') if value == '/absolute' else Path('/home/example') / fallback
                     self.assertEqual(xdg_directory(variable, fallback), expected)
                     if variable == 'XDG_STATE_HOME':
-                        self.assertEqual(state.state_path(), expected / 'agentoo/appearance.json')
+                        self.assertEqual(common.state_path(), expected / 'agentoo/appearance.json')
                         self.assertEqual(wallpaper.state_directory(), expected / 'agentoo')
 
     def test_fonts_config_and_output_cache(self):
@@ -53,7 +53,7 @@ class SharedPolicyTests(unittest.TestCase):
 
     def test_window_choices_and_validation_share_groups(self):
         parser = argparse.ArgumentParser()
-        state.window_option(parser)
+        common.window_option(parser)
         action = parser._option_string_actions['--window']
         self.assertIs(action.choices, common.WINDOW_GROUPS)
         self.assertIs(blur.GROUPS, common.WINDOW_GROUPS)

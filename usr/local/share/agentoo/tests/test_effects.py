@@ -17,7 +17,6 @@ SHARE = Path(__file__).resolve().parents[1]
 ROOT = SHARE.parents[3]
 sys.path.insert(0, str(SHARE / 'lib'))
 from desktop import effects
-from desktop import state
 
 spec = importlib.util.spec_from_loader('effects_desktop', importlib.machinery.SourceFileLoader(
     'effects_desktop', str(ROOT / 'usr/local/bin/agentoo-desktop')))
@@ -39,7 +38,7 @@ class EffectsTest(unittest.TestCase):
     def run_effect(self, *tokens):
         with contextlib.redirect_stderr(io.StringIO()), \
              patch.object(sys, 'argv', ['agentoo-desktop', *tokens]), \
-             patch.object(state, 'state_path', return_value=self.directory / 'appearance.json'):
+             patch.dict(os.environ, XDG_STATE_HOME=str(self.root)):
             return desktop.main()
 
     def test_help_completion_and_input_validation_need_no_session(self):

@@ -1,15 +1,54 @@
 """Small shared desktop helpers. Importing these performs no operations."""
+import argparse
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
-
 
 from xdg import xdg_directory
 
 # Keep categories aligned with /etc/xdg/hypr/window-classes.lua.
 # 'all' selects every category; it is not itself an application category.
 WINDOW_GROUPS = ('all', 'kitty', 'browser', 'other')
+
+
+def state_path():
+    return xdg_directory('XDG_STATE_HOME', '.local/state') / 'agentoo/appearance.json'
+
+
+def read_json(path):
+    try:
+        data = json.loads(path.read_text())
+    except (ValueError, OSError) as error:
+        raise RuntimeError(f'Cannot read appearance file {path}: {error}') from error
+    if not isinstance(data, dict):
+        raise RuntimeError(f'Appearance file {path} must contain a JSON object')
+    return data
+
+
+def read(path=None):
+    path = state_path() if path is None else Path(path)
+    return read_json(path) if path.exists() else {}
+
+
+def effective(data, group, focus):
+    return data.get(group, {}).get(focus, data.get('all', {}).get(focus))
+
+
+def file_option(parser, *, required=False):
+    parser.add_argument('--file', dest='appearance_file', metavar='FILE',
+                        required=required,
+                        help='Apply and remember supplied appearance settings from JSON; omitted settings stay unchanged').completion = 'files'
+
+
+def window_option(parser, *, child=False):
+    help_text = 'Window category (default: all). other excludes Kitty and browsers.'
+    if child:
+        help_text += ' --window may also be supplied before the action.'
+    parser.add_argument('--window', choices=WINDOW_GROUPS,
+                        default=argparse.SUPPRESS if child else 'all',
+                        help=help_text)
 
 
 def authored_hypr_paths():

@@ -119,8 +119,8 @@ class Blur(unittest.TestCase):
         path.write_text(json.dumps({'transparency': {'all': {'focused': 15, 'unfocused': 25}}}))
         with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved') as reload:
-            state.update(self.args(size=3, passes=1), self.directory, self.write)
-            state.update(self.args(window='kitty', focused='on'), self.directory, self.write)
+            state.update(self.args(size=3, passes=1), self.directory / 'appearance.json')
+            state.update(self.args(window='kitty', focused='on'), self.directory / 'appearance.json')
         data = blur.read_state(path)
         self.assertEqual(data, {'strength': {'size': 3, 'passes': 1}, 'kitty': {'focused': True}})
         reload.assert_called_with(data)
@@ -132,7 +132,7 @@ class Blur(unittest.TestCase):
                  patch.object(blur, 'conflicts', return_value=[]), \
                  patch.object(blur, 'reload_saved', return_value=self.report(**{'option.enabled': enabled})), \
                  redirect_stderr(io.StringIO()) as messages:
-                self.assertEqual(state.update(self.args(size=10, passes=3), self.directory, self.write), 0)
+                self.assertEqual(state.update(self.args(size=10, passes=3), self.directory / 'appearance.json'), 0)
             self.assertIn('Blur strength saved.', messages.getvalue())
             if enabled == 'off':
                 self.assertIn('Blur remains off', messages.getvalue())
@@ -151,7 +151,7 @@ class Blur(unittest.TestCase):
              patch.object(blur, 'reload_saved', side_effect=RuntimeError('bad reload')), \
              patch.object(effects, 'reload_settings') as command:
             with self.assertRaisesRegex(RuntimeError, 'bad reload'):
-                state.update(self.args(focused='on'), self.directory, self.write)
+                state.update(self.args(focused='on'), self.directory / 'appearance.json')
         self.assertEqual(path.read_bytes(), original)
         command.assert_called_once_with()
 
@@ -160,7 +160,7 @@ class Blur(unittest.TestCase):
         path = self.directory / 'appearance.json'
         path.write_text(json.dumps({'blur': {'bad': True}, 'gaps': {'inner': 4}}))
         with patch.object(blur, 'require_integration') as require, patch.object(blur, 'reload_saved') as reload:
-            state.update(self.args(action='clear'), self.directory, self.write)
+            state.update(self.args(action='clear'), self.directory / 'appearance.json')
         require.assert_called_once_with(recover=True)
         reload.assert_called_once_with({})
         self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
@@ -174,22 +174,22 @@ class Blur(unittest.TestCase):
         self.assertEqual(blur.conflicts(), [str(source) + ':3'])
         with patch.object(blur, 'require_integration'):
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
-                state.update(self.args(focused='on'), self.directory, self.write)
+                state.update(self.args(focused='on'), self.directory / 'appearance.json')
         self.assertFalse((self.directory / 'appearance.json').exists())
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'):
-            state.update(self.args(action='clear'), self.directory, self.write)
+            state.update(self.args(action='clear'), self.directory / 'appearance.json')
 
     def test_strength_only_and_category_reset_use_the_same_conflict_policy_as_config_loading(self):
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'), \
              patch.object(blur, 'conflicts', return_value=['authored.lua:2']):
-            state.update(self.args(size=3), self.directory, self.write)
+            state.update(self.args(size=3), self.directory / 'appearance.json')
             self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
             with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
                 blur.check_conflicts({'kitty': {'focused': True}})
             blur.check_conflicts({})
             blur.check_conflicts({'strength': {'size': 3}})
             self.write(self.directory / 'appearance.json', json.dumps({'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}}}))
-            state.update(self.args(window='kitty', action='clear'), self.directory, self.write)
+            state.update(self.args(window='kitty', action='clear'), self.directory / 'appearance.json')
             self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
 
     def test_queries_show_sources_without_creating_state(self):
