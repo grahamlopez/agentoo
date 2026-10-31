@@ -509,6 +509,41 @@ sign in independently and that unmerge removes package files while preserving
 user data. Native Wayland has upstream limitations around focus, floating
 windows, positioning, and shortcuts.
 
+## ThinkRail
+
+`dev-util/thinkrail-bin` installs the official ThinkRail desktop app under
+`/opt/thinkrail`, with a `thinkrail` command and application-menu entry. It
+includes the agent engine and Bun runtime and uses Gentoo's GTK 3 and
+WebKitGTK 4.1. No separate Bun, Node.js, or pi installation is required.
+The standalone browser CLI is not installed by this package.
+
+```sh
+emerge --ask dev-util/thinkrail-bin::agentoo
+thinkrail
+```
+
+Run as your normal user and connect a model provider in the app. Upstream's
+settings, credentials, and projects remain user-managed (`~/.thinkrail` and
+the existing pi configuration by default). Portage owns application updates;
+the package clears the desktop update feed to disable native self-updates.
+Unmerging preserves user data. This package is optional, with testing keywords
+accepted by Agentoo's common keyword configuration; no package set selects it.
+
+For version bumps, use the pinned `stable-linux-*-ThinkRail-VERSION.tar.zst`
+payloads from the [upstream release](https://github.com/JetBrains/thinkrail/releases),
+verify both against `SHA256SUMS`, inspect ELF and dynamically loaded library
+requirements, and regenerate the Manifest. Never run the vendor installer.
+Recheck the launcher, desktop identity, embedded Bun version and license,
+and update enablement before changing the recipe.
+
+Initial 0.3.0 validation checked publisher SHA-256 hashes for both architectures,
+Portage unpack through staged installation, amd64 dependency resolution,
+desktop-entry validation, and the disabled update feed. Install-phase QA reports
+the declared WebKitGTK/AppIndicator libraries absent on the build host, and
+arm64 libraries absent when staging that payload on amd64. Desktop launch,
+provider sign-in, terminal operation, and arm64 runtime operation still need
+testing on a target system.
+
 ## Nerd Fonts
 
 Five `media-fonts/*-nerd` packages provide Ubuntu Sans Mono, Ubuntu Mono,

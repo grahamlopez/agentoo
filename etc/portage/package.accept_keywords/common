@@ -5,6 +5,9 @@ dev-util/codex-cli-deps::agentoo ~amd64 ~arm64
 dev-util/claude-code-deps::agentoo ~amd64 ~arm64
 dev-util/pi-coding-agent-deps::agentoo ~amd64 ~arm64
 
+# Optional ThinkRail desktop IDE; not selected by a package set.
+dev-util/thinkrail-bin::agentoo ~amd64 ~arm64
+
 # System-wide keyboard remapping daemon and its IPC access group.
 app-misc/keyd::agentoo ~amd64 ~arm64
 acct-group/keyd::agentoo ~amd64 ~arm64

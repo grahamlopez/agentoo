@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <upstream>
+    <remote-id type="github">JetBrains/thinkrail</remote-id>
+  </upstream>
+  <longdescription>
+    Official ThinkRail desktop binary with its embedded agent engine and
+    WebKitGTK interface. Portage manages application files and updates;
+    provider credentials, projects, and user settings remain user-managed.
+  </longdescription>
+</pkgmetadata>
