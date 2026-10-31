@@ -61,6 +61,11 @@ def main():
                           str(Path(__file__).resolve()), *args])
     if parsed.operation == 'enable-write':
         subprocess.run(git_command(['remote', 'set-url', 'origin', SSH_REMOTE]), check=True)
+        # Secrets may have installed a separate HTTPS push URL. Remove it so
+        # native Git inherits the SSH fetch URL for pushes too.
+        result = subprocess.run(git_command(['config', '--unset-all', 'remote.origin.pushurl']))
+        if result.returncode not in (0, 5):  # 5: no push override was present.
+            raise subprocess.CalledProcessError(result.returncode, result.args)
         print(f'origin now uses SSH for fetch and push: {SSH_REMOTE}', file=sys.stderr)
     else:
         top = subprocess.run(git_command(['rev-parse', '--show-toplevel']), check=True,
