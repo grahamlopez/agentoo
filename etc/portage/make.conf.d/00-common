@@ -1,8 +1,4 @@
 COMMON_FLAGS="-O2 -pipe"
-CFLAGS="${COMMON_FLAGS}"
-CXXFLAGS="${COMMON_FLAGS}"
-FCFLAGS="${COMMON_FLAGS}"
-FFLAGS="${COMMON_FLAGS}"
 
 # Keep build output in English so diagnostics and bug reports are reproducible.
 LC_MESSAGES=C.utf8

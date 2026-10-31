@@ -29,8 +29,9 @@ It writes `/etc/agentoo/target-host`, containing the Portage-compatible assignme
 `GENTOO_TARGET_HOST="qemu"`, for example. This file is intentionally untracked
 local state because its value differs between installations. Portage's
 `/etc/portage/make.conf` sources `/etc/portage/make.conf.d/00-common`, this
-selector, then `/etc/portage/make.conf.d/90-${GENTOO_TARGET_HOST}`. All host
-fragments remain visible on every host.
+selector, then `/etc/portage/make.conf.d/90-${GENTOO_TARGET_HOST}`. It derives
+`CFLAGS`, `CXXFLAGS`, `FCFLAGS` and `FFLAGS` from the selected `COMMON_FLAGS`
+afterward. All host fragments remain visible on every host.
 
 Use one double-quoted assignment, with no spaces around `=`. Host names start
 with an ASCII letter or digit and contain only letters, digits, `_`, and `-`.

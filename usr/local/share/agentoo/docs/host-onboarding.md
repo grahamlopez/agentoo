@@ -10,10 +10,11 @@ configuration support only; installation and hardware acceptance are separate.
   `valid_target_host()` and update every supported-name list in help and errors
   (including internal dispatch validation). Hostname alone does not select policy.
 - [ ] **`etc/portage/make.conf.d/90-<host>`** — add the selected Portage fragment.
-  Set only justified differences: `COMMON_FLAGS` and language flags,
-  `RUSTFLAGS`, `VIDEO_CARDS`, `PORTAGE_TMPDIR` and `MAKEOPTS`. An empty/comment-only
-  fragment is valid when common defaults suffice. `etc/portage/make.conf`
-  already sources this path dynamically; it needs no host-specific edit.
+  Set only justified differences: `COMMON_FLAGS`, `RUSTFLAGS`, `VIDEO_CARDS`,
+  `PORTAGE_TMPDIR` and `MAKEOPTS`. `etc/portage/make.conf` derives C/C++/Fortran
+  flags from `COMMON_FLAGS` after sourcing this fragment. An empty/comment-only
+  fragment is valid when common defaults suffice. The path is sourced dynamically;
+  `etc/portage/make.conf` needs no host-specific edit.
 - [ ] **`usr/local/share/agentoo/tests/test_installer.py`** — extend the accepted
   target list in `test_supported_targets_validate` and add coverage for any new
   installer behavior. Existing generic host loaders need no new name registry.
