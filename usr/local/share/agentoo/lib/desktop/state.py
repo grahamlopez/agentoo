@@ -6,7 +6,8 @@ from pathlib import Path
 import sys
 
 from desktop import blur, effects, transparency
-from desktop.common import atomic_write, effective, read, read_json
+from desktop.common import (atomic_write, effective, read, read_json,
+                            window_rule_conflicts, WINDOW_GROUPS)
 
 SECTIONS = ('transparency', 'blur', *effects.COMMANDS)
 
@@ -46,8 +47,6 @@ def update(args, path, parser=None):
     values = effects.validate(args, parser) if not clearing and file is None and command in effects.COMMANDS else None
     if 'transparency' in changed:
         transparency.require_integration(recover=clearing and args.window == 'all')
-        if not clearing and transparency.conflicts():
-            raise RuntimeError('Conflicting transparency rules; edit them before adjusting')
     if 'blur' in changed:
         blur.require_integration(recover=clearing and args.window == 'all')
     if changed & set(effects.COMMANDS):
@@ -92,8 +91,11 @@ def update(args, path, parser=None):
                 else:
                     data[command] = {**data.get(command, {}), **values}
             data = validate_sections(data)
-            if 'blur' in changed:
-                blur.check_conflicts(data.get('blur', {}))
+            for feature in ('transparency', 'blur'):
+                if feature in changed and any(data.get(feature, {}).get(group) for group in WINDOW_GROUPS):
+                    found = window_rule_conflicts(feature)
+                    if found:
+                        raise RuntimeError(f'Conflicting {feature} window rules; edit and reload authored configuration before adjusting:\n' + '\n'.join(found))
             if 'transparency' in changed:
                 selected = data.get('transparency', {})
                 if any(effective(selected, 'kitty', focus) is not None for focus in transparency.STATES):

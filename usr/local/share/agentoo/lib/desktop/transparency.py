@@ -7,14 +7,13 @@ import argparse
 import json
 import math
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
 sys.dont_write_bytecode = True
 if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.common import (authored_hypr_paths, effective, hyprctl, read, state_path,
+from desktop.common import (window_rule_conflicts, effective, hyprctl, read, state_path,
                             WINDOW_GROUPS as GROUPS)
 STATES = ('focused', 'unfocused')
 
@@ -55,19 +54,6 @@ def adjusted(data, group, focused=None, unfocused=None):
             for child in GROUPS[1:]:
                 data.get(child, {}).pop(focus, None)
     return {key: values for key, values in data.items() if values}
-
-
-def conflicts():
-    # Conservative inspection, not a Lua evaluator. Never modify authored files.
-    # Includes anywhere beneath these roots are covered; opaque/dynamic includes
-    # outside them require manual inspection (documented).
-    found = []
-    for path in authored_hypr_paths():
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            line = re.split(r'--|#', line, maxsplit=1)[0]
-            if re.search(r'\b(opacity|opaque|force_rgbx)\s*[= ]', line):
-                found.append(f'{path}:{number}')
-    return found
 
 
 def require_integration(recover=False):
@@ -124,14 +110,13 @@ def show(data, selected):
             cells.append(f'{value:g}% ({source})' if value is not None else source)
         print(f'{group:<10} {cells[0]:<32} {cells[1]}')
     print('Kitty: background only. Other windows: whole window.')
-    for location in conflicts():
-        print(f'agentoo desktop: warning: transparency rule may conflict: {location}', file=sys.stderr)
+    if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
+        for location in window_rule_conflicts('transparency'):
+            print(f'agentoo desktop: warning: transparency rule may conflict: {location}', file=sys.stderr)
 
 
 def rules():
     data = read_state(state_path())
-    if data and conflicts():
-        raise RuntimeError('Conflicting authored transparency rules; saved overrides were not applied')
     for group in GROUPS:
         for focus in STATES:
             value = effective(data, group, focus)

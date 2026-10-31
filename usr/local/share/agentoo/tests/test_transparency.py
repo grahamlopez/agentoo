@@ -31,6 +31,10 @@ class Transparency(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
         self.directory = self.root / 'state/agentoo'
+        for module in (state, transparency):
+            manager = patch.object(module, 'window_rule_conflicts', return_value=[])
+            manager.start()
+            self.addCleanup(manager.stop)
 
     def test_independent_states_and_shared_override_precedence(self):
         original = {'all': {'focused': 5, 'unfocused': 10},
@@ -73,7 +77,7 @@ class Transparency(unittest.TestCase):
         data = {'all': {'focused': 5}, 'kitty': {'unfocused': 20}}
         with patch.object(transparency, 'hyprctl', return_value='{"float": 0.9}'), \
              patch.object(transparency, 'kitty_defaults', return_value=[0.8, True, []]), \
-             patch.object(transparency, 'conflicts', return_value=[]), redirect_stdout(io.StringIO()) as output:
+             patch.object(state, 'window_rule_conflicts', return_value=[]), redirect_stdout(io.StringIO()) as output:
             transparency.show(data, 'all')
         self.assertIn('5% (inherited: all)', output.getvalue())
         self.assertIn('20% (override)', output.getvalue())
@@ -98,7 +102,7 @@ class Transparency(unittest.TestCase):
         path = self.directory / 'appearance.json'
         original = '{"transparency": {"browser": {"focused": 12}}}\n'
         path.write_text(original)
-        with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
+        with patch.object(transparency, 'require_integration'), patch.object(state, 'window_rule_conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings', side_effect=[RuntimeError('reload failed'), None]) as call:
             with self.assertRaisesRegex(RuntimeError, 'reload failed'):
                 state.update(self.args(), self.directory / 'appearance.json')
@@ -106,7 +110,7 @@ class Transparency(unittest.TestCase):
         self.assertEqual(call.call_count, 2)
 
     def test_successful_save_and_full_reset_recover_corrupt_state(self):
-        with patch.object(transparency, 'require_integration'), patch.object(transparency, 'conflicts', return_value=[]), \
+        with patch.object(transparency, 'require_integration'), patch.object(state, 'window_rule_conflicts', return_value=[]), \
              patch.object(effects, 'reload_settings'):
             state.update(self.args(), self.directory / 'appearance.json')
         path = self.directory / 'appearance.json'
@@ -119,16 +123,15 @@ class Transparency(unittest.TestCase):
         require.assert_called_once_with(recover=True)
         self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
 
-    def test_authored_rule_conflict_prevents_any_saved_change(self):
-        folder = self.root / 'config/hypr'
-        folder.mkdir(parents=True)
-        rule = folder / 'agentoo-local.lua'
-        rule.write_text('-- opacity = "comment"\nhl.window_rule({opacity = "0.8"})\n')
-        self.assertEqual(transparency.conflicts(), [str(rule) + ':2'])
-        with patch.object(transparency, 'require_integration'):
-            with self.assertRaisesRegex(RuntimeError, 'Conflicting transparency rules'):
+    def test_active_rule_conflict_prevents_any_saved_change(self):
+        with patch.object(transparency, 'require_integration'), \
+             patch.object(state, 'window_rule_conflicts', return_value=['/outside/rules.lua:2']), \
+             patch.object(effects, 'reload_settings') as reload:
+            with self.assertRaisesRegex(RuntimeError, 'Conflicting transparency window rules.*') as error:
                 state.update(self.args(), self.directory / 'appearance.json')
-        self.assertFalse(self.directory.exists())
+        self.assertIn('/outside/rules.lua:2', str(error.exception))
+        self.assertFalse((self.directory / 'appearance.json').exists())
+        reload.assert_not_called()
 
     def test_kitty_background_only_focus_live_changes_and_reset(self):
         spec = importlib.util.spec_from_file_location('agentoo_kitty_transparency', SHARE / 'lib/kitty/transparency.py')
@@ -174,7 +177,8 @@ class Transparency(unittest.TestCase):
         module = self.root / 'transparency.lua'
         module.write_text((repository / 'etc/xdg/hypr/transparency.lua').read_text().replace(
             '/usr/local/share/agentoo/lib/desktop/transparency.py', str(SHARE / 'lib/desktop/transparency.py')).replace(
-            '/etc/xdg/hypr/window-classes.lua', str(repository / 'etc/xdg/hypr/window-classes.lua')))
+            '/etc/xdg/hypr/window-classes.lua', str(repository / 'etc/xdg/hypr/window-classes.lua')).replace(
+            '/etc/xdg/hypr/appearance-rules.lua', str(repository / 'etc/xdg/hypr/appearance-rules.lua')))
         config = self.root / 'hyprland.lua'
         config.write_text('dofile(' + json.dumps(str(module)) + ')\n')
         result = subprocess.run(['Hyprland', '--verify-config', '--config', str(config)],

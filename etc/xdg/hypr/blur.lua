@@ -1,5 +1,6 @@
 -- Remembered blur preferences follow authored configuration. No daemon, timer,
 -- driver tweaks, or opacity changes: native focus rules select window blur.
+local appearance = require("/etc/xdg/hypr/appearance-rules.lua")
 agentoo_blur_report = nil
 local function on(value) return value == true or value == 1 end
 local baseline = on(hl.get_config("decoration.blur.enabled"))
@@ -46,6 +47,7 @@ local function resolve(group, focus)
     return baseline
 end
 if managed then
+    appearance.check("blur")
     local engine = false
     -- Install all, then category rules: the last match takes precedence.
     -- Resolve omitted states against the original engine setting, rather than
@@ -54,7 +56,7 @@ if managed then
         for _, focus in ipairs({ "focused", "unfocused" }) do
             local enabled = resolve(group, focus)
             if group ~= "all" then engine = engine or enabled end
-            hl.window_rule({
+            appearance.window_rule({
                 name = "agentoo-blur-" .. group .. "-" .. focus,
                 match = { class = classes[group], focus = focus == "focused" },
                 no_blur = not enabled,

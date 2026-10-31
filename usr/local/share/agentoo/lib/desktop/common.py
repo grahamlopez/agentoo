@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import subprocess
 
-from host_selection import SELECTOR, read_host
 from xdg import xdg_directory
 
 # Keep categories aligned with /etc/xdg/hypr/window-classes.lua.
@@ -51,21 +50,12 @@ def window_option(parser, *, child=False):
                         help=help_text)
 
 
-def authored_hypr_paths():
-    paths = []
-    try:
-        selected = read_host(SELECTOR)
-    except FileNotFoundError:
-        pass
-    else:
-        host = Path('/etc/xdg/hypr/hosts') / (selected + '.lua')
-        if host.is_file():
-            paths.append(host)
-    root = xdg_directory('XDG_CONFIG_HOME', '.config') / 'hypr'
-    if root.exists():
-        paths.extend(path for path in sorted(root.rglob('*'))
-                     if path.suffix in ('.lua', '.conf') and path.is_file())
-    return paths
+def window_rule_conflicts(feature):
+    report = hyprctl('repl', 'return agentoo_window_rule_conflicts and '
+                     f'agentoo_window_rule_conflicts("{feature}") or "unavailable"')
+    if report == 'unavailable':
+        raise RuntimeError('Load the shared Agentoo appearance-rules.lua integration before adjusting appearance')
+    return report.splitlines()
 
 
 def hyprctl(*arguments, timeout=10):

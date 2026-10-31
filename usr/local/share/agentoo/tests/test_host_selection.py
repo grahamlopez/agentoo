@@ -14,7 +14,6 @@ SHARE = Path(__file__).resolve().parents[1]
 LIB = SHARE / 'lib'
 ROOT = SHARE.parents[3]
 sys.path.insert(0, str(LIB))
-from desktop import common
 import kernel_host
 from host_selection import read_host
 
@@ -42,7 +41,6 @@ class HostSelectionTests(unittest.TestCase):
 
     def test_python_consumers_agree_on_valid_and_malformed_assignments(self):
         with patch.object(kernel_host, 'SELECTOR', self.selector), \
-             patch.object(common, 'SELECTOR', self.selector), \
              patch.dict(os.environ, XDG_CONFIG_HOME=str(self.root)):
             for contents in VALID:
                 self.selector.write_text(contents)
@@ -50,27 +48,23 @@ class HostSelectionTests(unittest.TestCase):
                     self.assertEqual(read_host(self.selector), 'test-host_2')
                     self.assertEqual(kernel_host.selected_host(), 'test-host_2')
                     self.assertEqual(kitty.host_config(self.selector, self.hosts), 'font_size 10\n')
-                    self.assertEqual(common.authored_hypr_paths(), [])
             for contents in INVALID:
                 self.selector.write_text(contents)
                 for read in (lambda: read_host(self.selector), kernel_host.selected_host,
-                             lambda: kitty.host_config(self.selector, self.hosts), common.authored_hypr_paths):
+                             lambda: kitty.host_config(self.selector, self.hosts)):
                     with self.subTest(contents=contents), self.assertRaises(ValueError):
                         read()
 
     def test_missing_selector_and_profiles_retain_each_consumers_policy(self):
         with patch.object(kernel_host, 'SELECTOR', self.selector), \
              patch.object(kernel_host, 'HOSTS', self.hosts), \
-             patch.object(common, 'SELECTOR', self.selector), \
              patch.dict(os.environ, XDG_CONFIG_HOME=str(self.root)):
             self.assertEqual(kitty.host_config(self.selector, self.hosts), '')
-            self.assertEqual(common.authored_hypr_paths(), [])
             with self.assertRaises(FileNotFoundError):
                 kernel_host.selected_host()
             self.assertEqual(kernel_host.selected_host('test-host_2'), 'test-host_2')
             self.selector.write_text('GENTOO_TARGET_HOST="missing"\n')
             self.assertEqual(kitty.host_config(self.selector, self.hosts), '')
-            self.assertEqual(common.authored_hypr_paths(), [])
             with self.assertRaisesRegex(RuntimeError, 'no kernel profile'):
                 kernel_host.read_profile()
 

@@ -129,14 +129,22 @@ recognized by the compositor. Browser classes include Firefox, Chromium,
 Chrome, Brave, Edge, Vivaldi, Opera, LibreWolf, Floorp, and Zen. Custom application
 classes require extending the shared class expressions in `window-classes.lua`.
 
-Authored window opacity/opaque/force_rgbx rules in the personal Hyprland config
-tree and selected host file cause adjustments to fail with file/line locations;
-they are never rewritten. Queries warn about them. This scan is conservative:
-unused files in the personal tree may be reported, while dynamically constructed
-Lua or includes outside those locations require manual inspection. Decoration
-opacity settings and Kitty `background_opacity` are underlying defaults, not
-conflicts. A full reset remains available even with conflicting rules or a
-damaged state file. Separate sessions share the saved choice; a different
+Enabled authored `opacity`, `opaque`, or `force_rgbx` window rules cause managed
+transparency adjustments to fail, reporting the Lua callsite when available.
+Hyprland records executed `hl.window_rule` calls, including constructed rules,
+host/personal includes outside the config tree, and later callback declarations.
+Unused backups, inactive branches, and disabled rules do not block adjustments.
+Queries report this session's active declarations; after editing authored rules,
+reload Hyprland before retrying. Authored files are never rewritten.
+
+Saved transparency owns the category/focus window rules it installs; resolve
+competing authored window effects or clear the saved overrides. Conflict checks
+identify competing properties without trying to prove whether class matchers
+overlap. Decoration opacity and Kitty `background_opacity` remain underlying
+defaults. A full reset, or a category reset removing the last managed window
+rule, remains available with conflicting authored rules or a malformed
+transparency section. Malformed JSON requires repairing the shared file.
+Separate sessions share the saved choice; a different
 already-running Hyprland session picks it up on its next configuration reload.
 
 Verification: run `python3 -m unittest discover -s usr/local/share/agentoo/tests
@@ -212,15 +220,20 @@ share choices; another existing session adopts them on its next reload. A full
 reset can recover a malformed blur section or a conflicting-rule config error;
 malformed JSON itself requires repairing the shared file.
 
-Authored `no_blur`, `noblur`, `opaque`, and `force_rgbx` rules in the selected
-host file or personal Hyprland config tree are conservatively reported with
-file/line locations. The same conflict policy is used before saving and during
-configuration loading: conflicts block changes whose resulting state contains
-managed window rules. Strength-only state and a reset that removes the last
-managed window rule remain usable. Defaults such as `blur.size` and
-`blur.enabled` are retained rather than treated as conflicts. The scan cannot
-evaluate arbitrary Lua or includes outside those locations; unused personal
-files may also be flagged. No authored file is rewritten.
+Enabled authored `no_blur`, `opaque`, and `force_rgbx` window rules use the same
+active-declaration checks described for transparency. The CLI checks the running
+session before saving; configuration loading checks the declarations it has just
+executed. A conflict blocks changes whose resulting state contains managed blur
+window rules. Strength-only state and a reset removing the last managed window
+rule remain usable. Defaults such as `blur.size` and `blur.enabled` stay in
+effect and do not conflict. No authored file is rewritten.
+
+The shared entry file loads `appearance-rules.lua` before defaults, host, and
+personal configuration. It retains native rule handles for enable/disable checks
+and source locations for diagnostics; it does not copy rule definitions or parse
+Lua in Python. Managed blur/transparency rules use its native setter directly
+so they do not report themselves as conflicts. After deploying this integration,
+reload the shared Hyprland configuration before using appearance adjustments.
 
 Queries show saved preferences, inheritance, and defaults captured before the
 managed settings were applied. They separately report whether the saved revision

@@ -12,6 +12,7 @@ end
 
 -- Hyprland discovers this system fallback without a user entry file.
 -- require() tracks included files for reload in the selected release.
+require("/etc/xdg/hypr/appearance-rules.lua")
 require("/etc/xdg/hypr/agentoo.lua")
 
 local function include_optional(path)

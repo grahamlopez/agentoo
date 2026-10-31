@@ -1,11 +1,13 @@
 -- Loaded after host/personal settings. JSON remains the only saved authority.
 -- The helper emits group/state/percentage records, never executable Lua.
+local appearance = require("/etc/xdg/hypr/appearance-rules.lua")
 local stream = assert(io.popen("python3 /usr/local/share/agentoo/lib/desktop/transparency.py rules", "r"))
 local contents = stream:read("*a")
 -- Hyprland's SIGCHLD handler can reap popen's child before pclose, which then
 -- reports ECHILD even for a successful helper. Require its completion record.
 stream:close()
 assert(contents:sub(-4) == "end\n", "Cannot load Agentoo transparency state; see session stderr")
+if contents ~= "end\n" then appearance.check("transparency") end
 
 local families = require("/etc/xdg/hypr/window-classes.lua")
 local classes = { all = "negative:" .. families.kitty, kitty = families.kitty, browser = families.browser, other = families.other }
@@ -16,7 +18,7 @@ for group, state, raw in contents:gmatch("(%a+)\t(%a+)\t([^\n]+)\n") do
     -- changing the omitted focus state's authored rules or decoration default.
     -- Kitty itself controls background opacity; keep its text fully opaque.
     local opacity = group == "kitty" and 1 or (1 - value / 100)
-    hl.window_rule({
+    appearance.window_rule({
         name = "agentoo-transparency-" .. group .. "-" .. state,
         match = { class = classes[group], focus = state == "focused" },
         opacity = string.format("%.8f override", opacity),

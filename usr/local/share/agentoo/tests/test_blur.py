@@ -25,6 +25,10 @@ class Blur(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.directory = self.root / 'state/agentoo'
+        for module in (state, blur):
+            manager = patch.object(module, 'window_rule_conflicts', return_value=[])
+            manager.start()
+            self.addCleanup(manager.stop)
         self.env = patch.dict(os.environ, HOME=str(self.root), XDG_CONFIG_HOME=str(self.root / 'config'),
                               XDG_STATE_HOME=str(self.root / 'state'), HYPRLAND_INSTANCE_SIGNATURE='test')
         self.env.start()
@@ -117,7 +121,7 @@ class Blur(unittest.TestCase):
         self.directory.mkdir(parents=True)
         path = self.directory / 'appearance.json'
         path.write_text(json.dumps({'transparency': {'all': {'focused': 15, 'unfocused': 25}}}))
-        with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
+        with patch.object(blur, 'require_integration'), patch.object(state, 'window_rule_conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved') as reload:
             state.update(self.args(size=3, passes=1), self.directory / 'appearance.json')
             state.update(self.args(window='kitty', focused='on'), self.directory / 'appearance.json')
@@ -129,7 +133,7 @@ class Blur(unittest.TestCase):
     def test_strength_update_explains_when_blur_remains_off(self):
         for enabled in ('off', 'on'):
             with self.subTest(enabled=enabled), patch.object(blur, 'require_integration'), \
-                 patch.object(blur, 'conflicts', return_value=[]), \
+                 patch.object(state, 'window_rule_conflicts', return_value=[]), \
                  patch.object(blur, 'reload_saved', return_value=self.report(**{'option.enabled': enabled})), \
                  redirect_stderr(io.StringIO()) as messages:
                 self.assertEqual(state.update(self.args(size=10, passes=3), self.directory / 'appearance.json'), 0)
@@ -147,7 +151,7 @@ class Blur(unittest.TestCase):
         path = self.directory / 'appearance.json'
         original = b'{"blur": {"all": {"focused": false}}}\n'
         path.write_bytes(original)
-        with patch.object(blur, 'require_integration'), patch.object(blur, 'conflicts', return_value=[]), \
+        with patch.object(blur, 'require_integration'), patch.object(state, 'window_rule_conflicts', return_value=[]), \
              patch.object(blur, 'reload_saved', side_effect=RuntimeError('bad reload')), \
              patch.object(effects, 'reload_settings') as command:
             with self.assertRaisesRegex(RuntimeError, 'bad reload'):
@@ -165,36 +169,30 @@ class Blur(unittest.TestCase):
         reload.assert_called_once_with({})
         self.assertEqual(json.loads(path.read_text()), {'gaps': {'inner': 4}})
 
-    def test_authored_conflict_blocks_change_but_not_full_reset(self):
-        directory = self.root / 'config/hypr'
-        directory.mkdir(parents=True)
-        source = directory / 'agentoo-local.lua'
-        source.write_text('-- no_blur = true\nhl.config({decoration={blur={enabled=false,size=4}}})\n'
-                          'hl.window_rule({no_blur=true})\n')
-        self.assertEqual(blur.conflicts(), [str(source) + ':3'])
-        with patch.object(blur, 'require_integration'):
-            with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
+    def test_active_conflict_blocks_change_but_not_full_reset(self):
+        with patch.object(blur, 'require_integration'), \
+             patch.object(state, 'window_rule_conflicts', return_value=['/outside/rules.lua:3']):
+            with self.assertRaisesRegex(RuntimeError, 'Conflicting blur window rules'):
                 state.update(self.args(focused='on'), self.directory / 'appearance.json')
         self.assertFalse((self.directory / 'appearance.json').exists())
-        with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'):
+        with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'), \
+             patch.object(state, 'window_rule_conflicts', side_effect=AssertionError('reset queried conflicts')):
             state.update(self.args(action='clear'), self.directory / 'appearance.json')
 
     def test_strength_only_and_category_reset_use_the_same_conflict_policy_as_config_loading(self):
         with patch.object(blur, 'require_integration'), patch.object(blur, 'reload_saved'), \
-             patch.object(blur, 'conflicts', return_value=['authored.lua:2']):
+             patch.object(state, 'window_rule_conflicts', return_value=['authored.lua:2']):
             state.update(self.args(size=3), self.directory / 'appearance.json')
             self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
-            with self.assertRaisesRegex(RuntimeError, 'Conflicting blur rules'):
-                blur.check_conflicts({'kitty': {'focused': True}})
-            blur.check_conflicts({})
-            blur.check_conflicts({'strength': {'size': 3}})
+            with self.assertRaisesRegex(RuntimeError, 'Conflicting blur window rules'):
+                state.update(self.args(window='kitty', focused='on'), self.directory / 'appearance.json')
             self.write(self.directory / 'appearance.json', json.dumps({'blur': {'kitty': {'focused': True}, 'strength': {'size': 3}}}))
             state.update(self.args(window='kitty', action='clear'), self.directory / 'appearance.json')
             self.assertEqual(blur.read_state(self.directory / 'appearance.json'), {'strength': {'size': 3}})
 
     def test_queries_show_sources_without_creating_state(self):
         data = {'all': {'focused': True}, 'kitty': {'focused': False}, 'strength': {'passes': 2}}
-        with patch.object(blur, 'conflicts', return_value=[]), redirect_stdout(io.StringIO()) as output:
+        with patch.object(state, 'window_rule_conflicts', return_value=[]), redirect_stdout(io.StringIO()) as output:
             blur.show(data, 'all', self.report(data, **{'option.enabled': 'on'}))
         self.assertIn('off (override)', output.getvalue())
         self.assertIn('on (inherited: all)', output.getvalue())
@@ -309,7 +307,8 @@ class Blur(unittest.TestCase):
         module = self.root / 'blur.lua'
         module.write_text(source.read_text().replace('/usr/local/share/agentoo/lib/desktop/blur.py',
                                                    str(SHARE / 'lib/desktop/blur.py')).replace(
-            '/etc/xdg/hypr/window-classes.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/window-classes.lua')))
+            '/etc/xdg/hypr/window-classes.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/window-classes.lua')).replace(
+            '/etc/xdg/hypr/appearance-rules.lua', str(SHARE.parents[3] / 'etc/xdg/hypr/appearance-rules.lua')))
         for data, baseline, expected_engine in (
             ({}, False, False),
             ({'strength': {'size': 3, 'passes': 1}}, False, False),

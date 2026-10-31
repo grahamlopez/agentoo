@@ -40,9 +40,9 @@ class DesktopStateTest(unittest.TestCase):
             patch.dict(os.environ, XDG_STATE_HOME=str(self.root), HYPRLAND_INSTANCE_SIGNATURE='test'),
             patch.object(effects, 'hyprctl', return_value='ready'),
             patch.object(effects, 'reload_settings'),
-            patch.object(blur, 'require_integration'), patch.object(blur, 'check_conflicts'),
+            patch.object(blur, 'require_integration'),
             patch.object(blur, 'reload_saved'), patch.object(transparency, 'require_integration'),
-            patch.object(transparency, 'conflicts', return_value=[]),
+            patch.object(state, 'window_rule_conflicts', return_value=[]),
             patch.object(transparency, 'kitty_defaults', return_value=[1, True, [str(SHARE / 'lib/kitty/transparency.py')]]),
         ):
             manager.start()
@@ -123,6 +123,21 @@ class DesktopStateTest(unittest.TestCase):
             self.apply('set', '--file', str(self.file))
         self.assertEqual(self.path.read_bytes(), original)
         self.assertEqual(self.file.read_bytes(), imported)
+
+    def test_scoped_clear_blocks_only_while_managed_window_rules_remain(self):
+        self.directory.mkdir()
+        for feature, value in (('transparency', 5), ('blur', True)):
+            original = json.dumps({feature: {'all': {'focused': value}, 'browser': {'focused': value}}}) + '\n'
+            self.path.write_text(original)
+            with self.subTest(feature=feature), \
+                 patch.object(state, 'window_rule_conflicts', return_value=['/outside/rules.lua:2']), \
+                 self.assertRaisesRegex(RuntimeError, f'Conflicting {feature} window rules'):
+                self.apply(feature, 'clear', '--window', 'browser')
+            self.assertEqual(self.path.read_text(), original)
+            self.path.write_text(json.dumps({feature: {'browser': {'focused': value}}}))
+            with patch.object(state, 'window_rule_conflicts', side_effect=AssertionError('queried after last rule cleared')):
+                self.apply(feature, 'clear', '--window', 'browser')
+            self.assertEqual(common.read(self.path), {feature: {}})
 
     def test_file_argument_conflicts_help_and_completion_are_safe(self):
         entry = ROOT / 'usr/local/bin/agentoo'

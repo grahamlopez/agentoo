@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import sys
 from pathlib import Path
 import time
@@ -15,7 +14,7 @@ import time
 sys.dont_write_bytecode = True
 if __name__ == '__main__':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.common import (authored_hypr_paths, effective, file_option, hyprctl, read,
+from desktop.common import (window_rule_conflicts, effective, file_option, hyprctl, read,
                             state_path, window_option, WINDOW_GROUPS as GROUPS)
 STATES = ('focused', 'unfocused')
 LIMITS = {'size': 40, 'passes': 10}
@@ -124,30 +123,6 @@ def adjusted(data, args):
     return {key: values for key, values in data.items() if values}
 
 
-def conflicts():
-    # Scalar blur configuration is an authored default. Window-rule effects can
-    # compete with the managed rules; report rather than rewrite those files.
-    found = []
-    for path in authored_hypr_paths():
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            line = re.split(r'--|#', line, maxsplit=1)[0]
-            if re.search(r'\b(no_blur|noblur|force_rgbx|opaque)\s*[= ,]', line):
-                found.append(f'{path}:{number}')
-    return found
-
-
-def check_conflicts(data):
-    """Only saved window rules can compete with authored window effects.
-
-    Used before saving and when loading configuration. Strength-only state and
-    a full reset do not install window rules, so neither is blocked by them.
-    """
-    if any(data.get(group) for group in GROUPS):
-        found = conflicts()
-        if found:
-            raise RuntimeError('Conflicting blur rules; edit them before adjusting:\n' + '\n'.join(found))
-
-
 def live_report(*, timeout=10):
     result = hyprctl('repl', 'return agentoo_blur_report and agentoo_blur_report() or "unavailable"', timeout=timeout)
     report = {}
@@ -221,7 +196,7 @@ def diagnose(path, selected):
     system = read('Compositor system report', hyprctl, 'systeminfo')
     config_errors = read('Configuration errors', hyprctl, 'configerrors')
     classes = read('Open window classes', open_window_classes)
-    rule_conflicts = read('Potential conflicting rules', conflicts)
+    rule_conflicts = read('Active conflicting rules', window_rule_conflicts, 'blur')
 
     print('Blur diagnostics (read-only; no GPU load or power measurement)')
     if data is None:
@@ -235,7 +210,7 @@ def diagnose(path, selected):
     show_section('Compositor system report (includes version and GPU inventory)', system)
     show_section('Configuration errors', config_errors)
     show_section('Open window classes', classes)
-    show_section('Potential conflicting rules', None if rule_conflicts is None else '\n'.join(rule_conflicts))
+    show_section('Active conflicting rules', None if rule_conflicts is None else '\n'.join(rule_conflicts))
     print('\nClient blur regions and actual rendering are not verified by this API.')
     print('Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur')
     for error in errors:
@@ -294,14 +269,14 @@ def query(path, window):
     except RuntimeError:
         report = None
     show(data, window, report)
-    for location in conflicts():
-        print(f'agentoo desktop: warning: blur rule may conflict: {location}', file=sys.stderr)
+    if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
+        for location in window_rule_conflicts('blur'):
+            print(f'agentoo desktop: warning: blur rule may conflict: {location}', file=sys.stderr)
     return 0
 
 
 def rules():
     data = read_state(state_path())
-    check_conflicts(data)
     for group in GROUPS:
         for focus, value in data.get(group, {}).items():
             print(group, focus, 'on' if value else 'off', sep='\t')

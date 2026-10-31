@@ -8,6 +8,9 @@ local function run(records, baseline)
     local rules = {}
     local context = setmetatable({
         require = function(path)
+            if path == "/etc/xdg/hypr/appearance-rules.lua" then
+                return { window_rule = function(rule) rules[#rules + 1] = rule end, check = function() end }
+            end
             assert(path == "/etc/xdg/hypr/window-classes.lua")
             return dofile("etc/xdg/hypr/window-classes.lua")
         end,
