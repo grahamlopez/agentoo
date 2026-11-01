@@ -61,6 +61,13 @@ server accessed. No live editor, shell, desktop or tmux session was changed.
 
 ## Retained ideas and evidence
 
+User decision, 2026-11-01: restore the tmux and Neovim material removed by this
+cleanup. Those comments, experiments, and notes are intentionally preserved in
+the configuration files for future work. Both files were restored exactly to
+their pre-cleanup content, retaining the preceding functional fixes. Preserve
+that material in future edits; references to Git history are not a replacement
+for keeping it in the files. The Vim and Git-prompt changes were not reverted.
+
 Unselected editor ideas remain available in the original configuration history:
 native/Lua completion and diagnostics; undo/folding navigation and persistence;
 Markdown tables, previews/images, writing modes, links/PKM and theming. The old

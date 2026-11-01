@@ -41,6 +41,8 @@ release. Interrupted installation leaves artifacts for operator recovery, as
 described in the [kernel guide](../docs/kernel.md#install). The expert-workflow
 revision on 2026-11-01 removed the running-release prohibition and automatic
 rollback introduced by the initial review; card 036 records that decision.
+The same follow-up restored the intentionally preserved tmux and Neovim
+future-work comments and experiments; card 044 records that preservation policy.
 
 The first integrated batch passed 331 Python tests and all five then-existing
 Lua scripts without skips. The final combined suite passed 349 Python tests and
