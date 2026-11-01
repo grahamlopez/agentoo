@@ -18,12 +18,12 @@ Configuration design
 
 Code design
 
-- Keep code inline unless it is actually reused by multiple call sites. Extract
-  small helpers from repetition, not anticipated reuse; avoid frameworks and
-  abstractions for hypothetical needs.
-- Make the supported path direct and readable. Add features, validation, and
-  error handling for concrete requirements or failure risks, not speculative
-  edge cases. Preserve checks that prevent data loss or changes to the wrong target.
+- Keep procedures direct and readable. Use helpers for repeated logic or coherent
+  operations whose names make the caller easier to follow. Avoid trivial
+  forwarding wrappers and abstractions for hypothetical needs.
+- Add features, validation, and error handling for concrete requirements or failure
+  risks, not speculative edge cases. Preserve checks that prevent data loss or
+  changes to the wrong target.
 - Prefer a few consistent, composable mechanisms over special cases and new
   concepts. Prefer the simplest coherent solution over the smallest diff.
 - Agentoo is pre-alpha; backward compatibility is not a requirement. Change
