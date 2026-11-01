@@ -262,6 +262,91 @@ def select_dell_usb(command, value):
     return name, active
 
 
+def run_layout(command, value, *, target=None, secondary=None):
+    """Query or change the video layout while preserving the USB target."""
+    original_kvm = None
+    if value is not None:
+        original_kvm, active = select_dell_usb(command, None)
+        if original_kvm == 'unknown':
+            raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no layout or input write sent')
+    if target == 'active_kvm':
+        target = original_kvm
+    secondary_raw = secondary_value(secondary) if secondary is not None else None
+    if value is not None:
+        expected = DELL_LAYOUTS['off' if value == '100' else value]
+        write_switch(command, 'E9', expected)
+        wait_for_feature(command, 'E9', expected)
+        if target is not None:
+            try:
+                write_switch(command, '60', main_value(target))
+                wait_for_feature(command, '60', main_value(target))
+            except RuntimeError as error:
+                raise RuntimeError(f'Layout {value if value != "100" else "off"} confirmed, but input {target} was not confirmed: {error}') from None
+        if secondary_raw is not None:
+            try:
+                write_switch(command, 'E8', secondary_raw)
+                wait_for_feature(command, 'E8', secondary_raw)
+            except RuntimeError as error:
+                raise RuntimeError(f'Layout {value} and requested main input confirmed, but secondary input {secondary} was not confirmed: {error}') from None
+        try:
+            select_dell_usb(command, original_kvm)
+        except RuntimeError as error:
+            raise RuntimeError(f'Layout and requested video inputs confirmed, but KVM target {original_kvm} could not be preserved: {error}') from None
+    else:
+        expected = read_feature(command, 'E9')
+    name = next((name for name, value in DELL_LAYOUTS.items() if value == expected), 'unknown')
+    print(f'{name} (0x{expected:02X})')
+    if target is not None:
+        print(f'input {target} (0x{main_value(target):02X})')
+    if secondary_raw is not None:
+        print(f'sub-input {secondary} (0x{secondary_raw:04X})')
+    if original_kvm is not None:
+        print(f'kvm {original_kvm} (preserved)')
+
+
+def run_volume(command, value):
+    """Query or change volume while preserving the Speaker Off state."""
+    raw = read_feature(command, '62')
+    current = raw & 0x7F
+    speaker_off = bool(raw & 0x80)
+    if raw & ~0xFF or current > 100:
+        raise RuntimeError(f'Unexpected Dell volume encoding: 0x{raw:04X}; no volume write sent')
+    target = current
+    if value is not None:
+        if value in ('up', 'down'):
+            target = max(0, min(100, current + (5 if value == 'up' else -5)))
+        else:
+            target = int(value)
+        if target != current:
+            # Dell ignores the mute flag on volume writes and ordinary levels
+            # enable its speakers. Restore the previous Off state in the same
+            # invocation. This cannot promise there is no brief unmuted interval.
+            change = [*command, 'setvcp', '62', str(target)]
+            if speaker_off:
+                change += ['8D', str(DELL_SPEAKER_VALUES['off'])]
+            change += ['--noverify']
+            try:
+                result = subprocess.run(change, check=False, timeout=DDC_TIMEOUT)
+                failure = 'Volume write failed' if result.returncode else None
+            except subprocess.TimeoutExpired:
+                failure = 'Volume write timed out; the panel may have applied it'
+            if failure:
+                if speaker_off:
+                    # Restore only Speaker Off, never retry the uncertain level write.
+                    try:
+                        restore = subprocess.run([*command, 'setvcp', '8D',
+                                                  str(DELL_SPEAKER_VALUES['off']), '--noverify'],
+                                                 check=False, timeout=DDC_TIMEOUT)
+                        restored = restore.returncode == 0
+                    except subprocess.TimeoutExpired:
+                        restored = False
+                    if not restored:
+                        raise RuntimeError(f'{failure}; Speaker Off could not be restored; speaker state is uncertain; inspect the panel')
+                raise RuntimeError(f'{failure}; no volume write was retried; read the level and speaker state before retrying')
+            wait_for_feature(command, '62', target | (0x80 if speaker_off else 0))
+    print(f'{target}/100 (speakers {"off" if speaker_off else "on"})')
+
+
 def run(args, parser):
     if args.external_action == 'layout':
         left = getattr(args, 'layout_input', None)
@@ -295,46 +380,8 @@ def run(args, parser):
     bus = int(name[4:])
     command = ['ddcutil', '--bus', str(bus)]
     if action == 'layout':
-        target = getattr(args, 'layout_input', None)
-        original_kvm = None
-        if args.value is not None:
-            original_kvm, active = select_dell_usb(command, None)
-            if original_kvm == 'unknown':
-                raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no layout or input write sent')
-        if target == 'active_kvm':
-            target = original_kvm
-        secondary = getattr(args, 'layout_secondary', None)
-        secondary_raw = secondary_value(secondary) if secondary is not None else None
-        if args.value is not None:
-            expected = DELL_LAYOUTS['off' if args.value == '100' else args.value]
-            write_switch(command, 'E9', expected)
-            wait_for_feature(command, 'E9', expected)
-            if target is not None:
-                try:
-                    write_switch(command, '60', main_value(target))
-                    wait_for_feature(command, '60', main_value(target))
-                except RuntimeError as error:
-                    raise RuntimeError(f'Layout {args.value if args.value != "100" else "off"} confirmed, but input {target} was not confirmed: {error}') from None
-            if secondary_raw is not None:
-                try:
-                    write_switch(command, 'E8', secondary_raw)
-                    wait_for_feature(command, 'E8', secondary_raw)
-                except RuntimeError as error:
-                    raise RuntimeError(f'Layout {args.value} and requested main input confirmed, but secondary input {secondary} was not confirmed: {error}') from None
-            try:
-                select_dell_usb(command, original_kvm)
-            except RuntimeError as error:
-                raise RuntimeError(f'Layout and requested video inputs confirmed, but KVM target {original_kvm} could not be preserved: {error}') from None
-        else:
-            expected = read_feature(command, 'E9')
-        name = next((name for name, value in DELL_LAYOUTS.items() if value == expected), 'unknown')
-        print(f'{name} (0x{expected:02X})')
-        if target is not None:
-            print(f'input {target} (0x{main_value(target):02X})')
-        if secondary_raw is not None:
-            print(f'sub-input {secondary} (0x{secondary_raw:04X})')
-        if original_kvm is not None:
-            print(f'kvm {original_kvm} (preserved)')
+        run_layout(command, args.value, target=getattr(args, 'layout_input', None),
+                   secondary=getattr(args, 'layout_secondary', None))
     elif action == 'pip-position':
         if read_feature(command, 'E9') not in (DELL_LAYOUTS['pip-small'], DELL_LAYOUTS['pip-large']):
             raise RuntimeError('Position cycling requires pip-small or pip-large')
@@ -367,45 +414,7 @@ def run(args, parser):
         name = next((name for name, value in values.items() if value == expected), 'unknown')
         print(f'{name} (0x{expected:02X})')
     elif action == 'volume':
-        raw = read_feature(command, '62')
-        current = raw & 0x7F
-        speaker_off = bool(raw & 0x80)
-        if raw & ~0xFF or current > 100:
-            raise RuntimeError(f'Unexpected Dell volume encoding: 0x{raw:04X}; no volume write sent')
-        target = current
-        if args.value is not None:
-            if args.value in ('up', 'down'):
-                target = max(0, min(100, current + (5 if args.value == 'up' else -5)))
-            else:
-                target = int(args.value)
-            if target != current:
-                # Dell ignores the mute flag on volume writes and ordinary levels
-                # enable its speakers. Restore the previous Off state in the same
-                # invocation. This cannot promise there is no brief unmuted interval.
-                change = [*command, 'setvcp', '62', str(target)]
-                if speaker_off:
-                    change += ['8D', str(DELL_SPEAKER_VALUES['off'])]
-                change += ['--noverify']
-                try:
-                    result = subprocess.run(change, check=False, timeout=DDC_TIMEOUT)
-                    failure = 'Volume write failed' if result.returncode else None
-                except subprocess.TimeoutExpired:
-                    failure = 'Volume write timed out; the panel may have applied it'
-                if failure:
-                    if speaker_off:
-                        # Restore only Speaker Off, never retry the uncertain level write.
-                        try:
-                            restore = subprocess.run([*command, 'setvcp', '8D',
-                                                      str(DELL_SPEAKER_VALUES['off']), '--noverify'],
-                                                     check=False, timeout=DDC_TIMEOUT)
-                            restored = restore.returncode == 0
-                        except subprocess.TimeoutExpired:
-                            restored = False
-                        if not restored:
-                            raise RuntimeError(f'{failure}; Speaker Off could not be restored; speaker state is uncertain; inspect the panel')
-                    raise RuntimeError(f'{failure}; no volume write was retried; read the level and speaker state before retrying')
-                wait_for_feature(command, '62', target | (0x80 if speaker_off else 0))
-        print(f'{target}/100 (speakers {"off" if speaker_off else "on"})')
+        run_volume(command, args.value)
     else:
         # ddcutil handles ordinary VCP access; Dell-specific sequences stay above.
         if action == 'capabilities':
