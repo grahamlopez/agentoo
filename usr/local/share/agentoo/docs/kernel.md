@@ -242,26 +242,23 @@ on the ESP before activation.
 The complete module tree replaces `/lib/modules/<release>`; files absent from
 the build, including separately installed external modules, are removed from
 the live tree. Rebuild required external modules manually for the new build.
-Install refuses to change the running module-enabled kernel's release, even if
-no modules are currently loaded or its module directory is missing. Boot another
-release and retry the same version and label. Replacing a running module-free
-kernel is allowed because it does not load modules from that tree.
+Replacing the running release is allowed, including a module-enabled build.
+Until reboot, later module loads use the replacement tree with the old running
+kernel; changed modules may be incompatible. The operator chooses when to replace
+and reboot. No separate boot or override flag is required.
 
 After staging succeeds, install backs up the old image, renames the old module
 tree to its backup, moves the new complete tree into place, and finally renames
-the staged image into place. A command failure or cancellation before image
-activation restores the previous module tree; a failed first installation
-removes its new tree. If rollback also fails, the error identifies the retained
-recovery paths. Once the image rename succeeds, the new pair stays installed.
-Temporary staging files are cleaned up; cleanup errors report their paths.
+the staged image into place. The command prints the native operations and staging
+paths. On failure or cancellation it stops and retains backups and any remaining
+staging files for inspection. Recovery is manual; no automatic rollback rewrites
+the installed paths. Successful installation removes its temporary staging root.
 
-These renames span two filesystems and are not a power-loss transaction. Power
-loss, SIGKILL, or a system crash during activation can leave an incomplete pair.
-Retain a working recovery kernel. Before booting the affected release after such
-an interruption, inspect both live paths and either retry the complete install
-or restore **both** matching timestamped backups; restoring only the old image
-can leave it with the new build's modules. Successful replacement retains the
-backup pair until you remove it manually.
+These renames span two filesystems; an interrupted installation can leave an
+incomplete pair. Inspect both live paths, then finish installation or restore
+**both** original image/module backups before booting that release. Retain the
+original backups when retrying: a later attempt can back up an already partial
+installation. Backups and failed staging directories remain until removed manually.
 
 By default installation prints an `efibootmgr` registration command for manual
 use. To register and put the candidate first immediately:

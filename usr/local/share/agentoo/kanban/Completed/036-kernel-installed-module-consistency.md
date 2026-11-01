@@ -67,3 +67,29 @@ Image and module renames span filesystems; power loss, SIGKILL and crashes are
 not atomic. The guide explicitly requires inspecting/retrying the installation
 or restoring both matching backups before booting an interrupted release.
 Keep a working recovery kernel; live boot/hardware acceptance remains separate.
+
+## Expert workflow revision, 2026-11-01
+
+The user clarified that these utilities target expert operators and should
+preserve their tested update workflow without extensive guardrails. This
+supersedes the initial running-release prohibition and automatic rollback above.
+Same-version/same-label replacement is allowed while that kernel is running,
+including modular builds, with the existing confirmation and no override flag.
+The guide explains the potential module incompatibility until reboot.
+
+The installation remains a direct stage, back up, and replace procedure using
+native commands. Exact module trees, prepared indexes, complete staged images,
+backups, and target checks remain. Removed activation-state bookkeeping,
+post-interrupt state inference, automatic module restoration/removal, and nested
+rollback/cleanup error handling. A failed or cancelled operation stops, reports
+the retained artifacts, and leaves recovery to the operator. Successful installs
+clean their own staging root. Retrying preserves earlier backups and failed
+staging directories; retain original backups because another attempt can capture
+an already partial installation.
+
+Disposable regression coverage now exercises replacement of a running modular
+release, module/image activation failures, interruption, retained recovery
+artifacts, retries, obsolete-module removal, and version/label coexistence.
+All 51 kernel/firmware tests passed without skips. Comparison against the
+pre-review implementation confirmed configuration, build, host specialization,
+and initramfs code unchanged. No live build, installation, or firmware change ran.

@@ -36,9 +36,11 @@ Confirmed command features and JSON appearance storage remain supported. Existin
 installations need to restore and accept the three packaged shell/editor entry
 files when deploying their removal from Git; see
 [deployment guidance](../../../../../etc/agentoo/README.md#shell-and-editor-environment).
-Kernel replacement retains matching image/module backups and protects the running
-modular release; cross-filesystem power-loss recovery remains an operator step
-in the [kernel guide](../docs/kernel.md#install).
+Kernel replacement retains image/module backups and allows replacing the running
+release. Interrupted installation leaves artifacts for operator recovery, as
+described in the [kernel guide](../docs/kernel.md#install). The expert-workflow
+revision on 2026-11-01 removed the running-release prohibition and automatic
+rollback introduced by the initial review; card 036 records that decision.
 
 The first integrated batch passed 331 Python tests and all five then-existing
 Lua scripts without skips. The final combined suite passed 349 Python tests and

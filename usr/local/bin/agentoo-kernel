@@ -496,10 +496,6 @@ def install(args):
     image = output / 'arch/x86/boot/bzImage'
     modules = staged_modules(work, data)
     modules_destination = MODULES_ROOT / data['release']
-    # /proc/modules exists only when the running kernel supports loadable modules.
-    # Its release must keep its current tree even if no modules are loaded yet.
-    if data['release'] == platform.release() and Path('/proc/modules').exists():
-        raise RuntimeError('cannot replace modules for the running module-enabled kernel; boot another release and retry')
     destination = Path(args.dest).expanduser().resolve() / f'kernel-{data["release"]}.efi'
     notice(f'Build directory:  {work}\nKernel image:     {image}\nStaged modules:   {modules}\nInstall modules:  {modules_destination}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
     mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
@@ -540,7 +536,7 @@ def install(args):
     staging_root = Path(run(['mktemp', '--directory', str(MODULES_ROOT / '.agentoo-XXXXXXXX')], capture=True, root=True))
     staged_tree = staging_root / 'lib/modules' / data['release']
     staging = destination.with_name('.' + destination.name + f'.{stamp}.tmp')
-    activation_started = False
+    notice(f'Staging modules:  {staging_root}\nStaging image:    {staging}')
     try:
         run(['install', '-d', '-m', '0755', '--', staged_tree], root=True)
         run(['cp', '-a', '--no-preserve=ownership', '--', str(modules) + '/.', staged_tree], root=True)
@@ -550,34 +546,15 @@ def install(args):
             run(['cp', '--preserve=mode', '--', destination, backup], root=True)
         # Keep the old pair for recovery. Only complete trees/images become live;
         # renames stay on their respective filesystems, never merge directories.
-        activation_started = True
         if modules_backup:
             run(['mv', '-T', '--', modules_destination, modules_backup], root=True)
         run(['mv', '-T', '--', staged_tree, modules_destination], root=True)
         run(['mv', '-T', '--', staging, destination], root=True)
-    except (OSError, RuntimeError, KeyboardInterrupt, EOFError) as error:
-        try:
-            # Check the rename results themselves: an interrupt can arrive after
-            # mv completes but before Python resumes. Consuming the staged image
-            # is the commit point; after that, both live artifacts are the new pair.
-            if activation_started and staging.exists():
-                if modules_backup and os.path.lexists(modules_backup):
-                    run(['rm', '-rf', '--', modules_destination], root=True)
-                    run(['mv', '-T', '--', modules_backup, modules_destination], root=True)
-                elif not modules_backup:
-                    run(['rm', '-rf', '--', modules_destination], root=True)
-        except (OSError, RuntimeError, KeyboardInterrupt, EOFError) as rollback_error:
-            raise RuntimeError(f'installation failed: {error}; module rollback failed: {rollback_error}; '
-                               f'inspect {modules_destination}; previous modules: {modules_backup}; '
-                               f'previous image: {backup or destination}') from error
+    except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
+        notice('Installation stopped; backups and any remaining staging files are retained. '
+               'Inspect the paths above before retrying.')
         raise
-    finally:
-        for command in (['rm', '-rf', '--', staging_root], ['rm', '-f', '--', staging]):
-            try:
-                run(command, root=True)
-            except (OSError, RuntimeError) as cleanup_error:
-                # Recovery paths in the original error must remain visible.
-                notice(f'Cleanup failed: {cleanup_error}')
+    run(['rm', '-rf', '--', staging_root], root=True)
     command = ['efibootmgr', '--create', '--disk', device['pkname'], '--part', str(device['partn']),
                '--label', f'{data["label"]}-{data["release"].removesuffix("-" + data["label"])}', '--loader', loader]
     if args.efi_add_entry:
