@@ -18,6 +18,9 @@ Configuration design
 
 Code design
 
+- Every action should have a single source of truth, even if there are multiple
+  user-facing activations via commands, configuration settings, shortcuts, and
+  keybindings.
 - Keep procedures direct and readable. Use helpers for repeated logic or coherent
   operations whose names make the caller easier to follow. Avoid trivial
   forwarding wrappers and abstractions for hypothetical needs.
