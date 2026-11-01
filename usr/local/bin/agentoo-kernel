@@ -489,22 +489,8 @@ def efi_entries(report):
     return (order[1].upper().split(',') if order and order[1].strip() else []), {key.upper(): value for key, value in entries.items()}
 
 
-def install(args):
-    require_tools('findmnt', 'lsblk', 'install', 'cp', 'mv', 'rm', 'mktemp', 'depmod', *(['efibootmgr'] if args.efi_add_entry else []))
-    work, data = select_workspace(args)
-    output, _ = paths(work, data)
-    image = output / 'arch/x86/boot/bzImage'
-    modules = staged_modules(work, data)
-    modules_destination = MODULES_ROOT / data['release']
-    destination = Path(args.dest).expanduser().resolve() / f'kernel-{data["release"]}.efi'
-    notice(f'Build directory:  {work}\nKernel image:     {image}\nStaged modules:   {modules}\nInstall modules:  {modules_destination}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
-    mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
-    if mount_boot:
-        notice('Mount /boot using its existing mount configuration.')
-    confirm('Proceed', args.yes)
-    if mount_boot:
-        run(['mount', '/boot'], root=True)
-    # Resolve the mounted ESP before changing installed modules or images.
+def inspect_esp(destination):
+    """Inspect the mounted destination before changing installed modules or images."""
     ancestor = destination
     while not ancestor.exists():
         ancestor = ancestor.parent
@@ -520,6 +506,25 @@ def install(args):
         raise RuntimeError(f'cannot determine EFI disk/partition identity for {source}')
     relative = destination.relative_to(Path(mount['target']))
     loader = '\\' + str(relative).replace('/', '\\')
+    return device, loader
+
+
+def install(args):
+    require_tools('findmnt', 'lsblk', 'install', 'cp', 'mv', 'rm', 'mktemp', 'depmod', *(['efibootmgr'] if args.efi_add_entry else []))
+    work, data = select_workspace(args)
+    output, _ = paths(work, data)
+    image = output / 'arch/x86/boot/bzImage'
+    modules = staged_modules(work, data)
+    modules_destination = MODULES_ROOT / data['release']
+    destination = Path(args.dest).expanduser().resolve() / f'kernel-{data["release"]}.efi'
+    notice(f'Build directory:  {work}\nKernel image:     {image}\nStaged modules:   {modules}\nInstall modules:  {modules_destination}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
+    mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
+    if mount_boot:
+        notice('Mount /boot using its existing mount configuration.')
+    confirm('Proceed', args.yes)
+    if mount_boot:
+        run(['mount', '/boot'], root=True)
+    device, loader = inspect_esp(destination)
     stamp = time.time_ns()
     backup = destination.with_name(destination.name + f'.{stamp}.bak') if destination.exists() else None
     modules_backup = modules_destination.with_name(modules_destination.name + f'.{stamp}.bak') if os.path.lexists(modules_destination) else None
