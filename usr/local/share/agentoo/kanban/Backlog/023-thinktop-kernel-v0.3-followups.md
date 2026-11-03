@@ -20,7 +20,7 @@ they do not establish acceptance on the other hosts or every audio route.
   It is absent on disk and failed to load under both v0.2 and v0.3. Review
   installed savedconfig selection and early/built-in firmware availability;
   then verify link speed, connectivity, reconnect and resume. Driver binding
-  alone does not establish wired operation. See [firmware maintenance](../Completed/018-host-firmware-savedconfig.md).
+  alone does not establish wired operation. See firmware maintenance (completed card 018).
   The tracked Thinktop savedconfig list was corrected on 2026-10-27 while
   preparing Flattop's list; application/rebuild on Thinktop and wired validation
   remain outstanding. The same payload is retained for Flattop's possible use

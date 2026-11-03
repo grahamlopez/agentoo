@@ -85,7 +85,7 @@ Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
 
 ## Existing work and build maintenance
 
-The [kernel rebuild workflow](../Completed/015-shared-kernel-configuration-workflow.md)
+The kernel rebuild workflow (completed card 015)
 closed on 2026-10-27 after Thinktop operator build/install/boot acceptance. Its
 first increment supplies `agentoo kernel config|build|install`; it does not claim
 to implement shared-configuration capture or complete fleet validation.
@@ -112,7 +112,7 @@ Retain these deferred workflow items for later scoping:
 
 This does not revive the retired general kernel-reduction project. Link
 [initramfs keyboard policy](020-initramfs-keyboard-policy.md) and
-[firmware maintenance](../Completed/018-host-firmware-savedconfig.md) when relevant.
+firmware maintenance (completed card 018) when relevant.
 
 For each remaining host build use its own boot/firmware/microcode inputs and
 fresh initramfs, and verify synchronized release metadata before image naming

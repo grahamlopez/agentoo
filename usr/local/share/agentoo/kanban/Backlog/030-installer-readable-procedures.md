@@ -30,9 +30,8 @@ No installer changes have started. Read AGENTS.md and check the current work
 tree before proceeding; it was clean at implementation commit `58b13a8`.
 
 The initial command review pass is complete. A subsequent critical review found
-further non-installer issues, preserved in backlog cards
-[036](../Completed/036-kernel-installed-module-consistency.md) through
-[044](../Completed/044-retire-inactive-configuration-and-fallbacks.md). Those findings supersede
+further non-installer issues, recorded in cards 036 through 044 (now
+completed). Those findings supersede
 the earlier assessment that no further command work was apparent.
 
 Commits simplified fonts, secrets, permissions,
