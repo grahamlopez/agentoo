@@ -48,11 +48,11 @@ Hyprland also reads that assignment as data and automatically loads the tracked
 `/etc/xdg/hypr/hosts/name.lua` fragment when present; no separate Hyprland host
 selector is required.
 
-Kernel firmware requirements use shell assignment fragments under
-`/etc/agentoo/kernel-firmware.d/`: the installer reads `00-common` first,
-then `90-${GENTOO_TARGET_HOST}` when present. `SOF_FIRMWARE` must be `yes` or
-`no`; the common default is `no`, and `thinktop` enables it for its audio DSP.
-These files describe the target hardware, independent of the installation host.
+Host-specific packages belong in an optional native Portage set,
+`/etc/portage/sets/host-<name>`. The installer emerges the selected host's set
+during kernel-foundation, which records it in the world file; `host-thinktop`
+supplies SOF firmware for its audio DSP. Sets describe the target hardware,
+independent of the installation host.
 
 Custom kernel builds separately select native Kconfig fragments under
 `/etc/agentoo/kernel/hosts/<name>.config` through the same target-host selector
@@ -78,7 +78,7 @@ RAM capacity. Installer transactions also default to RAM-backed builds;
 `--no-ram-builds` selects disk-backed storage for an installer invocation.
 
 The captured boot used i915, iwlwifi, btusb, nvme, and snd_hda_intel, with an
-IDT 92HD95 audio codec. Retain the common `SOF_FIRMWARE=no` policy; a DSP-detected
+IDT 92HD95 audio codec. Flattop has no host set for SOF firmware; a DSP-detected
 log line alone does not establish that SOF was used. Subsequent distribution
 and custom-kernel boot evidence supports the reviewed Flattop savedconfig list
 described below; application and post-trimming validation are separate steps.

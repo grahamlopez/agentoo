@@ -199,7 +199,7 @@ not guarantee power-off. See the [kernel PCI sysfs documentation](https://docs.k
 
 Review configuration-protected files with `dispatch-conf`. Keep agentoo defaults
 when an incoming file only restores an upstream example; assess substantive
-package changes. Thinktop's installer firmware policy already selects SOF
+package changes. Thinktop's `@host-thinktop` set already selects SOF
 firmware, but verify it is installed and loaded on this target. A successful
 dependency plan does not establish audio or graphics hardware support.
 

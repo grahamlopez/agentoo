@@ -1,5 +1,16 @@
 # Firmware maintenance
 
+Host firmware has three owners, each selected by `/etc/agentoo/target-host`:
+
+| Concern | Host file | Consumer |
+| --- | --- | --- |
+| Extra firmware packages, such as SOF | `/etc/portage/sets/host-<name>` | installer kernel-foundation, then Portage world updates |
+| Installed linux-firmware trimming | `/etc/agentoo/firmware/<name>.list` plus `AGENTOO_LINUX_FIRMWARE_USE` in `/etc/portage/make.conf.d/90-<name>` | `agentoo kernel firmware apply`, then Portage |
+| Firmware embedded in a custom kernel | `CONFIG_EXTRA_FIRMWARE` in `/etc/agentoo/kernel/hosts/<name>.config` | `agentoo kernel config` ([kernel guide](kernel.md#host-specialization)) |
+
+CPU microcode follows the installer's `--microcode` choice. The rest of this guide
+covers installed linux-firmware trimming.
+
 Thinktop and Flattop have reviewed native savedconfig lists at
 `/etc/agentoo/firmware/thinktop.list` and `/etc/agentoo/firmware/flattop.list`.
 Their host Portage fragments enable savedconfig; apply the matching list locally

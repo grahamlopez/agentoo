@@ -43,6 +43,18 @@ class InstallerTest(unittest.TestCase):
             self.assertIn('--disk is required', result.stderr)
             self.assertNotIn('--target-host', result.stderr)
 
+    def test_host_package_set_is_optional_and_must_be_regular(self):
+        harness = 'TARGET_HOST=$2; host_package_set "$1"'
+        with tempfile.TemporaryDirectory() as directory:
+            sets = Path(directory) / 'etc/portage/sets'
+            sets.mkdir(parents=True)
+            (sets / 'host-thinktop').write_text('sys-firmware/sof-firmware\n')
+            (sets / 'host-qemu').symlink_to(sets / 'host-thinktop')
+            for host, code, stdout in [('thinktop', 0, '@host-thinktop\n'), ('flattop', 0, ''), ('qemu', 1, '')]:
+                with self.subTest(host=host):
+                    result = self.run_installer(directory, host, harness=harness)
+                    self.assertEqual((result.returncode, result.stdout), (code, stdout), result.stderr)
+
     def test_offline_masks_use_target_tools_without_host_systemctl(self):
         with tempfile.TemporaryDirectory() as directory:
             policy = Path(directory) / 'etc/agentoo/masked-units.conf'

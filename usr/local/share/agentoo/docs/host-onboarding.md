@@ -43,10 +43,11 @@ external-module integration; a host fragment alone does not provide that workflo
 
 ## Optional host policy files
 
-- [ ] **`etc/agentoo/kernel-firmware.d/90-<host>`** — add only if installer SOF
-  policy differs from `00-common`; use `SOF_FIRMWARE=yes` or `no`. CPU microcode
-  package selection comes from installer `--microcode`/CPU detection, not this
-  fragment. This policy is separate from custom-kernel embedded firmware.
+- [ ] **`etc/portage/sets/host-<host>`** — add only for packages this hardware
+  needs beyond the common sets, such as `sys-firmware/sof-firmware`. The installer
+  emerges it during kernel-foundation. CPU microcode package selection comes from
+  installer `--microcode`/CPU detection, not this set. This is separate from
+  custom-kernel embedded firmware.
 - [ ] **`etc/agentoo/firmware/<host>.list`** and
   **`etc/portage/make.conf.d/90-<host>`** — for reviewed installed-firmware trimming,
   add explicit package-relative paths and set

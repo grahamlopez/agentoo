@@ -80,7 +80,6 @@ INTERNAL_PORTAGE_CHROOT=0
 INTERNAL_UPDATE_CHROOT=0
 INTERNAL_KERNEL_CHROOT=0
 TARGET_MICROCODE=${TARGET_MICROCODE:-auto}
-TARGET_SOF_FIRMWARE=
 QEMU_VARS=${QEMU_VARS:-}
 QEMU_VARS_TEMPLATE=${QEMU_VARS_TEMPLATE:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
 TARGET_HOSTNAME=${TARGET_HOSTNAME:-}
@@ -154,7 +153,7 @@ BTRFS_LABEL, EFI_SIZE, MOUNT_ROOT, CONFIG_SOURCE,
 CONFIG_BRANCH, TARGET_TIMEZONE, TARGET_LOCALE, TARGET_CPU_FLAGS,
 TARGET_MICROCODE, TARGET_HOSTNAME, QEMU_VARS, and QEMU_VARS_TEMPLATE.
 --target-host must be supplied explicitly; TARGET_HOST is not inherited.
-SOF audio firmware is selected by the target's agentoo fragments.
+Host-specific packages come from the target's optional @host-TARGET set.
 
 Safety model:
   * Selected phases run by default; --dry-run is the non-destructive mode.
@@ -1826,25 +1825,16 @@ resolve_kernel_firmware_policy() {
   esac
 }
 
-# Read firmware requirements from the installed configuration's common and host
-# shell fragments. Validate the resolved SOF value rather than duplicating target
-# hardware choices in command-line switches or installer defaults.
-read_kernel_firmware_policy() {
-  local root=$1 directory SOF_FIRMWARE=
-  directory=${root%/}/etc/agentoo/kernel-firmware.d
+# Print the target's optional native Portage set for host-specific packages.
+# Sets live in the installed configuration, never in installer defaults.
+host_package_set() {
+  local root=$1 set
   valid_target_host "$TARGET_HOST" || die "unsupported kernel target: $TARGET_HOST"
-  [[ -f $directory/00-common && ! -L $directory/00-common ]] \
-    || die "missing firmware policy: $directory/00-common; update the target agentoo checkout"
-  source "$directory/00-common"
-  if [[ -e $directory/90-$TARGET_HOST || -L $directory/90-$TARGET_HOST ]]; then
-    [[ -f $directory/90-$TARGET_HOST && ! -L $directory/90-$TARGET_HOST ]] \
-      || die "firmware policy is not a regular file: $directory/90-$TARGET_HOST"
-    source "$directory/90-$TARGET_HOST"
+  set=${root%/}/etc/portage/sets/host-$TARGET_HOST
+  if [[ -e $set || -L $set ]]; then
+    [[ -f $set && ! -L $set ]] || die "host package set is not a regular file: $set"
+    printf '@host-%s\n' "$TARGET_HOST"
   fi
-  case $SOF_FIRMWARE in
-    yes|no) TARGET_SOF_FIRMWARE=$SOF_FIRMWARE ;;
-    *) die "SOF_FIRMWARE must be yes or no in $directory" ;;
-  esac
 }
 
 # Record target boot parameters or ESP identity, allowing retries with the same value.
@@ -2088,7 +2078,7 @@ INSTRUCTIONS
 # Establish update policy, install tools/firmware, rebuild modules and initramfs,
 # then validate the selected release without writing firmware boot entries.
 kernel_foundation_chroot() {
-  local root_uuid luks_uuid efi_uuid cmdline atom version pending
+  local root_uuid luks_uuid efi_uuid cmdline atom version pending host_set
   require_command emerge
   require_command portageq
   local -a tools=(sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr)
@@ -2099,7 +2089,7 @@ kernel_foundation_chroot() {
   valid_target_host "$TARGET_HOST" || die 'unsupported kernel target'
   grep -Fxq "GENTOO_TARGET_HOST=\"$TARGET_HOST\"" /etc/agentoo/target-host \
     || die 'kernel target differs from the installed Portage foundation'
-  read_kernel_firmware_policy /
+  host_set=$(host_package_set /)
   [[ -s /etc/portage/package.use/00cpu-flags ]] || die 'run system-update before kernel-foundation'
   pending=$(pending_config_updates)
   [[ -z $pending ]] || die "resolve protected configuration updates first: $pending"
@@ -2120,7 +2110,7 @@ kernel_foundation_chroot() {
   kernel_target_data /etc/kernel/cmdline "$cmdline"
   kernel_target_data /etc/kernel/gentoo-dist-esp.uuid "$efi_uuid"
   [[ $TARGET_MICROCODE != intel ]] || packages+=(sys-firmware/intel-microcode)
-  [[ $TARGET_SOF_FIRMWARE != yes ]] || packages+=(sys-firmware/sof-firmware)
+  [[ -z $host_set ]] || packages+=("$host_set")
   # Keep the binary provider in every transaction to prevent an OR dependency
   # (firmware -> virtual/dist-kernel) from selecting the source provider.
   # Explicit packages, rather than @early_install (which also contains sources
@@ -2176,11 +2166,12 @@ kernel_foundation_chroot() {
 install_kernel_foundation() {
   local source status=0
   log 'Phase: kernel-foundation'
+  local host_set
   resolve_kernel_firmware_policy
-  if [[ $MODE == dry-run && ! -e $MOUNT_ROOT/etc/agentoo/kernel-firmware.d/00-common ]]; then
-    TARGET_SOF_FIRMWARE='from target configuration (available after Portage foundation)'
+  if [[ $MODE == dry-run && ! -d $MOUNT_ROOT/etc/portage/sets ]]; then
+    host_set='from target configuration (available after Portage foundation)'
   else
-    read_kernel_firmware_policy "$MOUNT_ROOT"
+    host_set=$(host_package_set "$MOUNT_ROOT")
   fi
   [[ $TARGET_HOST == qemu || -z $QEMU_VARS ]] || die '--qemu-vars is only valid for target qemu'
   if (( VERBOSE )); then
@@ -2195,8 +2186,9 @@ and keyboard input. No host-only pruning or custom kernel configuration is
 used. The binary kernel and its virtual dependency stay on stable AMD64
 keywords to avoid pulling a testing source kernel during later world updates.
 auto microcode follows the installation host; override it when preparing
-another CPU vendor. SOF audio firmware follows the installed configuration:
-/etc/agentoo/kernel-firmware.d/00-common and optional 90-TARGET fragments.
+another CPU vendor. Host-specific firmware, such as Thinktop's SOF audio DSP
+firmware, comes from the installed configuration's optional
+/etc/portage/sets/host-TARGET set.
 Microcode selection is vendor-level: Intel adds intel-microcode, AMD uses
 linux-firmware. Firmware remains broad, with CPU matching performed at boot.
 The none option skips vendor-specific selection and verification; it does not
@@ -2225,11 +2217,11 @@ or roll back earlier changes in the phase.
 
 Install prerequisites, then firmware and the kernel together
 -----------------------------------------------------------------
-Example commands inside the target chroot (Intel system with SOF audio):
+Example commands inside the target chroot (Intel system with a host set):
 
-emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode sys-firmware/sof-firmware sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin
+emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode @host-thinktop sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin
 emerge --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr
-emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode sys-firmware/sof-firmware sys-kernel/gentoo-kernel-bin
+emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode @host-thinktop sys-kernel/gentoo-kernel-bin
 emerge --oneshot @module-rebuild
 emerge --config =sys-kernel/gentoo-kernel-bin-6.18.54
 
@@ -2240,15 +2232,13 @@ the selected installed kernel's initramfs after external modules are built.
 dist-kernel provides ongoing package integration,
 including NVIDIA when installed; no GPU driver is selected automatically.
 
-Read the target's firmware requirements
---------------------------------------
-The common fragment sets SOF_FIRMWARE=no; 90-thinktop sets SOF_FIRMWARE=yes.
-The selected host fragment overrides common policy, independent of the CPU or
-audio hardware visible on the installation host. Missing common policy or an
-invalid value stops the phase before package installation.
+Read the target's host package set
+----------------------------------
+A host set is optional and describes the target hardware, independent of the
+CPU or audio hardware visible on the installation host. Emerging it records the
+set in the world file, so ordinary updates keep it installed.
 
-cat /etc/agentoo/kernel-firmware.d/00-common
-cat /etc/agentoo/kernel-firmware.d/90-thinktop
+cat /etc/portage/sets/host-thinktop
 
 Inspect actual target boot ingredients
 -------------------------------------
@@ -2337,7 +2327,7 @@ Target root:          $MOUNT_ROOT
 Configuration target: $TARGET_HOST
 Kernel:               sys-kernel/gentoo-kernel-bin (stable AMD64 fallback)
 CPU microcode:        $TARGET_MICROCODE
-SOF audio firmware:   $TARGET_SOF_FIRMWARE
+Host package set:     ${host_set:-none}
 EFI files:            /boot/EFI/Gentoo/kernel-VERSION.efi and initramfs-VERSION.img
 QEMU firmware store:  ${QEMU_VARS:-not specified; used only for target qemu}
 
