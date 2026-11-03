@@ -38,7 +38,8 @@ Commits simplified fonts, secrets, permissions,
 kernel procedures, and desktop dependencies; fixed Git's SSH push transition;
 corrected command guidance; and completed cards 031–035. All previously confirmed
 command features remain required. Screenshot implementation remains deliberately
-unchanged. Custom kernels retain minimal/genkernel/supplied initramfs support;
+unchanged. Custom kernels retain minimal/supplied initramfs support (genkernel was later
+removed; see card 049);
 distribution kernels use upstream Gentoo mechanisms.
 
 The latest change replaces desktop conflict scans with observation of executed
