@@ -8,8 +8,8 @@ Bluetooth, udev, firmware, modules, resume and token integrations are omitted.
 
 The default `agentoo kernel build` runs this builder automatically in
 `<kernel-workspace>/initramfs/<release>/`, passing the partition UUID, mapping
-name and keymap recorded by `agentoo kernel config`. `--genkernel` selects the previous
-generator; `--initramfs FILE` bypasses generation and embeds that file.
+name and keymap recorded by `agentoo kernel config`. `--initramfs FILE` bypasses
+generation and embeds that file.
 
 To build separately as your ordinary user:
 

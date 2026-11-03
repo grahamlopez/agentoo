@@ -45,7 +45,7 @@ for scope, local exclusions, bare work trees, and output contracts.
 
 `agentoo kernel config|build|install --label LABEL` rebuilds a configured custom
 EFI kernel from updated sources. See [kernel rebuilding](kernel.md)
-for temporary workspaces, genkernel/custom initramfs inputs, module installation
+for temporary workspaces, minimal and custom initramfs inputs, module installation
 and optional firmware registration.
 
 ## Implementation conventions

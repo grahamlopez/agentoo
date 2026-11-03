@@ -241,7 +241,7 @@ class CliTest(unittest.TestCase):
     def test_migrated_command_direct_grouped_equivalence(self):
         for name, args in [('fonts', ('doctor', '--help')), ('fonts', ('set', '--no-input')),
                            ('kernel', ('build', '--label', '--help')), ('kernel', ('build', '--lab', 'test')),
-                           ('kernel', ('build', '--label', 'test', '--genkernel', '--initramfs', '/missing')),
+                           ('kernel', ('build', '--label', 'test', '--jobs', '0')),
                            ('permissions', ('check', '--help')), ('permissions', ('check', '--fix'))]:
             with self.subTest(name=name, args=args):
                 grouped = self.run_cli(name, *args)

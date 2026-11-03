@@ -69,14 +69,6 @@ elif any(x.startswith('-j') for x in a):
     (out / 'include/config').mkdir(parents=True, exist_ok=True)
     (out / 'include/config/kernel.release').write_text(release + '\\n')
 ''')
-        self.tool('genkernel', '''
-import json, os, pathlib, sys
-a = sys.argv[1:]
-with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['genkernel', *a]) + '\\n')
-out = pathlib.Path(next(x.split('=', 1)[1] for x in a if x.startswith('--bootdir=')))
-name = next(x.split('=', 1)[1] for x in a if x.startswith('--initramfs-filename='))
-(out / name).write_text('fresh archive')
-''')
         self.tool('sudo', '''
 import json, os, sys
 a = sys.argv[1:]
@@ -173,6 +165,11 @@ p.write_text(text)
 
     def prepare(self):
         self.invoke('config', '--label', 'test', '--config', str(self.start), '--sources', str(self.sources), '--accept-defaults', '--yes')
+
+    def build_modular(self):
+        archive = self.root / 'custom.cpio'
+        archive.write_text('custom input')
+        self.invoke('build', '--label', 'test', '--initramfs', str(archive), '--yes')
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
@@ -345,7 +342,7 @@ p.write_text(text)
                 self.prepare()
         self.assertFalse((self.work / kernel.METADATA).exists())
 
-    def test_dracut_local_input_keeps_genkernel_compatibility(self):
+    def test_dracut_local_input_keeps_baseline_crypt_root(self):
         local = TEST_CMDLINE.replace(f'crypt_root=UUID={TEST_LUKS_UUID} ', '')
         kernel.kernel_host.CMDLINE.write_text(local)
         baseline = TEST_CMDLINE.replace(f'rd.luks.uuid=luks-{TEST_LUKS_UUID} rd.luks.name={TEST_LUKS_UUID}=cryptroot ', '')
@@ -357,7 +354,6 @@ p.write_text(text)
         self.assertEqual(data['identity']['cmdline'], baseline)
         self.assertNotIn('rd.luks.', data['identity']['cmdline'])
         self.assertEqual(kernel.kernel_host.CMDLINE.read_text(), local)
-        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
         self.invoke('build', '--label', 'test', '--yes')
 
     def test_shared_cmdline_retains_policy_and_replaces_only_storage_inputs(self):
@@ -421,21 +417,17 @@ p.write_text(text)
         with self.assertRaisesRegex(RuntimeError, 'predates host specialization'):
             kernel.load(self.work, 'test')
 
-    def test_build_runs_module_install_without_modules_and_regenerates_initramfs(self):
+    def test_build_runs_module_install_without_modules(self):
         self.prepare()
-        self.invoke('build', '--label', 'test', '--genkernel', '--yes', '-j', '2')
+        self.invoke('build', '--label', 'test', '--yes', '-j', '2')
+        self.invoke('build', '--label', 'test', '--yes')
         data = kernel.load(self.work, 'test', completed=True)
-        output, gen = kernel.paths(self.work, data)
-        archive = gen / 'output/initramfs-6.18.57-test.cpio'
-        archive.write_text('stale archive')
-        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
-        self.assertEqual(archive.read_text(), 'fresh archive')
+        output, _ = kernel.paths(self.work, data)
         calls = self.calls()
-        self.assertFalse(any('genkernel' in call for call in calls if call[0] == 'sudo'))
+        self.assertFalse(any(call[0] == 'sudo' for call in calls if 'make' in call))
         installs = [call for call in calls if call[0] == 'make' and 'modules_install' in call]
         self.assertEqual(len(installs), 2)
         self.assertEqual(sum(any(x.startswith('INSTALL_MOD_PATH=') for x in call) for call in installs), 2)
-        self.assertTrue(all('--no-ramdisk-modules' in call for call in calls if call[0] == 'genkernel'))
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_CMDLINE'], json.dumps(TEST_CMDLINE))
         (output / '.config').write_text('modified after build')
         with self.assertRaisesRegex(RuntimeError, 'image/config changed'):
@@ -449,12 +441,11 @@ p.write_text(text)
         data = kernel.load(self.work, 'test', completed=True)
         (kernel.staged_modules(self.work, data) / 'stale.ko').write_text('obsolete')
         archive.write_text('stale')
-        self.invoke('build', '--label', 'test', '--no-genkernel', '--yes')
+        self.invoke('build', '--label', 'test', '--yes')
         self.assertEqual(archive.read_text(), 'fresh minimal archive')
         data = kernel.load(self.work, 'test', completed=True)
         output, _ = kernel.paths(self.work, data)
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_INITRAMFS_SOURCE'], json.dumps(str(archive)))
-        self.assertFalse(any(call[0] == 'genkernel' for call in self.calls()))
         self.assertFalse((kernel.staged_modules(self.work, data) / 'stale.ko').exists())
         self.assertEqual(len([call for call in self.calls() if call[0] == 'minimal-initramfs' and '--check' not in call]), 2)
         call = next(call for call in self.calls() if call[0] == 'minimal-initramfs')
@@ -487,33 +478,31 @@ sys.exit(2)
             kernel.build(args)
         self.assertFalse(any('modules_install' in call for call in self.calls()))
 
-    def test_custom_archive_implies_no_genkernel_and_module_config_is_retained(self):
+    def test_custom_archive_replaces_minimal_builder_and_module_config_is_retained(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
         self.prepare()
         archive = self.root / 'custom.cpio'
         archive.write_text('custom input')
         self.invoke('build', '--label', 'test', '--initramfs', str(archive), '--yes')
-        self.assertFalse(any(call[0] in ('genkernel', 'minimal-initramfs') for call in self.calls()))
+        self.assertFalse(any(call[0] == 'minimal-initramfs' for call in self.calls()))
         self.assertEqual(len([call for call in self.calls() if call[0] == 'make' and 'modules_install' in call]), 1)
         data = kernel.load(self.work, 'test', completed=True)
-        output, gen = kernel.paths(self.work, data)
+        output, _ = kernel.paths(self.work, data)
         self.assertEqual(kernel.read_config(output / '.config')['CONFIG_MODULES'], 'y')
-        self.assertEqual((gen / 'output/initramfs-6.18.57-test.cpio').read_text(), 'custom input')
+        embedded = Path(json.loads(kernel.read_config(output / '.config')['CONFIG_INITRAMFS_SOURCE']))
+        self.assertEqual(embedded.read_text(), 'custom input')
+        self.assertTrue(embedded.is_relative_to(self.work))
 
     def test_module_build_stays_unprivileged_and_install_uses_staged_tree(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
         self.prepare()
         start = len(self.calls())
-        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+        self.build_modular()
         self.assertFalse(any(call[0] == 'sudo' for call in self.calls()[start:]))
         self.assertFalse(kernel.MODULES_ROOT.exists())
-        genkernel_calls = [call for call in self.calls()[start:] if call[0] == 'genkernel']
-        self.assertEqual(len(genkernel_calls), 1)
-        self.assertIn('--ramdisk-modules', genkernel_calls[0])
         data = kernel.load(self.work, 'test', completed=True)
         modules = kernel.staged_modules(self.work, data)
         self.assertEqual((modules / 'kernel/drivers/example.ko').read_text(), 'compiled module')
-        self.assertIn('--kernel-modules-prefix=' + str(modules.parents[2]), genkernel_calls[0])
         # Installation uses the completed artifacts, not make or the sources.
         import shutil
         shutil.rmtree(self.sources)
@@ -537,7 +526,7 @@ sys.exit(2)
         self.prepare()
         previous = os.umask(0o077)
         try:
-            self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+            self.build_modular()
             data = kernel.load(self.work, 'test', completed=True)
             modules = kernel.staged_modules(self.work, data)
             for path in [modules, *modules.rglob('*')]:
@@ -568,7 +557,7 @@ sys.exit(2)
     def test_install_replaces_exact_tree_and_keeps_matching_backups(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
         self.prepare()
-        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+        self.build_modular()
         destination = self.fake_esp()
         self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
         image = destination / 'kernel-6.18.57-test.efi'
@@ -704,7 +693,7 @@ sys.exit(2)
     def test_running_modular_release_can_be_replaced_without_another_boot(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
         self.prepare()
-        self.invoke('build', '--label', 'test', '--genkernel', '--yes')
+        self.build_modular()
         destination = self.fake_esp()
         original_exists = Path.exists
         def exists(path):

@@ -60,18 +60,14 @@ keymap, passphrase unlock, discards, `@` and `/sbin/init`. It accepts either boo
 identifier style because its storage selection comes from those recorded inputs.
 Alternative roots/layouts, token/key-file unlock, hibernation, nonstandard init,
 or conflicting discard policy require separately scoped initramfs support.
-Genkernel requires the matching `crypt_root=UUID=...` argument in the generated
-command line. Use a baseline with that argument when choosing genkernel.
-Previously configured workspaces retain their recorded command lines; reconfigure
-from the desired baseline in a fresh workspace to adopt this behavior. Custom archives
-remain explicit operator inputs and their internal storage policy is not inspected.
+Custom archives remain explicit operator inputs and their internal storage policy is not inspected.
 
 Config saves the original baseline, host fragment snapshot and provenance hashes,
 resolved boot/storage identity and required host settings in the workspace.
 Build uses this recorded policy even if the selector/profile/local command line
 later changes. It checks host settings after each Kconfig resolution and refuses
 silent changes. To adopt new host policy or boot identity, configure a fresh
-workspace. Workspaces predating specialization must also be configured afresh.
+workspace.
 
 Installed firmware remains independent: follow the native savedconfig procedure
 in [firmware maintenance](firmware.md). Thinktop and Flattop have reviewed native
@@ -106,8 +102,7 @@ After showing the plan and confirming, config:
 
 1. Saves the starting config inside the workspace.
 2. Removes the source Makefile's Gentoo EXTRAVERSION suffix, backing up the
-   original Makefile beside it when a change is needed. Genkernel reads that
-   field directly, so changing only make's command-line value is insufficient.
+   original Makefile beside it when a change is needed.
 3. Sets `CONFIG_LOCALVERSION="-<label>"`, disables automatic SCM release suffixes,
    and enables EFI-stub, initramfs and `/proc/config.gz` support. It replaces
    embedded firmware and command-line settings with the selected host inputs,
@@ -147,11 +142,10 @@ Build replaces the embedded-initramfs input with a workspace-owned empty directo
 resolves the config and compiles
 the initial kernel and any selected in-tree modules. It then runs
 `modules_install INSTALL_MOD_STRIP=1` only into the workspace, under
-`genkernel/<release>/modules/lib/modules/<release>/`. Old staged modules are
+`modules/<release>/lib/modules/<release>/`. Old staged modules are
 removed on rebuild so disabled drivers do not linger. This stage runs even with
 `CONFIG_MODULES=n`, which stages built-in-module metadata. **Build does not write
-to the system's `/lib/modules` or request sudo.** Genkernel uses this staged tree
-when assembling a module-enabled initramfs.
+to the system's `/lib/modules` or request sudo.**
 
 Keeping a nonempty source path preserves Kconfig's dependent initramfs owner IDs,
 compression choice and built-in ACPI override setting during configuration and
@@ -162,7 +156,7 @@ Reconfigure from the original baseline in a fresh workspace if an earlier run
 cleared `INITRAMFS_SOURCE` to an empty string: that run may already have dropped
 the dependent settings, and the new placeholder cannot recover their old values.
 
-By default (`--no-genkernel`), build runs the minimal initramfs builder in
+By default, build runs the minimal initramfs builder in
 `<workspace>/initramfs/<release>/`. It extracts the cached
 `/var/cache/distfiles/busybox-1.36.1.tar.bz2`, builds a minimal static BusyBox,
 and bundles installed cryptsetup and its libraries. The complete subtree is
@@ -191,22 +185,16 @@ and the US/Caps-to-Control console map. It requires
 smoke tests. The builder receives explicit `--partuuid`, `--mapper` and `--keymap`
 arguments; it has no implicit thinktop partition UUID.
 
-Use `--genkernel` explicitly for the previous generator. Genkernel creates a
-fresh uncompressed LUKS-capable initramfs using the workspace cache, temporary,
-module and output directories. It does not mount `/boot`, update a bootloader,
-install firmware or save a config in `/etc/kernels`. Module-free configs use
-`--no-ramdisk-modules`; module-enabled configs use the workspace's staged modules.
-Host `/etc/genkernel.conf` settings otherwise apply. External NVIDIA module
-rebuilding is not implemented.
-
-For an explicitly supplied custom archive:
+Module-enabled configs require an explicitly supplied archive. External NVIDIA
+module rebuilding is not implemented.
 
 ```sh
 agentoo kernel build --label agentoo-v0.4 --initramfs /path/to/custom.cpio
 ```
 
-`--initramfs` bypasses both generators and copies that archive into the
-workspace. Explicit `--genkernel` conflicts with `--initramfs`. The old config's initramfs path is never selected implicitly.
+`--initramfs` bypasses the minimal builder and copies that archive into
+`<workspace>/initramfs/<release>/initramfs.cpio`. The old config's initramfs
+path is never selected implicitly.
 
 Finally, build embeds the archive, resolves the config and compiles again. It
 checks release consistency and records the completed config/image hashes and a
