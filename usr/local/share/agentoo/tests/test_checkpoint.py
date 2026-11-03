@@ -249,7 +249,7 @@ else: sys.exit('unexpected tool '+name)
         (cp / 'manifest').unlink()
         result = self.invoke('remove', 'saved', '--confirm=saved')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('legacy/unsupported', result.stderr)
+        self.assertIn('unsupported checkpoint: no manifest', result.stderr)
 
 
 if __name__ == '__main__':

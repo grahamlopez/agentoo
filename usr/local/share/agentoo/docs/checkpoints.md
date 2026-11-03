@@ -63,8 +63,8 @@ referenced by the live system or other checkpoints, so row sizes cannot be added
 to determine total snapshot overhead. Exclusive is a useful indication of unique
 file data, rather than an exact prediction of space reclaimed by deletion.
 
-This scans files and can take time on large checkpoints. It requires no quotas
-and includes legacy nested snapshots. `?` means measurement was unavailable.
+This scans files and can take time on large checkpoints. It requires no quotas.
+`?` means measurement was unavailable.
 These are file extent figures, not exact physical disk usage: compression,
 filesystem metadata and RAID replication are not accounted for. EFI archives
 on the separate EFI partition are excluded.
@@ -96,7 +96,8 @@ Btrfs mount, without deleting files or marking the checkpoint.
 
 Removal validates filesystem and snapshot identities, rejects symlinks,
 unexpected directory entries, mounts inside checkpoint paths, and nested
-subvolumes. Legacy and incomplete captures require manual cleanup. Archive
+subvolumes. Captures without a manifest and incomplete captures require manual
+cleanup. Archive
 checksums need not pass to delete an otherwise identified EFI backup.
 
 Deletion across Btrfs and EFI is not atomic. Before payload deletion, a durable
@@ -185,9 +186,7 @@ EFI files added later remain present. Firmware entries are left unchanged; the
 saved firmware listing is a reference for manual repair. The implementation lives
 outside `EFI/` so restoring boot files does not replace the running tool.
 
-Reboot and verify after success. Legacy fresh-install checkpoints remain stored,
-but their nested layout requires their original recorded recovery procedure;
-this command lists them and refuses automatic inspection/restoration.
+Reboot and verify after success.
 
 ## Boundaries
 

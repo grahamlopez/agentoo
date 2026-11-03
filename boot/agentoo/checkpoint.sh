@@ -265,7 +265,7 @@ offline() {
 }
 verify_checkpoint() {
     [ -d "$CP" ] && [ ! -L "$CP" ] || die 'checkpoint not found'
-    [ -f "$CP/manifest" ] && [ ! -L "$CP/manifest" ] || die 'legacy/unsupported checkpoint: use its original recovery instructions'
+    [ -f "$CP/manifest" ] && [ ! -L "$CP/manifest" ] || die 'unsupported checkpoint: no manifest'
     [ "$(meta format)" = 2 ] && [ "$(meta name)" = "$NAME" ] || die 'invalid checkpoint metadata'
     [ "$(meta root_uuid)" = "$FS_UUID" ] || die 'Btrfs UUID mismatch'
     [ ! -e "$CP/REMOVING" ] || die 'checkpoint removal in progress; retry remove'
@@ -331,7 +331,7 @@ remove_checkpoint() {
     for ENTRY in "$CP/manifest" "$CP/REMOVING"; do
         [ ! -L "$ENTRY" ] || die 'unsafe removal metadata'
     done
-    [ -f "$CP/manifest" ] || [ -f "$CP/REMOVING" ] || die 'legacy/unsupported checkpoint removal; manual cleanup required'
+    [ -f "$CP/manifest" ] || [ -f "$CP/REMOVING" ] || die 'unsupported checkpoint: no manifest; manual cleanup required'
     [ "$(meta format)" = 2 ] && [ "$(meta name)" = "$NAME" ] || die 'invalid checkpoint metadata'
     [ "$(meta root_uuid)" = "$FS_UUID" ] || die 'Btrfs UUID mismatch'
     RETRY=0
@@ -505,8 +505,7 @@ else
             STATE=incomplete
             if [ -f "$CP/COMPLETE" ] && [ "$(cat "$CP/COMPLETE")" = "${CP##*/}" ] && [ ! -e "$CP/INCOMPLETE" ]; then STATE=complete; fi
             [ ! -e "$CP/REMOVING" ] || STATE=removing
-            [ -f "$CP/manifest" ] || STATE="$STATE (legacy format)"
-            # Scan each checkpoint as one set, including legacy nested snapshots.
+            [ -f "$CP/manifest" ] || [ -f "$CP/REMOVING" ] || STATE=unsupported
             # FIEMAP sizes describe file extents, not compressed physical usage.
             SIZES='? ? ?'
             if LC_ALL=C btrfs filesystem du --summarize --human-readable "$CP" > "$TMP/usage"; then
