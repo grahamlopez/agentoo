@@ -238,7 +238,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(version.returncode, 0)
         self.assertIn('agentoo', version.stdout)
 
-    def test_migrated_command_direct_grouped_equivalence(self):
+    def test_direct_and_grouped_commands_are_equivalent(self):
         for name, args in [('fonts', ('doctor', '--help')), ('fonts', ('set', '--no-input')),
                            ('kernel', ('build', '--label', '--help')), ('kernel', ('build', '--lab', 'test')),
                            ('kernel', ('build', '--label', 'test', '--jobs', '0')),

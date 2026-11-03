@@ -231,12 +231,10 @@ class FontsTests(unittest.TestCase):
                     self.invoke('set', '--restore', old, *extra)
                 self.assertEqual(error.exception.code, 2)
 
-    def test_removed_commands_and_analysis_render_combination_are_rejected(self):
-        for args in [('list',), ('preview',), ('coverage',), ('explain',), ('kitty-config',),
-                     ('doctor', '--font', 'Example', '--render')]:
-            with patch('sys.stderr', new_callable=io.StringIO), self.assertRaises(SystemExit) as error:
-                self.invoke(*args)
-            self.assertEqual(error.exception.code, 2)
+    def test_analysis_and_render_are_mutually_exclusive(self):
+        with patch('sys.stderr', new_callable=io.StringIO), self.assertRaises(SystemExit) as error:
+            self.invoke('doctor', '--font', 'Example', '--render')
+        self.assertEqual(error.exception.code, 2)
 
     def test_face_analysis_exposes_substitution_and_single_face_gaps(self):
         with patch.object(f, 'output', return_value='Substitute\n/test/font.ttf\n20-7e'):

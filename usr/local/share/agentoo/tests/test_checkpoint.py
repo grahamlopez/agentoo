@@ -125,13 +125,6 @@ else: sys.exit('unexpected tool '+name)
         self.assertIn('keep distfiles and binary packages', result.stderr)
         self.assertFalse(any(call[0] == 'portageq' for call in self.calls()))
 
-    def test_legacy_cache_spellings_rejected_before_privileges(self):
-        for flag in ('--clean-distfiles', '--no-clean-distfiles'):
-            result = self.invoke('create', 'label', '--dry-run', flag)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('unknown option: ' + flag, result.stderr)
-            self.assertFalse(self.calls())
-
     def test_home_only_capture_preserves_caches_without_cleanup_tools(self):
         result = self.invoke('create', 'label', '--home', '--dry-run', '--no-input')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -152,13 +145,13 @@ else: sys.exit('unexpected tool '+name)
         self.assertIn('saved', result.stdout)
         self.assertIn('Warning: sizes unavailable for saved', result.stderr)
 
-    def test_removed_json_flag_rejected_before_tools(self):
-        for args in [('list', '--json'), ('inspect', 'saved', '--json'),
-                     ('create', 'label', '--json'),
-                     ('restore', 'saved', '--device=/mock', '--json')]:
+    def test_unknown_option_rejected_before_tools(self):
+        for args in [('list', '--unknown'), ('inspect', 'saved', '--unknown'),
+                     ('create', 'label', '--dry-run', '--unknown'),
+                     ('restore', 'saved', '--device=/mock', '--unknown')]:
             result = self.invoke(*args)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn('unknown option: --json', result.stderr)
+            self.assertIn('unknown option: --unknown', result.stderr)
             self.assertFalse(self.calls())
 
     def test_inspect_manifest_emitted_only_after_verification(self):

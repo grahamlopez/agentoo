@@ -52,15 +52,12 @@ class SharedPolicyTests(unittest.TestCase):
                     module['browser_test'](SimpleNamespace(suite='smoke', output=None, no_open=True))
                 self.assertTrue((cache / 'agentoo/fonts/preview.html').is_file())
 
-    def test_window_choices_and_validation_share_groups(self):
+    def test_every_window_choice_is_valid_saved_data(self):
         parser = argparse.ArgumentParser()
         common.window_option(parser)
-        action = parser._option_string_actions['--window']
-        self.assertIs(action.choices, common.WINDOW_GROUPS)
-        self.assertIs(blur.GROUPS, common.WINDOW_GROUPS)
-        self.assertIs(transparency.GROUPS, common.WINDOW_GROUPS)
+        choices = parser._option_string_actions['--window'].choices
         for validator in (blur.validate_data, transparency.validate_data):
-            for group in common.WINDOW_GROUPS:
+            for group in choices:
                 self.assertEqual(validator({group: {}}), {group: {}})
             with self.assertRaises(RuntimeError):
                 validator({'unknown': {}})

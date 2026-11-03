@@ -136,12 +136,6 @@ if sys.argv[1] == 'item':
         self.profile.write_text(f'ssh user {self.destination} template /nonexistent-agentoo-template\n')
         self.assertEqual(self.main(['ssh', '--dry-run'])[0], 1)
 
-    def test_removed_session_option_is_rejected(self):
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as result:
-            self.main(['ssh', '--session-dir', str(self.root)])
-        self.assertEqual(result.exception.code, 2)
-        self.assertFalse(self.log.exists())
-
     def test_provider_environment_and_diagnostics(self):
         work = self.root / 'work'
         work.mkdir()

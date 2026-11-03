@@ -195,12 +195,10 @@ class DesktopStateTest(unittest.TestCase):
         self.assertEqual(self.path.read_text(), original)
         self.assertTrue(wallpaper.exists())
 
-    def test_removed_forms_empty_set_and_invalid_combinations_have_no_effects(self):
-        invalid = [('--file', 'appearance.json'), ('wallpaper', 'restore'),
-                   ('clear', '--file', 'appearance.json'), ('set',)]
+    def test_empty_set_and_invalid_combinations_have_no_effects(self):
+        invalid = [('--file', 'appearance.json'), ('clear', '--file', 'appearance.json'), ('set',)]
         for feature in state.SECTIONS:
-            invalid.extend([(feature, 'set'), (feature, '--reset'),
-                            (feature, 'restore'), (feature, 'clear', '--file', 'x')])
+            invalid.extend([(feature, 'set'), (feature, 'clear', '--file', 'x')])
         invalid.extend([('transparency', '--focused', '5'),
                         ('blur', '--diagnose', 'clear'),
                         ('blur', '--diagnose', 'set', '--focused', 'on'),

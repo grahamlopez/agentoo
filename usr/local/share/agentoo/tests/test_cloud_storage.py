@@ -175,7 +175,7 @@ class CloudStorageTests(unittest.TestCase):
             with patch.object(cloud.os, 'geteuid', return_value=os.geteuid() + 1):
                 self.assertEqual(cloud.pcloud_mains(), [])
 
-    def test_legacy_stop_uses_pidfds_rechecks_identity_and_waits_for_every_main(self):
+    def test_unmanaged_stop_uses_pidfds_rechecks_identity_and_waits_for_every_main(self):
         with patch.object(cloud, 'pcloud_mains', return_value=[101, 102, 103]), \
                 patch.object(cloud.os, 'pidfd_open', side_effect=[10, 11, 12]), \
                 patch.object(cloud, 'is_pcloud_main', side_effect=[True, False, True]), \
@@ -187,7 +187,7 @@ class CloudStorageTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in wait.call_args_list], [[10, 12], [12]])
         self.assertEqual({call.args[0] for call in close.call_args_list}, {10, 11, 12})
 
-    def test_legacy_stop_timeout_closes_descriptors_without_forcing_a_kill(self):
+    def test_unmanaged_stop_timeout_closes_descriptors_without_forcing_a_kill(self):
         with patch.object(cloud, 'pcloud_mains', return_value=[101]), \
                 patch.object(cloud.os, 'pidfd_open', return_value=10), \
                 patch.object(cloud, 'is_pcloud_main', return_value=True), \
