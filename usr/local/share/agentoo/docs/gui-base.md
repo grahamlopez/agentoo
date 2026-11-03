@@ -330,6 +330,28 @@ regular workspace on that monitor, so hiding the dropdown leaves them visible.
 The cell size follows the normal Kitty font settings; the requested geometry
 requires enough monitor space at the selected font size and display scale.
 
+### Kitty host defaults
+
+Kitty loads `/etc/xdg/kitty/kitty.conf` before user configuration. Its native
+`geninclude` runs `/usr/local/share/agentoo/lib/kitty/host_config.py` when configuration
+is loaded, including on startup and reload. The helper reads
+`/etc/agentoo/target-host` as data and outputs the selected
+`/etc/xdg/kitty/hosts/<name>.conf` fragment. Missing selectors or host fragments
+leave Kitty's defaults in effect; malformed selectors and other read errors are
+reported. The helper must be executable, as recorded in the permissions policy.
+
+`/etc/xdg/kitty/hosts/thinktop.conf` sets Thinktop's font size. Other hosts
+retain Kitty's default size.
+User configuration, such as `~/.config/kitty/kitty.conf`, takes precedence;
+remove a local `font_size` override to inherit the managed host setting.
+No home configuration file, launch wrapper, or generated host include is needed.
+
+The shared configuration also enables dynamic background opacity and loads the
+Agentoo transparency watcher. `agentoo desktop transparency` stores personal
+focused/unfocused choices in XDG state; Kitty text stays opaque. See
+[window transparency](desktop.md#window-transparency)
+for inheritance, reset, conflict handling, and validation.
+
 ### Laptop brightness
 
 Laptop utilities live in the independent `@laptop` set, initially containing

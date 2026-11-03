@@ -13,8 +13,11 @@ covers installed linux-firmware trimming.
 
 Thinktop and Flattop have reviewed native savedconfig lists at
 `/etc/agentoo/firmware/thinktop.list` and `/etc/agentoo/firmware/flattop.list`.
-Their host Portage fragments enable savedconfig; apply the matching list locally
-before rebuilding. Other targets retain broad coverage.
+Their host Portage fragments enable savedconfig through `AGENTOO_LINUX_FIRMWARE_USE`;
+the common fragment sets `-savedconfig`, and `package.env/kernel` applies the
+variable only to linux-firmware. Do not add a conflicting package.use setting: it
+takes precedence over package.env. Apply the matching list locally before
+rebuilding. Other targets retain broad coverage.
 SOF audio firmware, CPU microcode and wireless regulatory data belong to separate
 packages and are not trimmed by this list. Installed files, initramfs copies and
 firmware embedded in a custom kernel are separate maintenance concerns.
@@ -222,7 +225,3 @@ in the affected host's `/etc/portage/make.conf.d/90-<host>` and rebuild. Check d
 initramfs regeneration and recreate affected custom artifacts. Keep a known
 working boot path or installation media: the fallback kernel shares the same
 root firmware directory.
-
-See [configuration details](../../../../../etc/agentoo/README.md#installed-firmware-selection)
-and [card 018](../kanban/Completed/018-host-firmware-savedconfig.md) for implementation,
-validation evidence and explicitly deferred maintenance checks.

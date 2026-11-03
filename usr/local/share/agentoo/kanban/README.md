@@ -35,7 +35,7 @@ implementation because native APIs do not offer a simpler equivalent.
 Confirmed command features and JSON appearance storage remain supported. Existing
 installations need to restore and accept the three packaged shell/editor entry
 files when deploying their removal from Git; see
-[deployment guidance](../../../../../etc/agentoo/README.md#shell-and-editor-environment).
+[deployment guidance](../docs/shell-editors.md).
 Kernel replacement retains image/module backups and allows replacing the running
 release. Interrupted installation leaves artifacts for operator recovery, as
 described in the [kernel guide](../docs/kernel.md#install). The expert-workflow

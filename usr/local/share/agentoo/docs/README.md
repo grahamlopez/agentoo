@@ -8,10 +8,14 @@ installer under one roof, with a local overlay for custom ebuilds.
 
 System
 
-- [Target host configuration checklist](host-onboarding.md)
 - [Host selectors and configuration policy](../../../../../etc/agentoo/README.md)
+- [Installation, first boot, and user setup](installation.md)
+- [Target host configuration checklist](host-onboarding.md)
+  and [Flattop hardware baseline](hosts/flattop.md)
 - [System checkpoints and recovery](checkpoints.md)
+- [Git updates for the system repository](git.md)
 - [Managed file permissions and Git automation](permissions.md)
+- [Shell and editor environment](shell-editors.md)
 - [Local Portage overlay](../portage/README.md)
 
 Kernel
@@ -80,21 +84,7 @@ Run the repository checks from a checkout:
 python3 usr/local/share/agentoo/tests/run_tests.py
 ```
 
-This runs the repository’s Python and Lua regression tests, covering CLI tools,
-installer and first-boot scripts, initramfs tooling, and desktop configuration
-logic. Lua checks are explicitly reported as skipped when `lua` is unavailable.
-Python tests that require optional native tools report their own skips. Tests
-use disposable files and mocks; they do not establish live hardware
-correctness. These checks include:
-
-- Installer tests (usr/local/share/agentoo/tests/test_installer.py) cover
-  target selection, CPU detection, RAM build storage, and identity
-  initialization.
-- First-boot tests (usr/local/share/agentoo/tests/test_firstboot_setup.py)
-  cover account prerequisites, autologin configuration, and authentication
-  recovery.
-- Initramfs tests (usr/local/share/agentoo/tests/test_initramfs.py) cover
-  builder validation and device handoff.
-- Lua tests cover Hyprland behavior such as lid handling, Alt-Tab, wallpaper,
-  blur, and transparency.
-
+This runs the repository's Python and Lua regression tests. Lua checks are
+reported as skipped when `lua` is unavailable; Python tests that need optional
+native tools report their own skips. Tests use disposable files and mocks; they
+do not establish live hardware correctness.

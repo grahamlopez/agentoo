@@ -188,6 +188,19 @@ outside `EFI/` so restoring boot files does not replace the running tool.
 
 Reboot and verify after success.
 
+## Subvolume boundaries and optional systemd features
+
+- /srv, /var/lib/machines, and /var/lib/portables use ordinary directories.
+- Same-named files in /etc/tmpfiles.d override vendor subvolume-creation rules;
+  unrelated rules are retained. Review vendor changes when updating systemd.
+- /etc/agentoo/masked-units.conf lists unused image/container units masked by the
+  installer immediately after checkout.
+- Unmasking does not remove the directory overrides or importd's ordinary-image
+  defaults. Explicit image clones/ephemeral containers can still create subvolumes;
+  review checkpoint coverage before enabling those operations.
+- Nested subvolumes are excluded from root snapshots. Do not reintroduce them
+  without changing and testing the checkpoint/recovery design.
+
 ## Boundaries
 
 - Creation is online-only; offline capture is deferred.

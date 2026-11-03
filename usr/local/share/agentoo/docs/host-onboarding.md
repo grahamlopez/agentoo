@@ -18,9 +18,9 @@ configuration support only; installation and hardware acceptance are separate.
 - [ ] **`usr/local/share/agentoo/tests/test_installer.py`** — extend the accepted
   target list in `test_supported_targets_validate` and add coverage for any new
   installer behavior. Existing generic host loaders need no new name registry.
-- [ ] **`etc/agentoo/README.md`** and **`usr/local/share/agentoo/docs/README.md`** —
-  update supported selectors. Record hardware assumptions and the selected
-  host policy in `etc/agentoo/README.md`.
+- [ ] **`etc/agentoo/README.md`** — update supported selectors. Record hardware
+  assumptions and the selected host policy in
+  `usr/local/share/agentoo/docs/hosts/<host>.md`.
 
 ## Required for custom kernel support
 
@@ -115,3 +115,8 @@ from another host into Git.
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
 | Startop | Present; CPU/graphics policy still provisional | Missing | Broad default | Shared defaults |
 | Bequiet | Missing | Missing; NVIDIA modules needed | Broad default | Shared defaults |
+
+Startop matches Thinktop's shared-memory build directory and twelve-job build
+limit, while retaining universal CPU flags until its hardware is identified.
+The installer prints its EFI registration command with the full device path
+required by its firmware.
