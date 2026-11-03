@@ -191,8 +191,8 @@ reboot test before any manual correction is still needed for persistence.
 
 ### Confirmed initramfs keymap discrepancy
 
-The v0.2 configuration is retained in
-[kernel-thinktop-v02-config](../../docs/kernel-thinktop-v02-config).
+The v0.2 configuration (`docs/kernel-thinktop-v02-config`, removed in a later
+commit and kept in Git history) was examined.
 `CONFIG_INITRAMFS_SOURCE` identifies the embedded archive at
 `/home/graham/local/agentoo-build/genkernel/6.18.54-agentoo-v0.2/output/initramfs-6.18.54-agentoo-v0.2.cpio`.
 Its `etc/udev/hwdb.bin` was extracted and queried using the actual ThinkPad
