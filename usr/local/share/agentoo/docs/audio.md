@@ -126,9 +126,7 @@ aplay -D default /tmp/mic-test.wav
 
 Confirm the default ALSA device uses the installed PipeWire ALSA configuration
 and your recording plays. Avoid `-D hw:...`, which bypasses the compatibility
-path. If `aplay` is absent on an installation predating the updated `@gui-base`,
-install `media-sound/alsa-utils` as root with
-`emerge --ask media-sound/alsa-utils`, then run the tests as the normal user.
+path.
 
 ### Check recovery and diagnose failures
 

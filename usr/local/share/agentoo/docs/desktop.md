@@ -485,14 +485,11 @@ appearance section and forgets and stops the managed wallpaper. A feature
 An empty saved object is retained after removing all preferences.
 
 The interface uses `set` and `clear` consistently. Adjustment flags and `--file`
-belong to `set`; bare feature commands are read-only queries. The previous
-direct adjustment syntax, `--reset`, and public wallpaper `restore` command
-are deliberately removed. Wallpaper startup and layout repair use the internal
-helper; appearance initialization continues reading saved state as before.
+belong to `set`; bare feature commands are read-only queries. Wallpaper startup
+and layout repair use the internal helper.
 
-Only `appearance.json` is read for appearance preferences. Older per-command
-state files and compositor snapshots are not supported or imported. Wallpaper
-retains its separate selection file. Queries do not create or change state.
+Only `appearance.json` is read for appearance preferences. Wallpaper retains its
+separate selection file. Queries do not create or change state.
 
 Additional verification:
 

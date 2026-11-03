@@ -404,7 +404,7 @@ p.write_text(text)
         self.assertIn('rd.luks.uuid=luks-' + TEST_LUKS_UUID, generated)
         self.assertIn('rd.luks.name=' + TEST_LUKS_UUID + '=cryptroot', generated)
 
-    def test_missing_firmware_and_legacy_workspace_fail_clearly(self):
+    def test_missing_firmware_and_incomplete_workspace_fail_clearly(self):
         self.prepare()
         data = kernel.load(self.work, 'test')
         output, _ = kernel.paths(self.work, data)
@@ -414,7 +414,7 @@ p.write_text(text)
             kernel.validate_inputs(self.work, data)
         del data['identity']
         kernel.save(self.work, data)
-        with self.assertRaisesRegex(RuntimeError, 'predates host specialization'):
+        with self.assertRaisesRegex(RuntimeError, 'invalid workspace metadata'):
             kernel.load(self.work, 'test')
 
     def test_build_runs_module_install_without_modules(self):

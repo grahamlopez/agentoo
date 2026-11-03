@@ -246,7 +246,7 @@ def load(work, label, completed=False):
     if data.get('label') != label or not data.get('configured'):
         raise RuntimeError(f'{work}: not a configured workspace for label {label}')
     if not isinstance(data.get('host_settings'), dict) or not isinstance(data.get('identity'), dict):
-        raise RuntimeError(f'{work}: workspace predates host specialization; run config in a fresh directory')
+        raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', data.get('release', '')):
         raise RuntimeError(f'{work}: invalid recorded kernel release')
     sources = Path(data['sources'])

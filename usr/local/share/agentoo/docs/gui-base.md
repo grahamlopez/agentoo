@@ -22,8 +22,7 @@ After creating Graham, `/root/002-agentoo-setup-user.sh` writes the local native
 systemd. Checkout alone leaves the packaged password-login command in effect.
 Setup does not restart tty1; autologin begins on its next start or reboot.
 The drop-in is local setup state, excluded from Git, and reruns accept matching
-content but reject conflicting custom configuration. Existing installations
-moving from the formerly tracked drop-in should rerun 002 to establish it locally.
+content but reject conflicting custom configuration.
 
 `/etc/zsh/zlogin` registers a one-time launch before the first prompt, only for
 graham (UID 1000), in an interactive login shell on tty1, with no existing

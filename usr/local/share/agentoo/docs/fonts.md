@@ -40,10 +40,7 @@ agentoo fonts set --font 'Liberation Mono' --size 11 --style Regular
   face. `--font` and `--render` are mutually exclusive: use `test --font` to
   visually inspect a candidate; rendering diagnostics trace the current config.
 
-Use `agentoo fonts COMMAND --help` for every option and default. The former
-`list`, `preview`, `coverage`, `explain`, and `kitty-config` commands have been
-removed. Translate an older printed `kitty-config --value TEXT` revert command
-into `set --restore TEXT`, retaining its exact quoted text.
+Use `agentoo fonts COMMAND --help` for every option and default.
 
 ## Installation
 

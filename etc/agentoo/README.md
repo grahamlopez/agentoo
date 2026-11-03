@@ -206,8 +206,7 @@ effective aliases and their source, run
 settings can override the shared defaults.
 
 The installer configures `pull.rebase=true` locally in the live Git database, so
-`agentoo git pull` rebases local commits by default. For an existing installation:
-`agentoo git config --local pull.rebase true`. This setting persists in
+`agentoo git pull` rebases local commits by default. This setting persists in
 `/var/lib/agentoo/repository.git/config`; it is separate from development-clone
 settings. Commit or reconcile live edits before pulling; updates immediately
 change system files, and Git hooks restore managed permissions.
@@ -238,18 +237,7 @@ their native extension points. The shared Git ignore policy excludes those
 vendor entries to prevent adding them again. Accept package updates to these
 entry files after review in `dispatch-conf`.
 
-On installations where Agentoo previously tracked those three entry files,
-pulling their removal also removes the live files. Before opening a new login
-shell or editor, restore the package entries with:
-
-```sh
-emerge --ask --oneshot app-shells/zsh app-editors/vim-core app-editors/neovim
-dispatch-conf
-```
-
-Accept the packaged replacements for all three paths, including protected
-`._cfg*` replacements for missing files. Keep the current shell open until they
-are restored. No vendor configuration is copied into the repository.
+No vendor configuration is copied into the repository.
 
 Gentoo's Zsh profile loads the distribution environment and `/etc/profile.d/`.
 Agentoo's interactive `zshrc` prefers Neovim, then Vim; personal startup files
@@ -313,7 +301,7 @@ for inheritance, reset, conflict handling, and validation.
 - Same-named files in /etc/tmpfiles.d override vendor subvolume-creation rules;
   unrelated rules are retained. Review vendor changes when updating systemd.
 - /etc/agentoo/masked-units.conf lists unused image/container units masked by the
-  installer immediately after checkout. Existing hosts require explicit application.
+  installer immediately after checkout.
 - Unmasking does not remove the directory overrides or importd's ordinary-image
   defaults. Explicit image clones/ephemeral containers can still create subvolumes;
   review checkpoint coverage before enabling those operations.

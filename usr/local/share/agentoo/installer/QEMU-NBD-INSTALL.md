@@ -123,8 +123,6 @@ bash /home/graham/VMs/agentic-gentoo/boot.sh
 
 No NBD attachment, host mount, disk creation, or installer run is needed.
 Keep `target.qcow2`, `OVMF_VARS.4m.fd`, and `boot.sh` together.
-For a VM created before this playbook, create `boot.sh` using just the
-`cat > boot.sh` block in section 1, from its VM directory.
 
 Unlock the disk and log in. Shut down from inside the guest with `poweroff`.
 Ctrl-a c switches between the serial console and QEMU monitor.

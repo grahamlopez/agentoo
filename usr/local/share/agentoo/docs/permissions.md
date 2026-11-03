@@ -87,8 +87,8 @@ repository's `core.hooksPath` to `/usr/local/share/agentoo/git-hooks`:
 - After checkout, merge, or rewrite/rebase: fix when running as root; otherwise check.
 - Before commit: check and block the commit if permissions or policy coverage fail.
 
-For an existing installation, run `agentoo git setup-hooks` as root to fix
-permissions and enable the hooks. It refuses to replace a different configured
+To apply the policy and enable the hooks manually, run `agentoo git setup-hooks`
+as root. It refuses to replace a different configured
 hooks directory. Hooks guard both the `/` work tree and the installed Git
 database path, and are not enabled in development clones. Post-operation
 failures report problems but do not roll back Git changes. Run the checker after
