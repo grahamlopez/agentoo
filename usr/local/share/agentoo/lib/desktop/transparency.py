@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 
@@ -68,6 +69,44 @@ def require_integration(recover=False):
         raise RuntimeError('Fix Hyprland configuration errors before changing transparency: ' + errors)
 
 
+def configured_default(group, focus):
+    if group == 'kitty':
+        kitty = kitty_defaults()
+        if not kitty:
+            raise RuntimeError('Cannot read Kitty background opacity')
+        return (1 - kitty[0]) * 100
+    option = 'active' if focus == 'focused' else 'inactive'
+    value = json.loads(hyprctl('-j', 'getoption', f'decoration:{option}_opacity'))['float']
+    return (1 - float(value)) * 100
+
+
+def active_category():
+    # Read the class and authoritative patterns together; these expressions use
+    # the common subset of Python and Hyprland's RE2 regular expressions.
+    report = hyprctl('repl', r'''local active = hl.get_active_window()
+if not active then return "none" end
+local families = require("/etc/xdg/hypr/window-classes.lua")
+return active.class .. "\n" .. families.kitty .. "\n" .. families.browser''')
+    fields = report.rsplit('\n', 2)
+    if len(fields) != 3:
+        raise RuntimeError('No active window category to adjust')
+    window_class, kitty, browser = fields
+    for group, pattern in (('kitty', kitty), ('browser', browser)):
+        if re.fullmatch(pattern, window_class):
+            return group
+    return 'other'
+
+
+def relative_adjusted(data, direction, unfocused=False):
+    group = active_category()
+    focus = 'unfocused' if unfocused else 'focused'
+    value = effective(data, group, focus)
+    if value is None:
+        value = configured_default(group, focus)
+    value = max(0, min(90, value + (5 if direction == 'up' else -5)))
+    return adjusted(data, group, **{focus: value})
+
+
 def kitty_defaults():
     # Kitty owns its include/geninclude/host/command-line parsing. This starts no
     # window and needs neither remote-control access nor a display connection.
@@ -87,10 +126,9 @@ def kitty_defaults():
 def show(data, selected):
     defaults = {}
     if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
-        for focus, option in zip(STATES, ('active', 'inactive')):
+        for focus in STATES:
             try:
-                value = json.loads(hyprctl('-j', 'getoption', f'decoration:{option}_opacity'))['float']
-                defaults[focus] = (1 - float(value)) * 100
+                defaults[focus] = configured_default('all', focus)
             except (RuntimeError, ValueError, KeyError, TypeError):
                 pass
     kitty = kitty_defaults()

@@ -55,6 +55,13 @@ def build_parser():
                '  agentoo desktop transparency clear --window kitty')
     window_option(transparency)
     actions = transparency.add_subparsers(dest='action')
+    for direction in ('up', 'down'):
+        relative = actions.add_parser(direction,
+            help=f'Adjust the active window category transparency {direction} by 5 percentage points',
+            description='Adjust and remember the active window category setting, bounded to 0–90. '
+                        'Defaults to the focused setting; --window is not used with this action.')
+        relative.add_argument('--unfocused', action='store_true',
+                              help='Adjust the category’s unfocused setting instead')
     setter = actions.add_parser('set', help='Apply and remember transparency settings',
         description='Apply and remember transparency. Omitted settings stay unchanged.',
         epilog='0 means fully opaque. Setting all clears category overrides for supplied focus states. '
@@ -86,6 +93,8 @@ def main():
 
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == 'transparency' and args.action in ('up', 'down') and args.window != 'all':
+        parser.error('up/down select the active window category; omit --window')
     path = state_path()
     if args.command == 'wallpaper':
         return wallpaper.run(args)

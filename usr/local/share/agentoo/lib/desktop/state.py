@@ -87,8 +87,11 @@ def update(args, path, parser=None):
             elif command == 'blur':
                 data[command] = blur.adjusted(blur.validate_data(data.get(command, {})), args)
             elif command == 'transparency':
-                data[command] = transparency.adjusted(transparency.validate_data(data.get(command, {})),
-                                                      args.window, args.focused, args.unfocused)
+                saved = transparency.validate_data(data.get(command, {}))
+                if args.action in ('up', 'down'):
+                    data[command] = transparency.relative_adjusted(saved, args.action, args.unfocused)
+                else:
+                    data[command] = transparency.adjusted(saved, args.window, args.focused, args.unfocused)
             else:
                 if command == 'animations':
                     data[command] = effects.animation_update(data.get(command, {}), values)

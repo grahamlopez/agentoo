@@ -55,6 +55,9 @@ def refresh(boss):
             if not options.dynamic_background_opacity:
                 raise RuntimeError('Kitty dynamic_background_opacity must be yes; restart older Kitty processes')
             boss.call_remote_control(window, ('set-background-opacity', f'--match=id:{window.id}', str(opacity)))
+            # Timer callbacks can run while an unfocused Kitty is otherwise idle.
+            # The opacity setter marks a redraw; refresh also wakes rendering.
+            window.refresh()
             if managed:
                 _applied[identifier] = opacity
             else:

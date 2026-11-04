@@ -58,6 +58,53 @@ class Transparency(unittest.TestCase):
             self.assertEqual(changed[group], original[group])
         self.assertNotIn('other', transparency.adjusted(changed, 'all', focused=10))
 
+    def test_relative_adjustments_inherit_and_preserve_other_settings(self):
+        original = {'all': {'focused': 10, 'unfocused': 20},
+                    'browser': {'focused': 15}, 'kitty': {'focused': 0}}
+        for group in ('kitty', 'browser', 'other'):
+            with patch.object(transparency, 'active_category', return_value=group):
+                changed = transparency.relative_adjusted(original, 'up', unfocused=True)
+            self.assertEqual(changed[group]['unfocused'], 25)
+            self.assertEqual(changed['all'], original['all'])
+            self.assertEqual(changed['browser']['focused'], 15)
+        self.assertNotIn('unfocused', original['kitty'])
+
+    @unittest.skipUnless(shutil.which('lua'), 'lua is unavailable')
+    def test_active_category_uses_shared_patterns(self):
+        families = SHARE.parents[3] / 'etc/xdg/hypr/window-classes.lua'
+        patterns = subprocess.check_output(
+            ['lua', '-'], input=f'local f = dofile({json.dumps(str(families))}); print(f.kitty); print(f.browser)',
+            text=True).strip()
+        for window_class, expected in (('kitty', 'kitty'), ('agentoo-dropdown', 'kitty'),
+                                       ('Firefox', 'browser'), ('prisma-access-browser', 'browser'),
+                                       ('custom-app', 'other')):
+            with patch.object(transparency, 'hyprctl', return_value=window_class + '\n' + patterns):
+                self.assertEqual(transparency.active_category(), expected)
+
+    def test_relative_defaults_limits_and_missing_active_window(self):
+        for group in ('kitty', 'browser', 'other'):
+            with patch.object(transparency, 'active_category', return_value=group), \
+                 patch.object(transparency, 'configured_default', return_value=12) as default:
+                self.assertEqual(transparency.relative_adjusted({}, 'down'), {group: {'focused': 7}})
+                default.assert_called_once_with(group, 'focused')
+                self.assertEqual(transparency.relative_adjusted({group: {'focused': 88}}, 'up')[group]['focused'], 90)
+                self.assertEqual(transparency.relative_adjusted({group: {'focused': 2}}, 'down')[group]['focused'], 0)
+        with patch.object(transparency, 'hyprctl', return_value='none'):
+            with self.assertRaisesRegex(RuntimeError, 'No active window'):
+                transparency.relative_adjusted({}, 'up')
+
+    def test_repeated_relative_updates_use_saved_value(self):
+        args = argparse.Namespace(command='transparency', action='up', window='all', unfocused=False)
+        path = self.directory / 'appearance.json'
+        with patch.object(transparency, 'require_integration'), \
+             patch.object(transparency, 'active_category', return_value='browser'), \
+             patch.object(transparency, 'configured_default', return_value=0), \
+             patch.object(effects, 'reload_settings') as reload:
+            state.update(args, path)
+            state.update(args, path)
+        self.assertEqual(json.loads(path.read_text()), {'transparency': {'browser': {'focused': 10}}})
+        self.assertEqual(reload.call_count, 2)
+
     def test_cli_invalid_arguments_and_help_have_no_effects(self):
         entry = SHARE.parents[1] / 'bin/agentoo'
         for args, status in [(['--focused', '91'], 2), (['--focused', '-1'], 2),
@@ -146,9 +193,10 @@ class Transparency(unittest.TestCase):
         utils.log_error = lambda message: self.fail(message)
         calls = []
         reloads = []
-        boss = SimpleNamespace(all_windows=[SimpleNamespace(id=1, os_window_id=11),
-                                           SimpleNamespace(id=2, os_window_id=11),
-                                           SimpleNamespace(id=3, os_window_id=12)],
+        refreshed = []
+        boss = SimpleNamespace(all_windows=[SimpleNamespace(id=1, os_window_id=11, refresh=lambda: refreshed.append(11)),
+                                           SimpleNamespace(id=2, os_window_id=11, refresh=lambda: refreshed.append(11)),
+                                           SimpleNamespace(id=3, os_window_id=12, refresh=lambda: refreshed.append(12))],
                                call_remote_control=lambda window, args: calls.append((window.os_window_id, args)),
                                load_config_file=lambda: reloads.append(True))
         watcher.read_state = lambda path: json.loads(json.dumps(data))
@@ -156,9 +204,19 @@ class Transparency(unittest.TestCase):
             watcher.refresh(boss)
             self.assertEqual(len(calls), 2)  # One call per OS window, not per split/tab.
             self.assertEqual([item[1][-1] for item in calls], ['0.95', '0.9'])
+            self.assertEqual(refreshed, [11, 12])
             calls.clear()
+            refreshed.clear()
             watcher.refresh(boss)
             self.assertEqual(calls, [])
+            self.assertEqual(refreshed, [])
+            # A saved unfocused adjustment must repaint the idle OS window,
+            # without needing any focus callback or touching the focused one.
+            data['all']['unfocused'] = 20
+            watcher.refresh(boss)
+            self.assertEqual([item[1][-1] for item in calls], ['0.8'])
+            self.assertEqual(refreshed, [12])
+            calls.clear()
             data.clear()
             watcher.refresh(boss)
             self.assertEqual([item[1][-1] for item in calls], ['0.7', '0.7'])

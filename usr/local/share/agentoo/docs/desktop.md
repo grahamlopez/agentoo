@@ -73,12 +73,26 @@ agentoo desktop transparency set --focused 5 --unfocused 10
 agentoo desktop transparency set --window kitty --unfocused 20
 agentoo desktop transparency set --window browser --focused 0 --unfocused 0
 agentoo desktop transparency set --window other --focused 5 --unfocused 15
+agentoo desktop transparency up
+agentoo desktop transparency down --unfocused
 agentoo desktop transparency clear --window browser
 agentoo desktop transparency clear
 ```
 
 Percentages measure transparency: 0 is opaque, 90 is the maximum, and fractional
 percentages are accepted. Focused and unfocused values change independently.
+`up` and `down` adjust transparency by 5 percentage points, bounded to 0–90,
+for the active window's category (`kitty`, `browser`, or `other`). They adjust
+the focused setting unless `--unfocused` is supplied; they do not accept a
+`--window` selection. The starting value is the category override, inherited
+shared value, or configured default. Changes affect all windows of that category
+and persist just like `set`. With no active window, the command fails without
+changing settings.
+
+Shift+BrightnessUp makes the active category more opaque (`down`);
+Shift+BrightnessDown makes it more transparent (`up`). Adding Ctrl adjusts
+that category's unfocused setting. Holding the keys repeats the adjustment.
+
 Without an action, the command prints settings without
 creating state or changing windows. `--window` defaults to `all`; a query of
 `all` shows all four groups with override, inherited, or configured-default
