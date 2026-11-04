@@ -51,6 +51,14 @@ the second-Tab package list after patching, and staged the patched package with
 Portage using Gentoo's unmodified ebuild and the user-patch directory. The source
 archive matches Gentoo's Manifest.
 
+## Softlock Neovim plugin
+
+`app-nvim/softlock` is a live `git-r3` package selected by `@terminal-env`.
+It installs the upstream plugin and generated help tags as a native Neovim start
+package. Source changes stay upstream; rebuild the package to fetch them.
+See [the shell and editor guide](../docs/shell-editors.md) for requirements and
+the update command.
+
 ## Keyd
 
 `app-misc/keyd` builds the tagged upstream 2.6.0 release and installs the

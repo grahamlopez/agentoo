@@ -26,6 +26,25 @@ entry files after review in `dispatch-conf`.
 
 No vendor configuration is copied into the repository.
 
+The terminal environment includes [softlock](https://github.com/grahamlopez/softlock.nvim)
+for passphrase-encrypted text files. Portage installs it as a native Neovim start
+package, including `:help softlock`; no plugin manager or setup call is needed.
+The package requires Neovim 0.12.3 or newer and GnuPG 2.2 or newer. Shared keyword
+settings accept testing Neovim releases and the unkeyworded live plugin package.
+
+The live ebuild fetches upstream's default branch when rebuilt. Normal
+`emerge --update @world` does not detect new commits for an unchanged `9999`
+version. To update the plugin explicitly:
+
+```sh
+emerge --ask --oneshot app-nvim/softlock
+```
+
+Plugin development stays in its upstream repository; Agentoo tracks only the
+packaging and default selection. Opening an encrypted buffer disables ShaDa
+persistence for the rest of that Neovim session; see the upstream help for usage
+and limitations.
+
 Gentoo's Zsh profile loads the distribution environment and `/etc/profile.d/`.
 Agentoo's interactive `zshrc` prefers Neovim, then Vim; personal startup files
 can override that choice. Desktop launch waits until all personal startup files,
