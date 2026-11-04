@@ -12,6 +12,7 @@ System
 - [Installation, first boot, and user setup](installation.md)
 - [Target host configuration checklist](host-onboarding.md)
   and [Flattop hardware baseline](hosts/flattop.md)
+- [Startop power after resume investigation](hosts/startop-power.md)
 - [System checkpoints and recovery](checkpoints.md)
 - [Git updates for the system repository](git.md)
 - [Managed file permissions and Git automation](permissions.md)

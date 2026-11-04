@@ -39,3 +39,13 @@ separate checks.
 
 EFI registration uses the installer's existing `--full-dev-path` workaround.
 Keep local storage identifiers and boot arguments outside tracked host policy.
+
+## Power after suspend
+
+Controlled tests reproduce approximately 1–1.4 W more idle draw after resume
+and loss of CPU package states deeper than C2. S3 additionally leaves the media
+GPU tile awake, but the power increase persists with both GPU tiles sleeping
+and GSC firmware working under firmware-enabled Modern Standby. Read the
+[power investigation and rejected hypotheses](startop-power.md) before
+diagnosing the boot or resume errors again. That record includes raw captures,
+the shared SOUTHPORT_A latency-request change, and unresolved next steps.
