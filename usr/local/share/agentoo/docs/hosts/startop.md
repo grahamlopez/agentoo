@@ -49,3 +49,6 @@ and GSC firmware working under firmware-enabled Modern Standby. Read the
 [power investigation and rejected hypotheses](startop-power.md) before
 diagnosing the boot or resume errors again. That record includes raw captures,
 the shared SOUTHPORT_A latency-request change, and unresolved next steps.
+Temporarily removing the unused secondary SSD at `0000:59:00.0` restored
+package C6/C8 accumulation and cleared the valid latency request, isolating
+the failure to that SSD or its root-port path through `0000:00:1c.0`.
