@@ -88,6 +88,7 @@ hl.on("window.open", function(window)
     end
 end)
 hl.bind("SUPER + SHIFT + Return", hl.dsp.exec_cmd("firefox-bin"))
+hl.bind("SUPER + SHIFT + backslash", hl.dsp.exec_cmd("prisma-access-browser"))
 hl.bind("SUPER + Q", hl.dsp.window.close())
 hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
 hl.bind("SUPER + F", hl.dsp.window.fullscreen({ action = "toggle" }))
