@@ -20,15 +20,22 @@ from desktop import common
 
 class ConflictTransportTests(unittest.TestCase):
     def test_read_only_query_reports_locations_and_rejects_missing_integration(self):
-        with patch.object(common, 'hyprctl', return_value='/outside/rules.lua:4\n/host.lua:9') as ipc:
+        with patch.object(common, 'hyprctl', return_value='ready\n/outside/rules.lua:4\n/host.lua:9') as ipc:
             self.assertEqual(common.window_rule_conflicts('blur'), ['/outside/rules.lua:4', '/host.lua:9'])
         self.assertEqual(ipc.call_args.args[0], 'repl')
+        self.assertIn('"ready\\n" ..', ipc.call_args.args[1])
         self.assertIn('agentoo_window_rule_conflicts("blur")', ipc.call_args.args[1])
-        with patch.object(common, 'hyprctl', return_value=''):
+        with patch.object(common, 'hyprctl', return_value='ready'):
             self.assertEqual(common.window_rule_conflicts('transparency'), [])
         with patch.object(common, 'hyprctl', return_value='unavailable'):
             with self.assertRaisesRegex(RuntimeError, 'appearance-rules.lua integration'):
                 common.window_rule_conflicts('transparency')
+
+    def test_transport_errors_are_not_reported_as_conflicts(self):
+        for report in ('unknown request', '', 'error: Lua query failed'):
+            with self.subTest(report=report), patch.object(common, 'hyprctl', return_value=report):
+                with self.assertRaisesRegex(RuntimeError, 'Cannot query Hyprland appearance window rules'):
+                    common.window_rule_conflicts('transparency')
 
 
 @unittest.skipUnless(shutil.which('Hyprland'), 'Hyprland parser required')

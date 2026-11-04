@@ -51,11 +51,16 @@ def window_option(parser, *, child=False):
 
 
 def window_rule_conflicts(feature):
+    # Hyprland treats an empty IPC reply as an unknown request. Always return
+    # a nonempty marker, including when the conflict list is empty.
     report = hyprctl('repl', 'return agentoo_window_rule_conflicts and '
-                     f'agentoo_window_rule_conflicts("{feature}") or "unavailable"')
+                     f'("ready\\n" .. agentoo_window_rule_conflicts("{feature}")) or "unavailable"')
     if report == 'unavailable':
         raise RuntimeError('Load the shared Agentoo appearance-rules.lua integration before adjusting appearance')
-    return report.splitlines()
+    lines = report.splitlines()
+    if not lines or lines[0] != 'ready':
+        raise RuntimeError(f'Cannot query Hyprland appearance window rules: {report or "empty reply"}')
+    return lines[1:]
 
 
 def hyprctl(*arguments, timeout=10):

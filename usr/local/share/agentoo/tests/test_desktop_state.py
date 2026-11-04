@@ -45,7 +45,7 @@ class DesktopStateTest(unittest.TestCase):
             patch.object(blur, 'require_integration'),
             patch.object(blur, 'reload_saved'), patch.object(transparency, 'require_integration'),
             patch.object(state, 'window_rule_conflicts', return_value=[]),
-            patch.object(transparency, 'kitty_defaults', return_value=[1, True, [str(SHARE / 'lib/kitty/transparency.py')]]),
+            patch.object(transparency, 'kitty_defaults', return_value=[1, True, ['/usr/local/share/agentoo/lib/kitty/transparency.py']]),
         ):
             manager.start()
             self.addCleanup(manager.stop)
@@ -82,6 +82,15 @@ class DesktopStateTest(unittest.TestCase):
             self.apply('set', '--file', str(self.file))
         reload.assert_called_once_with({'all': {'focused': True}, 'strength': {'size': 3}})
         general.assert_not_called()
+
+    def test_kitty_transparency_requires_configured_watcher_and_dynamic_opacity(self):
+        self.save_import({'transparency': {'kitty': {'focused': 5}}})
+        watcher = '/usr/local/share/agentoo/lib/kitty/transparency.py'
+        for defaults in (None, [1, False, [watcher]], [1, True, []]):
+            with self.subTest(defaults=defaults), patch.object(transparency, 'kitty_defaults', return_value=defaults):
+                with self.assertRaisesRegex(RuntimeError, 'Kitty configuration needs'):
+                    self.apply('set', '--file', str(self.file))
+                self.assertFalse(self.path.exists())
 
     def test_subcommand_reads_only_its_section_and_missing_section_is_an_error(self):
         self.save_import({'borders': {'width': 3}, 'gaps': {'typo': 10}})

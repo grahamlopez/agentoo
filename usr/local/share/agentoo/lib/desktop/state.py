@@ -104,9 +104,9 @@ def update(args, path, parser=None):
                 selected = data.get('transparency', {})
                 if any(effective(selected, 'kitty', focus) is not None for focus in transparency.STATES):
                     kitty = transparency.kitty_defaults()
-                    watcher = str(Path(transparency.__file__).parents[1] / 'kitty/transparency.py')
+                    watcher = '/usr/local/share/agentoo/lib/kitty/transparency.py'
                     if not kitty or not kitty[1] or watcher not in kitty[2]:
-                        raise RuntimeError('Kitty needs the Agentoo watcher and dynamic_background_opacity yes; restart older Kitty processes')
+                        raise RuntimeError('Kitty configuration needs dynamic_background_opacity yes and watcher ' + watcher)
             # Validate duration against the receiving desktop without saving curves.
             if 'animations' in changed and 'duration' in data.get('animations', {}):
                 if any(branch['bezier'].startswith('spring:') for branch in effects.live_animations().values()):
