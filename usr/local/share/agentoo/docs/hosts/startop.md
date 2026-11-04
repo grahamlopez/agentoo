@@ -30,9 +30,12 @@ available yet. The boot journal records Hyprland's abort at 9.08 seconds and
 i915 DRM registration at 9.16 seconds; a manual launch succeeded afterward.
 The native dracut fragment `/etc/dracut.conf.d/startop.conf` checks the existing
 host selector and forces early i915 loading only for Startop, so graphics
-initialization precedes tty1 autologin. Rebuild the
-distribution initramfs after applying this configuration, then verify a cold
-boot and record the result. Custom-kernel boot acceptance remains separate.
+initialization precedes tty1 autologin. After applying this configuration and
+rebuilding the distribution initramfs, the user confirmed successful desktop
+autostart on reboot on 2026-11-03. The running session's `hyprctl deprecated-config`
+and `hyprctl configerrors` checks report no deprecations or configuration errors.
+Repeated and cold-boot acceptance and custom-kernel boot acceptance remain
+separate checks.
 
 EFI registration uses the installer's existing `--full-dev-path` workaround.
 Keep local storage identifiers and boot arguments outside tracked host policy.
