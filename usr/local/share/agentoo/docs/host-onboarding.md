@@ -113,10 +113,10 @@ from another host into Git.
 | --- | --- | --- | --- | --- |
 | Thinktop | Present | Present | Present | Hyprland and Kitty |
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
-| Startop | Present; CPU/graphics policy still provisional | Missing | Broad default | Shared defaults |
+| Startop | Present; Arrow Lake CPU and Intel graphics | Missing | Broad default | Shared defaults |
 | Bequiet | Missing | Missing; NVIDIA modules needed | Broad default | Shared defaults |
 
-Startop matches Thinktop's shared-memory build directory and twelve-job build
-limit, while retaining universal CPU flags until its hardware is identified.
-The installer prints its EFI registration command with the full device path
-required by its firmware.
+Startop selects Arrow Lake compiler targets and Intel graphics, with a
+shared-memory build directory and twelve-job build limit. See its
+[hardware baseline](hosts/startop.md). The installer prints its EFI registration
+command with the full device path required by its firmware.
