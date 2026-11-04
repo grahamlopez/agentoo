@@ -43,6 +43,11 @@ external-module integration; a host fragment alone does not provide that workflo
 
 ## Optional host policy files
 
+- [ ] **`etc/dracut.conf.d/<host>.conf`** — add distribution-initramfs policy
+  only for demonstrated requirements. Dracut sources every `.conf` file as
+  shell configuration; explicitly check `/etc/agentoo/target-host` before
+  applying host settings, as `startop.conf` does for early i915 loading.
+  Rebuild affected distribution initramfs images after changing policy.
 - [ ] **`etc/portage/sets/host-<host>`** — add only for packages this hardware
   needs beyond the common sets, such as `sys-firmware/sof-firmware`. The installer
   emerges it during kernel-foundation. CPU microcode package selection comes from

@@ -66,6 +66,35 @@ relying on this route. Console switching cannot recover a kernel or GPU hard
 lock. Autologin grants physical users access to graham's session after boot;
 this setup does not add a screen locker.
 
+### GPU readiness at boot
+
+The native dracut fragment `/etc/dracut.conf.d/startop.conf` checks
+`/etc/agentoo/target-host` and forces early i915 loading only for Startop.
+Dracut sources every `.conf` fragment; filenames do not select hosts.
+Without early loading, fast tty1 autologin can
+launch Hyprland before the DRM GPU is registered: Startop's first launch
+reported `No gpus in scanGPUs`, while a manual retry succeeded. This is
+independent of Lua configuration warnings.
+
+After applying the Startop fragment, rebuild the booted
+distribution kernel's initramfs through the existing kernel-install hooks:
+
+```sh
+sudo kernel-install add "$(uname -r)" "/usr/lib/modules/$(uname -r)/vmlinuz"
+```
+
+The Agentoo ESP hook verifies the mounted boot target. The same kernel version
+retains its existing EFI paths and registration; the guidance hook prints a
+registration command but does not run it. Confirm early loading is present:
+
+```sh
+sudo lsinitrd -f etc/cmdline.d/20-force_drivers.conf "/boot/EFI/Gentoo/initramfs-$(uname -r).img"
+```
+
+Expect `rd.driver.pre=i915`. Then reboot and verify automatic desktop startup.
+This dracut policy applies to the distribution fallback; custom images have
+their own kernel and initramfs workflow.
+
 ## Before pulling on thinktop
 
 Inspect the current installed packages, local Portage settings, Hyprland/user

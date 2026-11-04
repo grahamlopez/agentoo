@@ -63,10 +63,11 @@ hl.window_rule({
 })
 
 -- A persistent terminal overlay; Kitty sizes the content in columns and rows.
-hl.workspace_rule({
-    workspace = "special:terminal",
-    on_created_empty = "kitty --class agentoo-dropdown -o remember_window_size=no -o initial_window_width=160c -o initial_window_height=45c",
-})
+hl.on("workspace.created", function(workspace)
+    if workspace.name == "special:terminal" and workspace.is_empty then
+        hl.exec_cmd("kitty --class agentoo-dropdown -o remember_window_size=no -o initial_window_width=160c -o initial_window_height=45c", { workspace = "special:terminal silent" })
+    end
+end)
 hl.window_rule({
     match = { class = "agentoo-dropdown" },
     float = true,
