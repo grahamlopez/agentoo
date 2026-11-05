@@ -70,7 +70,7 @@ local function cycle(step)
         local target = live[session.order[session.index]]
         if target then
             hl.dispatch(hl.dsp.focus({ window = target }))
-            hl.dispatch(hl.dsp.window.bring_to_top({ window = target }))
+            hl.dispatch(hl.dsp.window.alter_zorder({ mode = "top", window = target }))
             return
         end
     end

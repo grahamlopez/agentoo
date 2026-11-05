@@ -3,6 +3,7 @@ local source = arg[1] or "etc/xdg/hypr/alt-tab.lua"
 local regular, dropdown, other = {}, { name = "special:terminal" }, {}
 local monitor = { active_workspace = regular, active_special_workspace = dropdown }
 local windows, active, events, bindings = {}, nil, {}, {}
+local raised
 local function window(id, workspace)
     local w = { stable_id = id, workspace = workspace, monitor = monitor,
         mapped = true, hidden = false, accepts_input = true, focus_history_id = id - 1 }
@@ -24,7 +25,10 @@ hl = {
             active = args.window
             if events['window.active'] then events['window.active'](active) end
         end end,
-        window = { bring_to_top = function() return function() end end },
+        window = { alter_zorder = function(args)
+            assert(args.mode == 'top' and args.window, 'raise requires mode and target')
+            return function() raised = args.window end
+        end },
     },
 }
 dofile(source)
@@ -34,6 +38,7 @@ local function release() events['input.keyboard.key'](64, 0, 0) end
 -- A, B, C focus history: A -> C -> B, newest first.
 focus(b); focus(c); focus(a)
 tab(); assert(active == c, 'first Tab selects previous window including dropdown')
+assert(raised == c, 'selected window is raised')
 release(); tab(); assert(active == a, 'a fresh gesture bounces to origin')
 release()
 -- Repeated Tab keeps the original order despite focus events.
