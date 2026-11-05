@@ -34,6 +34,7 @@ User facing tools and configuration
 - [Displays, HiDPI, and laptop lid behavior](displays.md)
 - [Secret profiles and installation](../secrets/README.md)
 - [Desktop preferences](desktop.md)
+- [Theming and light/dark appearance](theming.md)
 - [Font diagnostics and selection](fonts.md)
 - [Repository status and terminal color tests](terminal-tools.md)
 

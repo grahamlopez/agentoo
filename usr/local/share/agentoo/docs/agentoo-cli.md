@@ -31,7 +31,7 @@ executable paths. `agentoo help fonts doctor` shows nested help, and `agentoo
 `agentoo theme light|dark` persists the current user's system appearance
 preference. With no argument, `agentoo theme` prints `light`, `dark`, or
 `no-preference`. Run without sudo. Application themes and their one-time
-"follow system" selections remain user-controlled. See [desktop preferences](desktop.md#system-lightdark-preference)
+"follow system" selections remain user-controlled. See [theming and light/dark appearance](theming.md)
 for portal setup and validation.
 
 ## Cloud storage

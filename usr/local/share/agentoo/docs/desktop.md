@@ -1,60 +1,7 @@
 # Desktop preferences
 
-## System light/dark preference
-
-```sh
-agentoo theme          # Show light, dark, or no-preference
-agentoo theme light
-agentoo theme dark
-```
-
-Run these as your desktop user, without sudo. The setters persist only
-`org.gnome.desktop.interface color-scheme` through native GSettings/dconf.
-There is no second mode setting in Agentoo's appearance state, no login restore
-command, and no theme or palette selection. Repeating a setter is harmless.
-The initial native value `default` is reported as `no-preference`, not guessed
-to be light or dark. Queries report the system preference, not application state.
-Successful queries print one value to stdout; setters report to stderr.
-Exit codes are 0 for success, 1 for settings failures, and 2 for invalid arguments.
-
-Install the dependencies with `emerge --ask --noreplace @gui-desktop`.
-The set includes dconf and the GTK portal backend, which pulls in
-`sys-apps/xdg-desktop-portal` and `gnome-base/gsettings-desktop-schemas`.
-The native `/etc/xdg/xdg-desktop-portal/hyprland-portals.conf` selects GTK
-for the Settings interface. It exposes the preference as
-`org.freedesktop.appearance color-scheme` and sends native change notifications.
-Personal portal configuration takes precedence; portal files are selected as
-whole files, not merged, so an existing personal file must also select the GTK
-Settings backend. See the upstream [portal configuration reference](https://flatpak.github.io/xdg-desktop-portal/docs/portals.conf.html)
-and [GTK Settings implementation](https://github.com/flatpak/xdg-desktop-portal-gtk/blob/main/src/settings.c).
-
-After first installing the portal or changing its configuration, log out of
-Hyprland and log back in. D-Bus activates the portal services on demand; no
-Agentoo watcher or service enablement is needed. Ordinary mode changes need
-neither a logout nor a compositor reload.
-
-Choose "follow system", "system", or "auto" once in each application's
-appearance settings. Terminal applications may follow their terminal instead;
-configure the terminal's native light/dark switching too. Applications pinned
-to dark or light keep their own preference. These commands do not edit
-application settings, supply palettes, change wallpaper or compositor colors,
-or restart applications. Whether an application updates live depends on its
-own support and configuration.
-
-To inspect the public preference from the running desktop session:
-
-```sh
-gdbus call --session --dest org.freedesktop.portal.Desktop \
-  --object-path /org/freedesktop/portal/desktop \
-  --method org.freedesktop.portal.Settings.Read \
-  org.freedesktop.appearance color-scheme
-```
-
-The returned unsigned value is 0 for no preference, 1 for dark, and 2 for light.
-Switch both directions with applications already open, directly in Kitty and
-inside tmux, then check newly launched applications and persistence after login.
-The checkout tests exercise command errors, help/completion, and isolated native
-GSettings persistence; they do not establish live portal or application behavior.
+For system light/dark mode, application setup, and switching limitations, see
+[theming and light/dark appearance](theming.md).
 
 ## Static wallpapers
 
