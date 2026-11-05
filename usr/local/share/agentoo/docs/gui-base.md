@@ -15,6 +15,10 @@ lid-close suspend belong to systemd/logind. Hyprland routes displays for docked
 lid use as described below. Resume returns to an unlocked session.
 Networking remains dhcpcd and wpa_supplicant.
 
+`@gui-desktop` adds the GTK Settings portal and dconf for persistent system
+light/dark preferences. See [system light/dark preference](desktop.md#system-lightdark-preference)
+for `agentoo theme`, one-time application setup, and validation.
+
 ## Automatic login and console recovery
 
 After creating Graham, `/root/002-agentoo-setup-user.sh` writes the local native

@@ -1,5 +1,8 @@
 # Desktop conveniences above the minimal graphics/audio base.
 @gui-base
+# Persistent appearance preferences and their native Settings portal.
+gnome-base/dconf
+sys-apps/xdg-desktop-portal-gtk
 # External monitor DDC/CI controls; no background service required.
 app-misc/ddcutil
 # Static Wayland wallpapers.

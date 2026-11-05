@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Show or set the current user's system light/dark preference."""
+from pathlib import Path
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
+from cli import ArgumentParser
+
+
+def build_parser():
+    parser = ArgumentParser(prog='agentoo theme', description=__doc__,
+        epilog='Run as your desktop user, without sudo. Applications must be configured '
+               'to follow system appearance. This changes only the mode preference, not '
+               'application themes. With no argument, prints light, dark, or no-preference. '
+               'Exit codes: 0 success, 1 settings failure, 2 invalid arguments.')
+    parser.add_argument('mode', nargs='?', choices=('light', 'dark'),
+                        help='Persist the system appearance preference (default: show it)')
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
+    command = ['gsettings', 'set' if args.mode else 'get',
+               'org.gnome.desktop.interface', 'color-scheme']
+    if args.mode:
+        command.append('prefer-' + args.mode)
+    try:
+        result = subprocess.run(command, text=True, capture_output=True)
+    except OSError as error:
+        print(f'agentoo theme: {error}', file=sys.stderr)
+        return 1
+    # dconf can report a failed write on stderr while gsettings exits zero.
+    if result.returncode or result.stderr.strip():
+        print('agentoo theme: ' + (result.stderr.strip() or 'gsettings failed'), file=sys.stderr)
+        return 1
+    if args.mode:
+        print(f'System appearance preference: {args.mode}', file=sys.stderr)
+    else:
+        modes = {"'prefer-light'": 'light', "'prefer-dark'": 'dark', "'default'": 'no-preference'}
+        value = result.stdout.strip()
+        if value not in modes:
+            print(f'agentoo theme: unexpected color-scheme value: {value}', file=sys.stderr)
+            return 1
+        print(modes[value])
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

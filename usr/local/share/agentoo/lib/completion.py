@@ -29,6 +29,7 @@ COMMANDS = {
     'power': 'Show battery and CPU power status',
     'fonts': 'Diagnose, preview, and select installed fonts',
     'desktop': 'Manage wallpaper and desktop appearance',
+    'theme': 'Show or set the system light/dark preference',
     'help': 'Show help for a command',
 }
 

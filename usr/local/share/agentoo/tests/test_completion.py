@@ -60,6 +60,8 @@ class CompletionTests(unittest.TestCase):
                 os.write(master, (setup + '\n').encode())
                 prompt()
                 cases = {
+                    'agentoo theme li': 'agentoo theme light ',
+                    'agentoo theme da': 'agentoo theme dark ',
                     'agentoo desktop cl': 'agentoo desktop clear ',
                     'agentoo desktop transparency se': 'agentoo desktop transparency set ',
                     'agentoo desktop blur clear --window kit': 'agentoo desktop blur clear --window kitty ',

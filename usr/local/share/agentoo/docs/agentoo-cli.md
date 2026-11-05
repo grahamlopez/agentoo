@@ -17,6 +17,7 @@ Use `agentoo --help` for the unified CLI:
 - power        Show battery and CPU power status
 - fonts        Diagnose, preview, and select installed fonts
 - desktop      Manage wallpaper and desktop appearance
+- theme        Show or set the system light/dark preference
 - help         Show help for a command
 
 Each command corresponds to an independently runnable executable: `agentoo
@@ -24,6 +25,14 @@ power` and `agentoo-power` use the same implementation and arguments. Normal
 commands use Python's standard library; the dispatcher only routes to fixed
 executable paths. `agentoo help fonts doctor` shows nested help, and `agentoo
 --version` reports the repository revision when readable.
+
+## Light/dark preference
+
+`agentoo theme light|dark` persists the current user's system appearance
+preference. With no argument, `agentoo theme` prints `light`, `dark`, or
+`no-preference`. Run without sudo. Application themes and their one-time
+"follow system" selections remain user-controlled. See [desktop preferences](desktop.md#system-lightdark-preference)
+for portal setup and validation.
 
 ## Cloud storage
 

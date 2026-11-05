@@ -17,7 +17,7 @@ class CliTest(unittest.TestCase):
         self.entry = self.root / 'agentoo'
         self.entry.write_text(ENTRY.read_text().replace(
             "SHARE = BIN.parent / 'share/agentoo'", f"SHARE = Path({str(COMMANDS.parent)!r})"))
-        for name in ('power', 'fonts', 'permissions', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage', 'kernel'):
+        for name in ('power', 'fonts', 'permissions', 'display', 'screenshot', 'git', 'secrets', 'checkpoint', 'desktop', 'repos', 'term-colors', 'cloud-storage', 'kernel', 'theme'):
             (self.root / ('agentoo-' + name)).symlink_to(ENTRY.with_name('agentoo-' + name))
         checkpoint = self.root / 'agentoo-checkpoint'
         if checkpoint.is_symlink():
@@ -40,7 +40,7 @@ class CliTest(unittest.TestCase):
                      ['permissions', 'check', '--help'], ['help', 'permissions'],
                      ['secrets', 'install', '--help'], ['help', 'power'],
                      ['help', 'display', 'backlight'], ['help', 'display'], ['help', 'screenshot'],
-                     ['help', 'repos'], ['help', 'term-colors'], ['help', 'cloud-storage'],
+                     ['help', 'repos'], ['help', 'term-colors'], ['help', 'cloud-storage'], ['help', 'theme'],
                      ['help', 'cloud-storage', 'pcloud'], ['cloud-storage', 'pcloud', 'start', '--help'],
                      ['kernel', 'firmware', '--help'], ['kernel', 'firmware', 'apply', '--help']]:
             with self.subTest(args=args):
@@ -104,7 +104,7 @@ class CliTest(unittest.TestCase):
         self.assertFalse(call.exists())
 
     def test_completion_usage_matches_actual_help(self):
-        paths = [(), ('git',), ('repos',), ('term-colors',), ('kernel',),
+        paths = [(), ('git',), ('repos',), ('term-colors',), ('theme',), ('kernel',),
                  *(('kernel', action) for action in ('config', 'build', 'install', 'firmware')),
                  ('kernel', 'firmware', 'apply'), ('permissions',), ('permissions', 'check'),
                  ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
