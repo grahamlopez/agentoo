@@ -1,0 +1,50 @@
+# Startop linux-firmware savedconfig: explicit paths relative to /lib/firmware.
+# Reviewed against linux-firmware-20261019 and Gentoo 6.18.60 sources.
+# Both 6.18.60 distribution/custom boot logs load MTL and AX210 API 89.
+# Microcode, regulatory data and SOF have separate package ownership.
+# Apply explicitly using agentoo kernel firmware apply; retest both boot paths.
+
+
+# MTL graphics: observed DMC/GuC/HuC/GSC plus packaged DMC fallback.
+i915/mtl_dmc.bin
+i915/mtl_dmc_ver2_10.bin
+i915/mtl_gsc_1.bin
+i915/mtl_guc_70.bin
+i915/mtl_huc_gsc.bin
+
+# AX210: all installed API alternatives, PNVM and root compatibility aliases.
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-59.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-66.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-72.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-73.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-74.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-77.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-78.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-79.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-81.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-83.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-84.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-86.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0-89.ucode
+intel/iwlwifi/iwlwifi-ty-a0-gf-a0.pnvm
+iwlwifi-ty-a0-gf-a0-59.ucode
+iwlwifi-ty-a0-gf-a0-66.ucode
+iwlwifi-ty-a0-gf-a0-72.ucode
+iwlwifi-ty-a0-gf-a0-73.ucode
+iwlwifi-ty-a0-gf-a0-74.ucode
+iwlwifi-ty-a0-gf-a0-77.ucode
+iwlwifi-ty-a0-gf-a0-78.ucode
+iwlwifi-ty-a0-gf-a0-79.ucode
+iwlwifi-ty-a0-gf-a0-81.ucode
+iwlwifi-ty-a0-gf-a0-83.ucode
+iwlwifi-ty-a0-gf-a0-84.ucode
+iwlwifi-ty-a0-gf-a0-86.ucode
+iwlwifi-ty-a0-gf-a0-89.ucode
+iwlwifi-ty-a0-gf-a0.pnvm
+
+# Intel Bluetooth executable and device configuration.
+intel/ibt-0041-0041.sfi
+intel/ibt-0041-0041.ddc
+
+# Shared Dell monitor/KVM RTL8156 Ethernet coverage (Thinktop card 023).
+rtl_nic/rtl8156b-2.fw

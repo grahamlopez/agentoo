@@ -57,14 +57,32 @@ the failure to that SSD or its root-port path through `0000:00:1c.0`.
 
 ## Custom kernel onboarding
 
-The Startop kernel fragment is prepared for shared v0.4 with the observed MTL
+The Startop kernel fragment was used for shared v0.4 with the observed MTL
 DMC/GuC/HuC/GSC, AX210 API 89/PNVM, Intel Bluetooth SFI plus companion DDC,
 regulatory data and `intel-ucode/06-c5-02`. All 11 inputs were present at review.
 Current audio uses HDA/ALC233; no SOF/Cirrus payload requirement is established.
-The shared driver union is unchanged. Kconfig resolution, custom build/boot and
-hardware acceptance remain pending, as does the custom EFI registration extension.
+The shared driver union is unchanged. On 2026-11-05 the operator configured, built, installed and booted
+`6.18.60-agentoo-v0.4`, including the Startop full-device-path EFI registration
+extension. The corrected storage/udev handoff smoke test passed, no systemd
+units failed, and the operator reported the requested peripheral and functional
+suspend/resume checks passing. Early microcode updated from 0x121 to 0x122.
+A separate cold power-cycle and post-trimming checks remain pending.
 
-Keep broad installed firmware until the custom candidate is accepted. The
+Broad installed firmware was retained for custom-candidate acceptance. The
 operation checklist tracks subsequent savedconfig review for both kernels and
 peripherals. Resume-power investigation is deferred until other onboarding is
 working; functional suspend/resume tests remain required.
+
+The proposed installed-firmware list retains 36 paths (22 regular payloads and
+14 symlinks), totaling 23,466,209 regular-file bytes versus 2,087,238,841 for the
+broad package (98.9% projected reduction). Selected payload MD5s match the
+installed Portage VDB and every selected symlink resolves to another selected
+path. It retains packaged MTL graphics, AX210 API alternatives/PNVM and aliases,
+Bluetooth SFI/DDC and shared RTL8156 dock coverage. No PCI NPU was enumerated.
+SOF, regulatory data and microcode retain separate package ownership. These are
+pre-apply measurements, not measured post-merge savings. Deploy the host USE
+policy and list, review `agentoo kernel firmware apply --dry-run`, then apply and
+cold-boot/retest both kernels. Raw WHENCE was unavailable locally; installed
+symlink closure and VDB ownership/checksums were checked instead. Full recovery
+module metadata was also unavailable to modinfo in the sandbox, so acceptance
+of the trimmed recovery kernel remains a required host check.

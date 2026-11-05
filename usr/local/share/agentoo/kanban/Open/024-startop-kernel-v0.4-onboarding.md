@@ -123,17 +123,17 @@ of failure. Mark unused workload/peripheral checks explicitly with their scope.
 Paths in the command examples are deployed paths. Supply the chosen `--sources`
 and `--build-dir` where needed, and retain the same build directory throughout.
 
-- [ ] Configure with `agentoo kernel config --label agentoo-v0.4 --config
+- [x] Configure with `agentoo kernel config --label agentoo-v0.4 --config
   /usr/local/share/agentoo/docs/kernel-shared-v04-config`. Review new Kconfig
   choices and the printed diff, including dependency changes, resolved host
   settings, firmware presence, local storage identity and generated command line.
   Confirm old baseline UUIDs and Thinktop firmware have been replaced; preserve
   baseline non-storage boot policy intentionally.
-- [ ] Build with `agentoo kernel build --label agentoo-v0.4 -j12`. Record compiler
+- [x] Build with `agentoo kernel build --label agentoo-v0.4 -j12`. Record compiler
   flags (default KCFLAGS uses `-march=native`), final release, completed config,
   image and fresh embedded-initramfs paths. Check initramfs ownership/embedding,
   staged built-in-module metadata and consistent release naming.
-- [ ] Run the documented disposable initramfs storage smoke test against the
+- [x] Run the documented disposable initramfs storage smoke test against the
   generated archive/work directory. Record unlock, discards, read-only Btrfs
   mount and real-root udev handoff results. This does not establish physical
   keyboard or actual PID 1 boot acceptance.
@@ -157,12 +157,12 @@ and `--build-dir` where needed, and retain the same build directory throughout.
   Bluetooth and regulatory data; investigate missing firmware and new errors.
 - [ ] Desktop: repeated/cold-boot autostart, acceleration, internal/external
   displays, dock hotplug, brightness, backlight, hotkeys, lid and input devices.
-- [ ] Camera `1bcf:2ced`: UVC binding, video nodes, real capture and privacy.
-- [ ] Audio: speakers, internal mic, headset/jack, HDMI/DP and USB audio as used;
+- [x] Camera `1bcf:2ced`: UVC binding, video nodes, real capture and privacy.
+- [x] Audio: speakers, internal mic, headset/jack, HDMI/DP and USB audio as used;
   compare actual operation rather than relying on HDA driver binding.
-- [ ] Wi-Fi/Bluetooth: connections, traffic, reconnect, tethering and used devices;
+- [x] Wi-Fi/Bluetooth: connections, traffic, reconnect, tethering and used devices;
   dock Ethernet link speed/traffic/hotplug if attached.
-- [ ] Suspend/resume: repeat the used mode and rerun graphics, camera, audio,
+- [x] Suspend/resume: repeat the used mode and rerun graphics, camera, audio,
   networking, input and dock checks. Compare idle draw/package states using the
   same SSD configuration and observation conditions as the distribution baseline.
 - [ ] Check used sensors, SCU/platform/PMC USB, PMC/PMT and peripheral power/wake
@@ -185,7 +185,7 @@ and `--build-dir` where needed, and retain the same build directory throughout.
   targets. Retain distribution-kernel fallbacks and needed dock/peripheral files.
   Keep CPU microcode, regulatory data and any SOF payloads with their separate
   owning packages. Record exact linux-firmware and kernel versions reviewed.
-- [ ] Add reviewed package-relative paths with hardware rationale to
+- [x] Add reviewed package-relative paths with hardware rationale to
   `etc/agentoo/firmware/startop.list`. Set
   `AGENTOO_LINUX_FIRMWARE_USE="savedconfig -deduplicate -compress-xz -compress-zstd"`
   in `etc/portage/make.conf.d/90-startop`. Reuse existing package.env wiring;
@@ -296,3 +296,35 @@ and `--build-dir` where needed, and retain the same build directory throughout.
   caller identity preservation and generated rule content. All four initramfs
   tests pass; host smoke rerun remains pending. No embedded payload change or
   kernel rebuild is required for this test-only fix.
+
+- 2026-11-05: Operator reran the corrected disposable smoke test successfully.
+  Both PASS messages were reported: archived cryptsetup unlocks LUKS2 with
+  discards and BusyBox mounts Btrfs @ read-only; real-root udev rule evaluation
+  probes Btrfs, requests its filesystem UUID link and permits systemd device
+  readiness. Physical boot/unlock and actual systemd handoff remain pending.
+
+- 2026-11-05 first candidate boot: operator rebooted and read-only inspection
+  confirms `6.18.60-agentoo-v0.4`, Btrfs @ on cryptroot, the intended command
+  line, early microcode update 0x121 -> 0x122, MTL DMC/GuC/HuC/GSC, AX210 API
+  89/PNVM, Bluetooth SFI and regulatory data loading. HDA/ALC233 binds. Failed
+  systemd units cannot be queried from the sandbox; operator check remains
+  pending along with physical-device and suspend acceptance. Error-level journal
+  includes unsupported shared-union drivers, PMC DMU telemetry endpoint -19,
+  missing /usr/lib/udev/tpm2_id and dhcpcd prestart address messages; compare
+  relevant symptoms/baseline before assigning regressions. Installed firmware
+  remains broad. This reboot does not establish a cold power-cycle test.
+
+- 2026-11-05 operator acceptance: systemctl reports zero failed units; operator
+  reports all other requested device and functional suspend/resume checks passed.
+  Known resume-power investigation remains deferred. Distinct cold-power-cycle
+  and broader shared workload/sensor audits are not independently established.
+- Prepared Startop installed-firmware selection and host savedconfig USE policy:
+  36 paths, 22 regular files, 14 symlinks, 23,466,209 payload bytes; projected
+  reduction 98.9% against the recorded broad package. All regular-file MD5s match
+  the installed linux-firmware VDB, and all selected symlink targets are included.
+  Both recorded boot paths use MTL/AX210 API 89; the list keeps packaged AX210
+  alternatives and MTL DMC fallback plus Bluetooth and shared RTL8156 coverage.
+  Raw WHENCE and recovery modinfo were unavailable in the sandbox; record those
+  review limits and require both cold-boot acceptance paths. No package rebuild
+  or live firmware-policy deployment occurred here; dry-run/application remain
+  pending after the reviewed repository changes are deployed.
