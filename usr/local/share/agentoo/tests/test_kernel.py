@@ -762,6 +762,7 @@ sys.exit(2)
             self.invoke('install', '--label', 'test', '--dest', str(destination), '--efi-add-entry', '--yes')
         creation, options = next((command, options) for command, options in commands if '--create' in command)
         self.assertEqual(options['umask'], 0o022)
+        self.assertNotIn('--full-dev-path', creation)
         self.assertIn(['efibootmgr', '--bootorder', '0004,0003,0001'], [command for command, _ in commands])
         loader = creation[creation.index('--loader') + 1]
         self.assertEqual(loader, r'\EFI\Gentoo\kernel-6.18.57-test.efi')
@@ -772,6 +773,44 @@ sys.exit(2)
             self.invoke('install', '--label', 'test', '--dest', str(destination), '--efi-add-entry', '--yes')
         self.assertFalse(any('--create' in command for command, _ in commands))
         self.assertIn(['efibootmgr', '--bootorder', '0004,0003,0001'], [command for command, _ in commands])
+
+    def test_startop_full_device_path_manual_creation_and_reuse(self):
+        self.prepare()
+        metadata = self.work / kernel.METADATA
+        data = json.loads(metadata.read_text())
+        data['host'] = 'startop'
+        metadata.write_text(json.dumps(data))
+        # The local selector still says testhost: registration follows the workspace.
+        self.invoke('build', '--label', 'test', '--yes')
+        destination = self.fake_esp()
+        stdout, _ = self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        self.assertIn('efibootmgr --create --full-dev-path', stdout)
+        self.tool('efibootmgr', 'raise AssertionError("firmware calls must be intercepted")')
+        loader = r'\EFI\Gentoo\kernel-6.18.57-test.efi'
+        prefix = 'PciRoot(0x0)/Pci(0x6,0x1)/Pci(0x0,0x0)/NVMe(0x1,00-25-38-54-01-50-2A-28)/'
+        before = ('BootOrder: 0003,0001\nBootNext: 0001\n'
+                  'Boot0001* Other disk\t' + prefix + 'HD(1,GPT,other,0x800,0x200000)/' + loader + '\n'
+                  'Boot0003* Other image\t' + prefix + 'HD(1,GPT,uuid,0x800,0x200000)/' + loader + '.old\n')
+        original_run = kernel.run
+        for suffix in (loader, 'File(' + loader + ')'):
+            after = before + 'Boot0004* Candidate\t' + prefix + 'HD(1,GPT,uuid,0x800,0x200000)/' + suffix + '\n'
+            for existing in (False, True):
+                with self.subTest(suffix=suffix, existing=existing):
+                    reports = iter((after, after) if existing else (before, after, after))
+                    commands = []
+                    def run(command, **options):
+                        if command[0] == 'efibootmgr':
+                            commands.append(command)
+                            return next(reports) if '-u' in command else ''
+                        return original_run(command, **options)
+                    with patch.object(kernel, 'run', side_effect=run):
+                        self.invoke('install', '--label', 'test', '--dest', str(destination), '--efi-add-entry', '--yes')
+                    creates = [c for c in commands if '--create' in c]
+                    self.assertEqual(len(creates), 0 if existing else 1)
+                    if creates:
+                        self.assertIn('--full-dev-path', creates[0])
+                    self.assertIn(['efibootmgr', '--bootorder', '0004,0003,0001'], commands)
+                    self.assertFalse(any('--bootnext' in c for c in commands))
 
 
 if __name__ == '__main__':

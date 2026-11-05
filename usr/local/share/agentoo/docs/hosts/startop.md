@@ -18,12 +18,14 @@ The installer writes detected CPU feature flags to the local native
 installation; keep that local definition rather than duplicating it in the
 tracked host fragment. Installed linux-firmware retains broad default coverage.
 
-First-boot verification and checkpointing are reported complete. Desktop and
-physical hardware acceptance remain pending: displays and acceleration,
-brightness and input controls, camera capture/privacy, speakers/headphones and
-microphone, Wi-Fi/Bluetooth, dock hotplug, suspend/resume and lid/power behavior.
-Establish results on the distribution kernel before comparing a custom kernel.
-See the [Startop follow-ups](../../kanban/Backlog/024-startop-kernel-v0.3-followups.md).
+First-boot verification and checkpointing are reported complete. On 2026-11-05
+the operator confirmed recovery readiness and working distribution-kernel
+hardware except the known resume-power issue. Required peripherals match the
+other onboarded hosts: Dell external monitor, Bluetooth mice and headsets,
+Lily58 Bluetooth/USB keyboard, built-in and Logitech webcams, Blue USB microphone
+and shared peripherals. This is operator acceptance; repeat functional checks
+on the custom kernel and on both boot paths after installed-firmware trimming.
+See the [Startop kernel and firmware operation checklist](../../kanban/Open/024-startop-kernel-v0.4-onboarding.md).
 
 The first desktop autostart on Hyprland 0.57.0 failed because no DRM GPU was
 available yet. The boot journal records Hyprland's abort at 9.08 seconds and
@@ -52,3 +54,17 @@ the shared SOUTHPORT_A latency-request change, and unresolved next steps.
 Temporarily removing the unused secondary SSD at `0000:59:00.0` restored
 package C6/C8 accumulation and cleared the valid latency request, isolating
 the failure to that SSD or its root-port path through `0000:00:1c.0`.
+
+## Custom kernel onboarding
+
+The Startop kernel fragment is prepared for shared v0.4 with the observed MTL
+DMC/GuC/HuC/GSC, AX210 API 89/PNVM, Intel Bluetooth SFI plus companion DDC,
+regulatory data and `intel-ucode/06-c5-02`. All 11 inputs were present at review.
+Current audio uses HDA/ALC233; no SOF/Cirrus payload requirement is established.
+The shared driver union is unchanged. Kconfig resolution, custom build/boot and
+hardware acceptance remain pending, as does the custom EFI registration extension.
+
+Keep broad installed firmware until the custom candidate is accepted. The
+operation checklist tracks subsequent savedconfig review for both kernels and
+peripherals. Resume-power investigation is deferred until other onboarding is
+working; functional suspend/resume tests remain required.

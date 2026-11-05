@@ -542,6 +542,10 @@ def install(args):
     run(['rm', '-rf', '--', staging_root], root=True)
     command = ['efibootmgr', '--create', '--disk', device['pkname'], '--part', str(device['partn']),
                '--label', f'{data["label"]}-{data["release"].removesuffix("-" + data["label"])}', '--loader', loader]
+    # Use the configured host, not a selector that may have changed since config.
+    # Match the standalone installer's physical-registration workaround.
+    if data['host'] == 'startop':
+        command.insert(2, '--full-dev-path')
     if args.efi_add_entry:
         before = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
         order, entries = efi_entries(before)

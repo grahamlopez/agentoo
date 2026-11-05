@@ -19,8 +19,9 @@ agentoo kernel install --label agentoo-v0.4
 Configure on the destination host. `/etc/agentoo/target-host` selects the tracked
 native Kconfig fragment `/etc/agentoo/kernel/hosts/<name>.config`; `--host NAME`
 overrides the selection, not the destination hardware or storage. Missing or
-malformed profiles fail before workspace/source changes. Thinktop and flattop
-are supplied initially; other hosts need reviewed profiles first.
+malformed profiles fail before workspace/source changes. Thinktop, flattop and startop
+profiles are supplied; Startop build/boot acceptance remains pending. Other hosts
+need reviewed profiles first.
 
 The starting config supplies the shared driver/capability union. Host fragments
 set explicit embedded firmware names, their absolute directory, CPU microcode
@@ -254,6 +255,10 @@ use. To register and put the candidate first immediately:
 ```sh
 agentoo kernel install --label agentoo-v0.4 --efi-add-entry
 ```
+
+Startop registration adds `--full-dev-path` to both the printed manual command
+and automatic creation, using the host recorded in the workspace. The standalone
+installer and distribution-kernel guidance use the same workaround independently.
 
 Registration reuses an entry matching the partition identity and loader path, or
 creates one with `--create`, which also adds it to BootOrder. It then puts that
