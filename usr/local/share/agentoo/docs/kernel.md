@@ -20,7 +20,7 @@ Configure on the destination host. `/etc/agentoo/target-host` selects the tracke
 native Kconfig fragment `/etc/agentoo/kernel/hosts/<name>.config`; `--host NAME`
 overrides the selection, not the destination hardware or storage. Missing or
 malformed profiles fail before workspace/source changes. Thinktop, flattop and startop
-profiles are supplied; Startop build/boot acceptance remains pending. Other hosts
+profiles are supplied; Startop has build/boot and peripheral acceptance. Other hosts
 need reviewed profiles first.
 
 The starting config supplies the shared driver/capability union. Host fragments
@@ -71,7 +71,7 @@ silent changes. To adopt new host policy or boot identity, configure a fresh
 workspace.
 
 Installed firmware remains independent: follow the native savedconfig procedure
-in [firmware maintenance](firmware.md). Thinktop and Flattop have reviewed native
+in [firmware maintenance](firmware.md). Thinktop, Flattop and Startop have reviewed native
 savedconfig lists; applying or revising them and rebuilding linux-firmware are
 separate from kernel configuration. The Thinktop list also includes the recorded
 RTL8156 dock Ethernet correction, which needs application on that host.

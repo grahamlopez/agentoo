@@ -21,7 +21,7 @@ firmware and minimal initramfs; the operator confirmed everything works before
 and after suspend. Its host card records boot-log evidence and remaining scope.
 
 Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
-[startop](../Open/024-startop-kernel-v0.4-onboarding.md),
+[Startop acceptance](../../docs/hosts/startop.md#installed-firmware-acceptance),
 [flattop](025-flattop-kernel-v0.3-followups.md),
 [bequiet](026-bequiet-kernel-v0.3-followups.md). Record per-host results there.
 
@@ -94,9 +94,10 @@ Retain these deferred workflow items for later scoping:
 
 - Host specialization is now implemented for thinktop/flattop: native tracked
   Kconfig fragments, local `/etc/kernel/cmdline` cross-checks and recorded storage
-  identity for the minimal initramfs. Missing profiles fail explicitly; startop
-  and bequiet still need reviewed profiles. Installed-firmware trimming remains
-  native/manual, and flattop keeps broad installed coverage. See the
+  identity for the minimal initramfs. Missing profiles fail explicitly; Bequiet still needs a reviewed profile.
+  Startop completed v0.4 and installed-firmware acceptance on both 6.18.60
+  boot paths on 2026-11-05. Installed-firmware apply uses the native savedconfig
+  workflow; see the maintained firmware guide for current host coverage. See the
   [kernel guide](../../docs/kernel.md#host-specialization) for behavior and limits.
 
 - Shared configuration generation and selective menuconfig capture into Git,
@@ -135,3 +136,20 @@ Close when host results and used workload checks are recorded and each remaining
 optional investigation is resolved or explicitly carried forward with its tradeoff.
 Preserve known-working recovery kernels. Tracking work does not authorize
 automatic builds, installations, hardware control changes or device assignments.
+
+## Follow-ups carried from Startop onboarding
+
+Startop's requested boot/peripheral/suspend acceptance and installed-firmware
+trimming are complete (see host notes). Retain these separate scopes:
+
+- Broader shared workload/platform/sensor audits above remain pending unless
+  independently recorded. Decide raw SPI-NOR/MTD access only if required.
+- Resume-power diagnosis remains deferred in Startop's power investigation.
+- EFI full-device-path policy remains independently expressed in the standalone
+  installer, distribution guidance and custom CLI; consolidate only with a
+  coherent solution that preserves standalone installer use and recorded-host
+  behavior. The custom manual/automatic registration fix is implemented/tested.
+- Firmware apply encountered a protected generated snapshot and a skipped native
+  initramfs rebuild when the source selector targeted an out-of-tree custom
+  build. Manual recovery is documented in firmware.md. Review handling of these
+  concrete cases before claiming fully automatic apply/regeneration.

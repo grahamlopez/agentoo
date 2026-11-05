@@ -11,8 +11,9 @@ Host firmware has three owners, each selected by `/etc/agentoo/target-host`:
 CPU microcode follows the installer's `--microcode` choice. The rest of this guide
 covers installed linux-firmware trimming.
 
-Thinktop and Flattop have reviewed native savedconfig lists at
-`/etc/agentoo/firmware/thinktop.list` and `/etc/agentoo/firmware/flattop.list`.
+Thinktop, Flattop and Startop have reviewed native savedconfig lists under
+`/etc/agentoo/firmware/`. Startop has operator acceptance on both 6.18.60
+boot paths after trimming; see its [acceptance record](hosts/startop.md#installed-firmware-acceptance).
 Their host Portage fragments enable savedconfig through `AGENTOO_LINUX_FIRMWARE_USE`;
 the common fragment sets `-savedconfig`, and `package.env/kernel` applies the
 variable only to linux-firmware. Do not add a conflicting package.use setting: it
@@ -158,6 +159,21 @@ acceptance predates this correction: reapply the updated list and rebuild on
 Thinktop. Check wired link speed, traffic, reconnect and resume. If a built-in
 driver requests it before root becomes available, separately review early or
 built-in firmware availability; changing savedconfig alone does not embed it.
+
+## Startop application follow-up
+
+On Startop, Portage protected the generated versioned savedconfig as a `._cfg`
+update even after the old snapshot was retired. The installed selection matched,
+but apply correctly stopped because its expected versioned path was absent.
+Review the pending file against the host list and accept that specific update,
+then check `agentoo kernel firmware`; do not assume a protected file is active.
+
+linux-firmware's native regeneration hook can also stop early if `/usr/src/linux`
+selects an out-of-tree custom build with no in-tree `.config`/image. A successful
+package merge alone does not establish distribution-initramfs regeneration.
+On Startop, `emerge --config '=sys-kernel/gentoo-kernel-bin-6.18.60'` rebuilt the
+distribution initramfs and reinstalled its artifacts before both boot paths were
+accepted. Use the installed distribution package version on other systems.
 
 ## Routine maintenance
 

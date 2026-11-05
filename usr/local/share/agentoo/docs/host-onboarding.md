@@ -118,7 +118,7 @@ from another host into Git.
 | --- | --- | --- | --- | --- |
 | Thinktop | Present | Present | Present | Hyprland and Kitty |
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
-| Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Prepared; apply/acceptance pending | Shared defaults |
+| Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Shared defaults |
 | Bequiet | Missing | Missing; NVIDIA modules needed | Broad default | Shared defaults |
 
 Startop selects Arrow Lake compiler targets and Intel graphics, with a
