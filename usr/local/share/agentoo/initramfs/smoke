@@ -85,7 +85,9 @@ unshare --mount --fork /bin/bash -euo pipefail -c '
     fi
     echo "REPRODUCED: coldplug without the handoff rule reports SYSTEMD_READY=0."
     . "$root/udev-handoff"
-    prepare_udev_handoff "$name"
+    # The sourced helper uses name/uuid for dm identity; retain the test
+    # filesystem UUID for the checks below. Its output is the rule file.
+    (prepare_udev_handoff "$name")
     udevadm verify /run/udev/rules.d/09-agentoo-initramfs-root.rules
     udevadm test --action=add "$sys" > "$work/coldplug-after.log" 2>&1
     cat "$work/coldplug-after.log" | grep -E "^[[:space:]]*(DEVLINKS|DM_NAME|DM_UDEV_PRIMARY_SOURCE_FLAG|ID_FS_UUID|SYSTEMD_READY|TAGS)=" || true

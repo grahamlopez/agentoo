@@ -286,3 +286,13 @@ and `--build-dir` where needed, and retain the same build directory throughout.
   socket (`Operation not permitted`). The 36 focused kernel tests pass.
   The runner stops before Lua checks when Python discovery fails. Whitespace
   validation passes. Live firmware registration remains untested and unchanged.
+
+- Operator configured and built `6.18.60-agentoo-v0.4` from Gentoo 6.18.60
+  sources. Configuration resolved only the expected boot identity, embedded
+  firmware and initramfs placeholder changes. The disposable smoke test passed
+  storage unlock/mount checks but exposed a test variable collision: the sourced
+  handoff helper overwrote the expected filesystem UUID with the dm UUID.
+  Isolated the smoke helper call in a subshell and added a regression verifying
+  caller identity preservation and generated rule content. All four initramfs
+  tests pass; host smoke rerun remains pending. No embedded payload change or
+  kernel rebuild is required for this test-only fix.

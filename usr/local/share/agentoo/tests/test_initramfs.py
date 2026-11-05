@@ -64,6 +64,29 @@ class BuilderArgumentsTest(unittest.TestCase):
 
 
 class HandoffTest(unittest.TestCase):
+    def test_smoke_handoff_preserves_filesystem_identity(self):
+        # Exercise the smoke script's actual invocation against the real helper,
+        # substituting disposable sysfs and rule directories (no privileges).
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            block = root / 'sys/dm-0/dm'
+            block.mkdir(parents=True)
+            (block / 'name').write_text('smoke-mapping\n')
+            (block / 'uuid').write_text('CRYPT-LUKS2-test-smoke-mapping\n')
+            helper = root / 'helper'
+            helper.write_text((HERE / 'udev-handoff').read_text()
+                              .replace('/sys/class/block', str(root / 'sys'))
+                              .replace('/run/udev/rules.d', str(root / 'rules')))
+            invocation = next(line.strip() for line in (HERE / 'smoke').read_text().splitlines()
+                              if 'prepare_udev_handoff "$name"' in line)
+            script = '. "$1"; name=smoke-mapping; uuid=filesystem-uuid; ' + invocation + '; '
+            script += '[ "$uuid" = filesystem-uuid ] && [ "$name" = smoke-mapping ]'
+            result = subprocess.run(['bash', '-eu', '-c', script, 'smoke-test', str(helper)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rule = (root / 'rules/09-agentoo-initramfs-root.rules').read_text()
+            self.assertIn('ATTR{dm/uuid}=="CRYPT-LUKS2-test-smoke-mapping"', rule)
+
     def test_coldplug_accepts_only_prepared_mapping(self):
         if not all(shutil.which(tool) for tool in ('unshare', 'udevadm', 'mount')):
             self.skipTest('requires unshare, mount and udevadm')
