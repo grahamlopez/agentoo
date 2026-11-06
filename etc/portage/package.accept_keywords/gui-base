@@ -1,6 +1,11 @@
 # Allow release updates, scoped to the selected packages and overlay.
 # Testing keywords do not accept unkeyworded live ebuilds or override masks.
 gui-wm/hyprland::hyproverlay ~amd64
+gui-apps/hyprlock::hyproverlay ~amd64
+gui-apps/hypridle::hyproverlay ~amd64
+
+# Hyprlock and Hypridle require the sdbus-c++ 2 ABI.
+dev-cpp/sdbus-c++:0/2::gentoo ~amd64
 
 # Required by the selected compositor and its dependency graph.
 gui-libs/hyprutils::hyproverlay ~amd64

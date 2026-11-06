@@ -35,9 +35,11 @@ hl.config({
 })
 
 hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"))
+hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"))
 
 -- Capture text once per session; configuration reloads do not start watchers.
 hl.on("hyprland.start", function()
+    hl.exec_cmd("hypridle")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
     hl.exec_cmd("hyprctl setcursor Adwaita 24")
     hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-theme 'Adwaita'")

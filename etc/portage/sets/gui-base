@@ -1,5 +1,7 @@
 # Minimal Wayland base; see /usr/local/share/agentoo/docs/gui-base.md before install.
 gui-wm/hyprland::hyproverlay
+gui-apps/hyprlock::hyproverlay
+gui-apps/hypridle::hyproverlay
 x11-themes/adwaita-icon-theme
 x11-terms/kitty
 media-video/pipewire

@@ -10,9 +10,11 @@ dependencies may require additional package-specific keyword decisions.
 The system automatically logs graham in on tty1 and starts `start-hyprland`.
 Other users and TTYs can launch it explicitly with `start-hyprland`.
 There is no greeter, UWSM, XWayland, launcher, panel,
-notification daemon, portal, wallpaper daemon in the base, or screen locker. Suspend and
+notification daemon, portal, or wallpaper daemon in the base. Hypridle and
+Hyprlock provide manual locking and locking before sleep. Suspend and
 lid-close suspend belong to systemd/logind. Hyprland routes displays for docked
-lid use as described below. Resume returns to an unlocked session.
+lid use as described below. See [screen locking](#screen-locking) for setup and
+the existing tty1 recovery-shell limitation.
 Networking remains dhcpcd and wpa_supplicant.
 
 `@gui-desktop` adds the GTK Settings portal and dconf for persistent system
@@ -68,7 +70,7 @@ For boot recovery, append `systemd.unit=rescue.target` to the kernel command
 line for one boot and authenticate as root. Verify root's password before
 relying on this route. Console switching cannot recover a kernel or GPU hard
 lock. Autologin grants physical users access to graham's session after boot;
-this setup does not add a screen locker.
+screen locking does not protect the tty1 recovery shell after a compositor exit.
 
 ### GPU readiness at boot
 
@@ -328,6 +330,7 @@ creating a previously absent optional file.
 | Super+grave (backtick) | Show / hide the persistent terminal overlay |
 | Alt+Tab / Alt+Shift+Tab | Cycle recent windows forward / backward, including the visible dropdown |
 | Super+Q | Close active window |
+| Super+L | Lock the session |
 | Super+Shift+E | Exit Hyprland |
 | Super+F / Super+V | Toggle fullscreen / floating |
 | Super+arrows / Super+Shift+arrows | Focus / move window |
@@ -542,3 +545,75 @@ Sources inspected for the selected release:
 ## Desktop preferences
 
 See [wallpapers, transparency, blur, and desktop appearance](desktop.md).
+
+## Screen locking
+
+`@gui-base` supplies `gui-apps/hyprlock::hyproverlay` and
+`gui-apps/hypridle::hyproverlay`. Hyprland starts Hypridle once per session;
+configuration reloads do not start another instance. Super+L runs
+`loginctl lock-session`. Hypridle receives that logind signal and starts the
+locker defined only in `/etc/xdg/hypr/hypridle.conf`. Repeated lock requests
+leave an existing Hyprlock process in place.
+
+Before logind suspends the machine, Hypridle requests the same session lock.
+`inhibit_sleep = 3` holds a delay inhibitor until Hyprland reports the session
+locked. Logind's `InhibitDelayMaxSec` still bounds that wait: a missing, failed,
+or slow locker can outlast the inhibitor. This is coordination with logind,
+not a guarantee that sleep is refused on locker failure. No new lid binding,
+sleep hook, user service, or idle timeout is added. The existing external-power
+and docked lid policy remains in effect.
+
+Hyprlock uses an opaque background and centered password field on every output,
+with animations disabled. Authentication uses the package's PAM service
+`hyprlock`, which includes the system `login` authentication stack. Keep that
+policy package-owned; no Agentoo PAM file is needed. This authenticates the
+account password and does not evict or restore LUKS keys.
+
+Both tools discover their system fallback under `/etc/xdg/hypr/` through
+hyprutils. A personal `hyprlock.conf` or `hypridle.conf` takes precedence.
+For a local override, create a real file under `$XDG_CONFIG_HOME/hypr/`
+(normally `~/.config/hypr/`) beginning with the corresponding native include,
+then add personal settings:
+
+```conf
+source = /etc/xdg/hypr/hyprlock.conf
+```
+
+For Hypridle use `source = /etc/xdg/hypr/hypridle.conf` instead. Do not copy the
+shared defaults into home. Restart Hypridle after changing its configuration;
+Hyprlock reads its configuration on each invocation.
+
+### Install and accept on a managed host
+
+Preview `emerge --pretend --verbose --autounmask=n @gui-base`, then install
+with `emerge --ask --verbose @gui-base`. The locally reviewed Hyprlock 0.9.7
+ebuild requires an active GCC >=16 or Clang >=19; installing a compiler alone
+does not select it. Review the actual selected releases and dependencies.
+Verify `/etc/pam.d/hyprlock` was installed and includes `login`, and resolve
+configuration-protected files with `dispatch-conf`.
+
+After deploying these files, reload Hyprland to add Super+L. In an existing
+session, start `hypridle` from a terminal after checking
+`pgrep -a -u "$(id -u)" -x hypridle`; a fresh Hyprland session starts it
+automatically. Do not also enable a Hypridle user service. Confirm
+`systemd-inhibit --list` shows its sleep
+delay inhibitor and its startup log reports waiting for the Wayland session
+to lock. Confirm `hyprctl configerrors` is empty.
+
+Before relying on it, verify Super+L and `loginctl lock-session`, an incorrect
+then correct account password, repeated lock requests, and an already-locked
+session going to sleep. Test manual suspend and undocked lid-close suspend on
+battery, including repeated cycles and external-display hotplug while locked.
+Check every display stays covered and resume does not show the desktop before
+authentication. Verify password login on tty2 remains available. Repository
+checks cannot establish PAM, compositor, display, or physical suspend behavior.
+
+The existing tty1 autologin and recovery shell are still available when
+Hyprland exits, including after a crash. A screen lock does not secure that
+path, another already-authenticated TTY, or a reboot into autologin. Treat
+protection across compositor termination as a separate login-policy decision;
+this change adds session locking without changing console recovery.
+
+References: [Hypridle locking and inhibition](https://wiki.hypr.land/hypr-ecosystem/user/hypridle/),
+[Hyprlock configuration](https://wiki.hypr.land/hypr-ecosystem/user/hyprlock/),
+and [upstream PAM policy](https://github.com/hyprwm/hyprlock/blob/main/pam/hyprlock).
