@@ -1,0 +1,3 @@
+# Opt-in locker and the existing GURU window-to-layer adapter.
+gui-apps/swaylock-plugin::agentoo ~amd64
+gui-apps/windowtolayer::guru ~amd64

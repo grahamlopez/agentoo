@@ -566,6 +566,29 @@ These packages install fonts only, with no application configuration changes.
 
 ## Terminal animations
 
+### Experimental terminal-background locker
+
+`gui-apps/swaylock-plugin` pins upstream commit
+`fb0eeb6fac9c7daf934c9e7468eb4eeb9f8c22ef` (2026-11-03), based on swaylock
+1.8.7. It builds with PAM and systemd logind, installs upstream's
+`/etc/pam.d/swaylock-plugin`, and needs no setuid bit. The recipe disables the
+optional GdkPixbuf image loader; the trial renders through an external terminal.
+Swaybg remains a runtime dependency because it is upstream's default background
+renderer when no command is supplied.
+
+`@lock-trial` reuses `gui-apps/windowtolayer::guru`; do not duplicate that recipe
+in this overlay. Its release is narrowly unmasked and keyworded alongside the
+locker. Kitty and the existing `app-misc/ttfx` complete the trial. Installation
+does not select this locker for the desktop.
+
+The locker passed Portage unpack through staged installation on amd64; the
+package set resolves against the local repositories. Windowtolayer 0.1.0 and
+TTFX 0.5.0 also compiled separately, and the trial config parsed with the real
+locker. Graphical integration and security behavior require the
+[target-session trial](../docs/gui-base.md#optional-terminal-background-locker-trial).
+
+### Available terminal animations
+
 Seven optional `games-misc` packages provide terminal animations. Both bonsai
 variants and both aquarium variants can be installed together:
 

@@ -1,2 +1,4 @@
-# Clipboard history; keep all other GURU packages masked.
+# Explicitly selected GURU packages; keep all others masked.
 app-misc/cliphist::guru
+# Existing adapter for the optional terminal-background lock trial.
+gui-apps/windowtolayer::guru

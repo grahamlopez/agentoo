@@ -617,3 +617,65 @@ this change adds session locking without changing console recovery.
 References: [Hypridle locking and inhibition](https://wiki.hypr.land/hypr-ecosystem/user/hypridle/),
 [Hyprlock configuration](https://wiki.hypr.land/hypr-ecosystem/user/hyprlock/),
 and [upstream PAM policy](https://github.com/hyprwm/hyprlock/blob/main/pam/hyprlock).
+
+### Optional terminal-background locker trial
+
+`@lock-trial` adds `swaylock-plugin` from Agentoo's overlay, the existing
+`windowtolayer` release from GURU, Kitty, and TTFX. It does not replace Hyprlock
+or change Hypridle, Super+L, or startup. The locker is an experimental upstream
+fork; first evaluate it manually while recovery through tty2 is available.
+
+After deploying the repository, preview and install:
+
+```sh
+sudo emerge --pretend --verbose --autounmask=n @lock-trial
+sudo emerge --ask --verbose @lock-trial
+```
+
+Verify `/etc/pam.d/swaylock-plugin` exists and contains `auth include login`.
+The ebuild installs this upstream PAM file and does not use setuid. Before the
+first trial, verify tty2 login and record the graphical session's
+`WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, and `HYPRLAND_INSTANCE_SIGNATURE` values.
+From a terminal inside Hyprland, run:
+
+```sh
+swaylock-plugin --config /etc/swaylock-plugin/config
+```
+
+The locker acquires Wayland session-lock surfaces and handles password input.
+For each output it launches `windowtolayer`, which adapts a fresh Kitty window
+into the lock background. Kitty ignores personal configuration and runs
+`sh /usr/local/share/agentoo/lib/desktop/lock-animation.sh`, repeating TTFX's
+`decrypt` effect on a small Agentoo banner. No interactive shell is launched.
+The terminal is decoration; it neither receives the password nor decides when
+to unlock. There is no password-free grace period configured.
+
+First check that the animation renders on every display and that an incorrect
+then correct account password behaves as expected. Then test display hotplug,
+scale changes, and manual suspend while this locker is already active. A
+terminal or adapter failure must leave the session locked; a locker crash must
+leave Hyprland's locked fallback, with no desktop exposure. Check that animation
+processes stop after unlocking and that repeated trials leave none behind.
+Avoid unrelated Kitty/TTFX instances when inspecting process cleanup. Do not
+use the existing Super+L binding during this trial: it still requests Hyprlock.
+
+If the trial hangs, switch to tty2, log in as the same user, and terminate only
+the experimental locker with `pkill -u "$(id -u)" -x swaylock-plugin`. Hyprland
+should stay locked. Restore the recorded graphical environment values and run
+`hyprlock` to take over the abandoned session lock, then return to the graphical
+TTY and authenticate. Verify this recovery on the target before relying on the
+trial. The existing tty1 recovery-shell limitations still apply.
+
+This locker has no native post-authentication animation hook: the pinned source
+immediately ends its display loop after PAM succeeds. A transition that finishes
+before revealing the desktop would need separate upstream work. This trial
+does not change LUKS keys or provide the root-independent resume environment.
+
+The initial package plan, locker Portage build through staged installation,
+native locker configuration parsing, and TTFX pseudo-terminal rendering were
+checked on amd64. Windowtolayer also compiled from its GURU release source.
+Kitty integration, authentication, lock failure behavior, process cleanup,
+multi-display rendering, and physical suspend remain target-session checks.
+
+See [overlay packaging notes](../portage/README.md#experimental-terminal-background-locker)
+and the [upstream terminal-background examples](https://github.com/mstoeckl/swaylock-plugin#readme).

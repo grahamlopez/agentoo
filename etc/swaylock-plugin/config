@@ -1,0 +1,6 @@
+# Opt-in: swaylock-plugin --config /etc/swaylock-plugin/config
+# Each output gets a separate terminal. Keyboard input stays with the locker.
+command-each=windowtolayer -- kitty --config NONE -o linux_display_server=wayland -o background=#111111 -o foreground=#eeeeee -o background_opacity=1 -o font_size=24 -o shell_integration=disabled sh /usr/local/share/agentoo/lib/desktop/lock-animation.sh
+color=111111
+show-failed-attempts
+ignore-empty-password

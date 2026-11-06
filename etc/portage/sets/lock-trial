@@ -1,0 +1,5 @@
+# Optional terminal-background locker experiment; Hyprlock remains the default.
+gui-apps/swaylock-plugin::agentoo
+gui-apps/windowtolayer::guru
+x11-terms/kitty
+app-misc/ttfx::agentoo
