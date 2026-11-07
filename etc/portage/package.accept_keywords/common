@@ -10,6 +10,7 @@ app-admin/proton-pass-cli-bin::agentoo ~amd64 ~arm64
 dev-util/codex-cli-deps::agentoo ~amd64 ~arm64
 dev-util/claude-code-deps::agentoo ~amd64 ~arm64
 dev-util/pi-coding-agent-deps::agentoo ~amd64 ~arm64
+dev-util/herdr-app-deps::agentoo ~amd64 ~arm64
 
 # Optional ThinkRail desktop IDE; not selected by a package set.
 dev-util/thinkrail-bin::agentoo ~amd64 ~arm64

@@ -339,6 +339,39 @@ user-owned installations. Each user installs and signs in separately. Codex
 state lives in `~/.codex` (or `CODEX_HOME`); Claude uses `~/.claude` and
 `~/.claude.json` (or its `CLAUDE_CONFIG_DIR` override).
 
+### Herdr desktop app
+
+`dev-util/herdr-app-deps` supplies prerequisites for the optional, user-managed
+[Herdr desktop app](https://github.com/herdrdev/herdr-app), with `~amd64` and
+`~arm64` accepted in the common keyword configuration. No package set selects it.
+
+```sh
+emerge --ask dev-util/herdr-app-deps
+# Then, as your normal user:
+curl -fsSL https://releases.herdr.dev/app/install.sh | sh
+herdr-app
+```
+
+The upstream installer adds the app, desktop entry, and icon under
+`${XDG_DATA_HOME:-$HOME/.local/share}`, links `herdr-app` into `~/.local/bin`,
+and installs herdr-core (`hc`) if missing. Keep `~/.local/bin` on PATH.
+Linux requires a desktop session and a working Vulkan driver; this package
+supplies the loader, while the host graphics configuration supplies the driver.
+
+Official releases download app updates in the background and apply them when
+you quit and reopen, or select the update action. Settings → Updates shows
+availability. The app also manages core updates, preserving running terminals.
+Rerunning the installer manually updates the app. Portage owns only the
+prerequisites; it never runs the installer or changes user files. Removing the
+dependency package leaves the app, core, configuration, and sessions in place.
+Quit the app and review running core terminals before removing user installations
+or depcleaning prerequisites. Release telemetry can be disabled in Settings → Privacy.
+
+Runtime prerequisites were checked against both official Linux 0.1.13 archives
+and their publisher SHA-256 hashes: glibc 2.35, GCC runtime, XCB, xkbcommon with
+X11 support, fontconfig, FreeType, Wayland, and Vulkan. Future upstream updates
+can require newer dependencies; this recipe does not pin the user installation.
+
 ### Migrate existing Portage installations
 
 Install the new dependency packages first, then remove the old binaries through
