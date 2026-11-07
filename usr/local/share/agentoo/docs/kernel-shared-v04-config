@@ -521,7 +521,7 @@ CONFIG_HOTPLUG_CPU=y
 CONFIG_LEGACY_VSYSCALL_XONLY=y
 # CONFIG_LEGACY_VSYSCALL_NONE is not set
 CONFIG_CMDLINE_BOOL=y
-CONFIG_CMDLINE="root=UUID=a0d8c112-b1fd-4a55-8515-d5eb8f13b76d rootfstype=btrfs rootflags=subvol=@ crypt_root=UUID=aace61a6-83ee-4825-b1e2-71d6fd3995ea ro root_trim=yes console=tty0 earlyprintk=efi,keep loglevel=7 ignore_loglevel"
+CONFIG_CMDLINE="ro root_trim=yes console=tty0 loglevel=4"
 CONFIG_CMDLINE_OVERRIDE=y
 CONFIG_MODIFY_LDT_SYSCALL=y
 # CONFIG_STRICT_SIGALTSTACK_SIZE is not set
