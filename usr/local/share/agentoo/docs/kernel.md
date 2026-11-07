@@ -56,6 +56,11 @@ and `ro`, without importing local boot policy. Old baseline UUIDs are replaced.
 Unsupported initramfs policy fails explicitly rather
 than being silently carried into an incompatible build.
 
+Config enables the built-in command line and disables `CONFIG_CMDLINE_OVERRIDE`.
+On x86, firmware/bootloader arguments follow the built-in defaults; precedence
+for repeated arguments depends on the parameter. Existing workspaces retain
+their recorded override setting. Configure a fresh workspace to adopt this policy.
+
 The minimal initramfs uses the recorded PARTUUID and mapping name, US/Caps-to-Control
 keymap, passphrase unlock, discards, `@` and `/sbin/init`. It accepts either boot
 identifier style because its storage selection comes from those recorded inputs.
@@ -119,6 +124,50 @@ After showing the plan and confirming, config:
 Only the starting config is imported from an older build. Old initramfs images,
 firmware staging and caches are not copied. Missing selected firmware fails
 configuration; review the host fragment and installed packages before retrying.
+
+### Command-line merge boot experiment
+
+Use a separate label so the working EFI image remains available:
+
+```sh
+agentoo kernel config --label cmdline-test
+agentoo kernel build --label cmdline-test
+agentoo kernel install --label cmdline-test
+```
+
+The default baseline is the running kernel config. Before building, check the
+workspace's `kernel/<release>/.config` for `CONFIG_CMDLINE_BOOL=y`, the intended
+`CONFIG_CMDLINE`, and disabled `CONFIG_CMDLINE_OVERRIDE`. Install prints the
+firmware registration command. In that command, replace `--create` with
+`--create-only` to preserve the normal BootOrder, and append:
+
+```sh
+--unicode 'agentoo.cmdline_test=external loglevel=4'
+```
+
+Run that complete command to create the test entry with its arguments. Identify
+its Boot number with `sudo efibootmgr -v -u`, then select it for one boot
+(replace `XXXX` with its four-digit hexadecimal Boot number):
+
+```sh
+sudo efibootmgr --bootnext XXXX
+```
+
+The marker is supplied only through firmware, not added to `/etc/kernel/cmdline`
+or the built-in string. After booting, check:
+
+```sh
+uname -r
+cat /proc/cmdline
+cat /proc/sys/kernel/printk
+```
+
+Expect the test label in the release and the built-in arguments followed by
+`agentoo.cmdline_test=external loglevel=4`. The first printk value should be `4`
+unless userspace has subsequently changed it. This tests delivery and a kernel
+parameter; the minimal initramfs uses embedded storage settings and does not
+parse command-line root/unlock/mount overrides. Reboot into the working image
+if the candidate fails.
 
 ## Build
 

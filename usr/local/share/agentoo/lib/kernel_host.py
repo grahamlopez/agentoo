@@ -129,7 +129,7 @@ def resolve_identity(run):
 
 
 def expectations(values, identity):
-    return {**values, 'CONFIG_CMDLINE_BOOL': 'y', 'CONFIG_CMDLINE_OVERRIDE': 'y',
+    return {**values, 'CONFIG_CMDLINE_BOOL': 'y', 'CONFIG_CMDLINE_OVERRIDE': 'n',
             'CONFIG_CMDLINE': json.dumps(identity['cmdline'])}
 
 

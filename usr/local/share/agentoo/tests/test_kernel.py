@@ -216,6 +216,8 @@ p.write_text(text)
         output, _ = kernel.paths(self.work, data)
         values = kernel.read_config(output / '.config')
         self.assertEqual(values['CONFIG_CMDLINE'], json.dumps(TEST_CMDLINE))
+        self.assertEqual(values['CONFIG_CMDLINE_BOOL'], 'y')
+        self.assertEqual(values['CONFIG_CMDLINE_OVERRIDE'], 'n')
         self.assertEqual(values['CONFIG_INITRAMFS_SOURCE'], json.dumps(str(self.work / 'empty-initramfs')))
         self.assertEqual(list((self.work / 'empty-initramfs').iterdir()), [])
         self.assertEqual(data['identity']['partuuid'], TEST_PARTUUID)
@@ -335,7 +337,7 @@ p.write_text(text)
             if 'olddefconfig' in arguments:
                 output, _ = kernel.paths(work, data)
                 config = output / '.config'
-                config.write_text(config.read_text().replace('CONFIG_CMDLINE_OVERRIDE=y', 'CONFIG_CMDLINE_OVERRIDE=n'))
+                config.write_text(config.read_text().replace('CONFIG_CMDLINE_OVERRIDE=n', 'CONFIG_CMDLINE_OVERRIDE=y'))
             return result
         with patch.object(kernel, 'make', side_effect=resolving_make):
             with self.assertRaisesRegex(AssertionError, 'did not survive Kconfig'):
