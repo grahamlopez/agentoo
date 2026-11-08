@@ -1,2 +1,2 @@
--- keyd emits Linux KEY_F16; the default evdev XKB map names it XF86Launch7.
-hl.bind("XF86Launch7", hl.dsp.exec_cmd("agentoo screenshot region"))
+-- Use native-size UI on startop's internal panel.
+hl.monitor({ output = "eDP-1", mode = "3840x2400@60", position = "auto", scale = 1.5 })
