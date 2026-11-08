@@ -21,7 +21,7 @@ spec.loader.exec_module(kernel)
 TEST_ROOT_UUID = '11111111-1111-4111-8111-111111111111'
 TEST_LUKS_UUID = '22222222-2222-4222-8222-222222222222'
 TEST_PARTUUID = '33333333-3333-4333-8333-333333333333'
-TEST_CMDLINE = f'root=UUID={TEST_ROOT_UUID} rootfstype=btrfs rootflags=subvol=@ crypt_root=UUID={TEST_LUKS_UUID} rd.luks.uuid=luks-{TEST_LUKS_UUID} rd.luks.name={TEST_LUKS_UUID}=cryptroot ro'
+TEST_CMDLINE = 'ro console=tty0 loglevel=5'
 
 
 class KernelTests(unittest.TestCase):
@@ -33,7 +33,7 @@ class KernelTests(unittest.TestCase):
         (self.sources / 'scripts').mkdir(parents=True)
         (self.sources / 'Makefile').write_text('VERSION = 6\nPATCHLEVEL = 18\nSUBLEVEL = 57\nEXTRAVERSION = -gentoo\nNAME = Test\n')
         self.start = self.root / 'starting.config'
-        stale_cmdline = TEST_CMDLINE.replace(TEST_ROOT_UUID, TEST_PARTUUID).replace(TEST_LUKS_UUID, TEST_PARTUUID)
+        stale_cmdline = 'root=UUID=' + TEST_PARTUUID + ' console=ttyS0'
         self.start.write_text('CONFIG_LOCALVERSION="-old"\nCONFIG_CMDLINE=' + json.dumps(stale_cmdline) +
                              '\n# CONFIG_MODULES is not set\nCONFIG_INITRAMFS_SOURCE="/missing/old-build.cpio"\n')
         self.bin = self.root / 'bin'
@@ -128,14 +128,12 @@ p.write_text(text)
         selection = patch.object(kernel.kernel_host, 'read_host', return_value='testhost')
         selection.start()
         self.addCleanup(selection.stop)
-        cmdline = self.root / 'cmdline'
-        cmdline.write_text(TEST_CMDLINE + '\n')
         sysblock = self.root / 'sysblock'
         dm = sysblock / 'dm-0/dm'
         dm.mkdir(parents=True)
         (dm / 'name').write_text('cryptroot\n')
         (dm / 'uuid').write_text('CRYPT-LUKS2-test\n')
-        for name, value in dict(HOSTS=hosts, CMDLINE=cmdline, SYS_BLOCK=sysblock).items():
+        for name, value in dict(HOSTS=hosts, SYS_BLOCK=sysblock).items():
             change = patch.object(kernel.kernel_host, name, value)
             change.start()
             self.addCleanup(change.stop)
@@ -211,7 +209,7 @@ p.write_text(text)
             self.assertEqual(kernel.run(['example'], capture=True, root=True), 'ok')
         self.assertEqual(run.call_args_list[-1].args[0], ['sudo', '-n', '--', 'example'])
 
-    def test_config_handoff_specializes_cmdline_and_rejects_reconfiguration(self):
+    def test_config_handoff_replaces_cmdline_and_rejects_reconfiguration(self):
         self.prepare()
         data = kernel.load(self.work, 'test')
         output, _ = kernel.paths(self.work, data)
@@ -225,8 +223,9 @@ p.write_text(text)
         self.assertEqual(data['host'], 'testhost')
         self.assertEqual(values['CONFIG_LOCALVERSION'], '"-test"')
         self.assertEqual(values['CONFIG_IKCONFIG_PROC'], 'y')
-        self.assertIn('EXTRAVERSION = \n', (self.sources / 'Makefile').read_text())
-        self.assertTrue(list(self.sources.glob('Makefile.agentoo-*.bak')))
+        self.assertIn('EXTRAVERSION = -gentoo\n', (self.sources / 'Makefile').read_text())
+        self.assertFalse(list(self.sources.glob('Makefile.agentoo-*.bak')))
+        self.assertTrue(all('EXTRAVERSION=' in call for call in self.calls() if call[0] == 'make'))
         with self.assertRaisesRegex(RuntimeError, 'empty or absent'):
             kernel.configure(kernel.build_parser().parse_args(['config', '--label', 'test', '--config', str(self.start), '--sources', str(self.sources), '--accept-defaults', '--yes']))
 
@@ -244,7 +243,7 @@ p.write_text(text)
         self.assertIn('CONFIG_MODULES: n -> y', errors)
         self.assertIn('CONFIG_REMOVED: n -> <absent>', errors)
 
-    def test_build_keeps_initramfs_policy_during_both_resolution_passes(self):
+    def test_build_preserves_policy_and_compiles_once(self):
         with self.start.open('a') as stream:
             stream.write('CONFIG_INITRAMFS_COMPRESSION_NONE=y\nCONFIG_INITRAMFS_ROOT_UID=0\n'
                          'CONFIG_INITRAMFS_ROOT_GID=0\n# CONFIG_ACPI_TABLE_OVERRIDE_VIA_BUILTIN_INITRD is not set\n')
@@ -265,33 +264,18 @@ p.write_text(text)
         with patch.object(kernel, 'make', side_effect=resolving_make):
             self.prepare()
             self.invoke('build', '--label', 'test', '--yes')
-        self.assertEqual(len(resolutions), 3)
-        self.assertEqual(resolutions[0], resolutions[1])
-        self.assertNotEqual(resolutions[1], resolutions[2])
+        self.assertEqual(len(resolutions), 2)
+        self.assertNotEqual(resolutions[0], resolutions[1])
+        compiles = [call for call in self.calls() if call[0] == 'make' and any(arg.startswith('-j') for arg in call)]
+        self.assertEqual(len(compiles), 1)
+        self.assertLess(next(i for i, call in enumerate(self.calls()) if call[0] == 'minimal-initramfs' and '--check' not in call), self.calls().index(compiles[0]))
 
-    def test_placeholder_rejects_leftover_files_and_symlinks(self):
-        directory = kernel.empty_initramfs(self.root)
-        (directory / 'stale-file').touch()
-        with self.assertRaisesRegex(RuntimeError, 'must remain empty'):
-            kernel.empty_initramfs(self.root)
-        other = self.root / 'other'
-        other.mkdir()
-        (other / 'empty-initramfs').symlink_to(directory, target_is_directory=True)
-        with self.assertRaisesRegex(RuntimeError, 'real empty directory'):
-            kernel.empty_initramfs(other)
-
-    def test_bad_host_and_mismatched_boot_identity_fail_before_source_changes(self):
+    def test_bad_host_fails_before_workspace_changes(self):
         for suffix in (['--target-host', '../thinktop'], ['--target-host', 'missing']):
             args = kernel.build_parser().parse_args(['config', '--label', 'test', '--config', str(self.start),
                                                     '--sources', str(self.sources), '--accept-defaults', '--yes', *suffix])
             with self.assertRaises((ValueError, RuntimeError)):
                 kernel.configure(args)
-        original = kernel.kernel_host.CMDLINE.read_text()
-        for before, after in ((TEST_ROOT_UUID, TEST_PARTUUID), (TEST_LUKS_UUID, TEST_PARTUUID),
-                              ('=cryptroot', '=wrong'), ('subvol=@', 'subvol=@other')):
-            kernel.kernel_host.CMDLINE.write_text(original.replace(before, after))
-            with self.assertRaises(RuntimeError):
-                kernel.kernel_host.resolve_identity(kernel.run)
         self.assertIn('EXTRAVERSION = -gentoo\n', (self.sources / 'Makefile').read_text())
         self.assertFalse(self.work.exists())
 
@@ -319,17 +303,17 @@ p.write_text(text)
             with self.subTest(addition=addition), self.assertRaises(ValueError):
                 kernel.kernel_host.read_profile('invalid')
 
-    def test_identity_rejects_duplicate_uuid_luks1_and_unsupported_unlock_policy(self):
-        original = kernel.kernel_host.CMDLINE.read_text()
-        for suffix in (f' root=UUID={TEST_ROOT_UUID}', ' rd.luks.options=tpm2-device=auto',
-                       ' root_trim=no', ' resume=UUID=' + TEST_ROOT_UUID):
-            kernel.kernel_host.CMDLINE.write_text(original + suffix)
-            with self.subTest(suffix=suffix), self.assertRaises(RuntimeError):
-                kernel.kernel_host.resolve_identity(kernel.run)
-        kernel.kernel_host.CMDLINE.write_text(original)
+    def test_identity_rejects_luks1(self):
         (kernel.kernel_host.SYS_BLOCK / 'dm-0/dm/uuid').write_text('CRYPT-LUKS1-test')
         with self.assertRaisesRegex(RuntimeError, 'requires LUKS2'):
             kernel.kernel_host.resolve_identity(kernel.run)
+
+    def test_identity_rejects_wrong_root_layout_and_invalid_uuid(self):
+        self.tool('findmnt', 'print(\'{"filesystems": [{"source": "/dev/root", "fstype": "ext4", "fsroot": "/"}]}\')')
+        with self.assertRaisesRegex(RuntimeError, 'Btrfs'):
+            kernel.kernel_host.resolve_identity(kernel.run)
+        with self.assertRaisesRegex(RuntimeError, 'storage UUID'):
+            kernel.kernel_host.identifier('invalid')
 
     def test_kconfig_lost_host_setting_rejects_configuration(self):
         original_make = kernel.make
@@ -345,67 +329,13 @@ p.write_text(text)
                 self.prepare()
         self.assertFalse((self.work / kernel.METADATA).exists())
 
-    def test_dracut_local_input_keeps_baseline_crypt_root(self):
-        local = TEST_CMDLINE.replace(f'crypt_root=UUID={TEST_LUKS_UUID} ', '')
-        kernel.kernel_host.CMDLINE.write_text(local)
-        baseline = TEST_CMDLINE.replace(f'rd.luks.uuid=luks-{TEST_LUKS_UUID} rd.luks.name={TEST_LUKS_UUID}=cryptroot ', '')
-        self.start.write_text('CONFIG_LOCALVERSION="-old"\nCONFIG_CMDLINE=' + json.dumps(baseline) +
-                             '\n# CONFIG_MODULES is not set\n')
-        self.prepare()
-        data = kernel.load(self.work, 'test')
-        self.assertEqual(data['identity']['local_cmdline'], local)
-        self.assertEqual(data['identity']['cmdline'], baseline)
-        self.assertNotIn('rd.luks.', data['identity']['cmdline'])
-        self.assertEqual(kernel.kernel_host.CMDLINE.read_text(), local)
-        self.invoke('build', '--label', 'test', '--yes')
-
-    def test_shared_cmdline_retains_policy_and_replaces_only_storage_inputs(self):
-        shared = ENTRY.parent.parent / 'share/agentoo/docs/kernel-shared-v04-config'
-        baseline = json.loads(kernel.read_config(shared)['CONFIG_CMDLINE'])
-        identity = kernel.kernel_host.resolve_identity(kernel.run)
-        generated = kernel.kernel_host.specialize_cmdline(baseline, identity)
-        replacements = {'root': 'UUID=' + TEST_ROOT_UUID, 'crypt_root': 'UUID=' + TEST_LUKS_UUID}
-        self.assertNotIn('rd.luks.', generated)
-        tokens = generated.split()
-        for key, value in replacements.items():
-            self.assertEqual([token for token in tokens if token.startswith(key + '=')], [key + '=' + value])
-        for token in baseline.split():
-            if not token.startswith(('root=', 'crypt_root=')):
-                self.assertIn(token, tokens)
-        self.assertNotIn('a0d8c112-b1fd-4a55-8515-d5eb8f13b76d', generated)
-        self.assertNotIn('aace61a6-83ee-4825-b1e2-71d6fd3995ea', generated)
-        self.start.write_text('CONFIG_LOCALVERSION="-old"\nCONFIG_CMDLINE=' + json.dumps(baseline) +
-                             '\n# CONFIG_MODULES is not set\n')
-        self.prepare()
+    def test_explicit_cmdline_is_embedded_without_storage_rewriting(self):
+        commandline = 'ro rd.luks.uuid=luks-' + TEST_LUKS_UUID + ' console=ttyS0'
+        self.invoke('config', '--label', 'test', '--config', str(self.start),
+                    '--sources', str(self.sources), '--accept-defaults', '--yes', '--cmdline', commandline)
         data = kernel.load(self.work, 'test')
         output, _ = kernel.paths(self.work, data)
-        self.assertEqual(json.loads(kernel.read_config(output / '.config')['CONFIG_CMDLINE']), generated)
-        self.assertEqual(data['identity']['cmdline'], generated)
-
-    def test_cmdline_policy_quotes_and_missing_storage_arguments(self):
-        identity = kernel.kernel_host.resolve_identity(kernel.run)
-        generated = kernel.kernel_host.specialize_cmdline('root=UUID=old ro dyndbg="file example.c +p" console=tty0', identity)
-        self.assertIn('dyndbg="file example.c +p" console=tty0', generated)
-        self.assertIn('crypt_root=UUID=' + TEST_LUKS_UUID, generated)
-        self.assertNotIn('rd.luks.', generated)
-        for unsupported in ('root_trim=no', 'resume=UUID=old', 'rd.luks.key=/old/key'):
-            with self.subTest(unsupported=unsupported), self.assertRaisesRegex(RuntimeError, 'unsupported initramfs policy'):
-                kernel.kernel_host.specialize_cmdline('root=UUID=old ' + unsupported, identity)
-
-    def test_cmdline_does_not_import_local_policy_and_keeps_explicit_dracut_style(self):
-        identity = kernel.kernel_host.resolve_identity(kernel.run)
-        identity['cmdline'] += ' console=ttyS0 loglevel=1'
-        generated = kernel.kernel_host.specialize_cmdline('', identity)
-        self.assertIn('crypt_root=UUID=' + TEST_LUKS_UUID, generated)
-        self.assertIn('ro', generated.split())
-        self.assertNotIn('rd.luks.', generated)
-        self.assertNotIn('console=', generated)
-        self.assertNotIn('loglevel=', generated)
-        dracut_baseline = 'ro rd.luks.uuid=luks-old rd.luks.name=old=oldmapper'
-        generated = kernel.kernel_host.specialize_cmdline(dracut_baseline, identity)
-        self.assertNotIn('crypt_root=', generated)
-        self.assertIn('rd.luks.uuid=luks-' + TEST_LUKS_UUID, generated)
-        self.assertIn('rd.luks.name=' + TEST_LUKS_UUID + '=cryptroot', generated)
+        self.assertEqual(kernel.read_config(output / '.config')['CONFIG_CMDLINE'], json.dumps(commandline))
 
     def test_missing_firmware_and_incomplete_workspace_fail_clearly(self):
         self.prepare()

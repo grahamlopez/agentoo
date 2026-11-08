@@ -2117,8 +2117,7 @@ kernel_foundation_chroot() {
   [[ $TARGET_MICROCODE != intel ]] || packages+=(sys-firmware/intel-microcode)
   # Keep the binary provider in every transaction to prevent an OR dependency
   # (firmware -> virtual/dist-kernel) from selecting the source provider.
-  # Explicit packages, rather than @early_install (which also contains sources
-  # and Genkernel). kernel-bin is an ebuild containing a prebuilt kernel; this
+  # kernel-bin is an ebuild containing a prebuilt kernel; this
   # works in both source-only and binary-preferred installation modes.
   prepare_install_binpkgs
   install_emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin

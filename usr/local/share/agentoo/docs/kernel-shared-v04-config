@@ -521,8 +521,8 @@ CONFIG_HOTPLUG_CPU=y
 CONFIG_LEGACY_VSYSCALL_XONLY=y
 # CONFIG_LEGACY_VSYSCALL_NONE is not set
 CONFIG_CMDLINE_BOOL=y
-CONFIG_CMDLINE="ro root_trim=yes console=tty0 loglevel=4"
-CONFIG_CMDLINE_OVERRIDE=y
+CONFIG_CMDLINE="ro console=tty0 loglevel=5"
+# CONFIG_CMDLINE_OVERRIDE is not set
 CONFIG_MODIFY_LDT_SYSCALL=y
 # CONFIG_STRICT_SIGALTSTACK_SIZE is not set
 CONFIG_HAVE_LIVEPATCH=y
@@ -2033,8 +2033,7 @@ CONFIG_FW_LOADER=y
 # CONFIG_FW_LOADER_DEBUG is not set
 CONFIG_FW_LOADER_PAGED_BUF=y
 CONFIG_FW_LOADER_SYSFS=y
-CONFIG_EXTRA_FIRMWARE="i915/mtl_dmc.bin i915/mtl_guc_70.bin i915/mtl_huc_gsc.bin i915/mtl_gsc_1.bin iwlwifi-bz-b0-fm-c0-101.ucode iwlwifi-bz-b0-fm-c0.pnvm regulatory.db regulatory.db.p7s intel/ibt-0093-0291.sfi intel/ibt-0093-0291.ddc intel/sof-ipc4/arl/sof-arl.ri intel/sof-ace-tplg/sof-hda-generic-idisp-2ch.tplg intel/sof-ace-tplg/sof-arl-cs42l43-l2-cs35l56-l3-2ch.tplg cs42l43.bin cirrus/cs35l56-b0-dsp1-misc-17aa2349.wmfw cirrus/cs35l56-b0-dsp1-misc-17aa2349-amp1.bin cirrus/cs35l56-b0-dsp1-misc-17aa2349-amp2.bin intel-ucode/06-c5-02"
-CONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"
+CONFIG_EXTRA_FIRMWARE=""
 # CONFIG_FW_LOADER_USER_HELPER is not set
 CONFIG_FW_LOADER_COMPRESS=y
 CONFIG_FW_LOADER_COMPRESS_XZ=y

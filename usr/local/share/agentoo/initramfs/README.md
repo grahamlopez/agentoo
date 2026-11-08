@@ -90,7 +90,9 @@ Install separately using the existing workflow, retaining a working EFI image.
 Cold-boot checks: internal keyboard, USB cable/paired receiver, incorrect then
 correct passphrase, root `@`, active discard flag, systemd startup, and firmware
 behavior. Compare microcode against the observed baseline `0x122`. Inspect the
-microphone-mute key before retiring the existing real-root workaround.
+microphone-mute key as `MICMUTE` (keycode 248). Keep the real-root workaround
+until a controlled cold boot with the rule temporarily disabled confirms the
+mapping; remove it permanently only after that check passes.
 
 ## Initial investigation validation
 

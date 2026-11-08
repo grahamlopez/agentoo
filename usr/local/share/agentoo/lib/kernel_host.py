@@ -5,13 +5,11 @@ No configuration is sourced as shell code and no storage is changed.
 import json
 from pathlib import Path
 import re
-import shlex
 import uuid
 
 from host_selection import HOST_NAME, read_host
 
 HOSTS = Path('/etc/agentoo/kernel/hosts')
-CMDLINE = Path('/etc/kernel/cmdline')
 KEYMAP = '/usr/share/keymaps/i386/qwerty/us-caps.map.gz'
 SYS_BLOCK = Path('/sys/class/block')
 
@@ -89,86 +87,12 @@ def resolve_identity(run):
         raise RuntimeError('unsupported root mapping name')
     identity = dict(root_uuid=identifier(root['uuid']), luks_uuid=identifier(partition['uuid']),
                     partuuid=identifier(partition['partuuid']), mapper=mapper, subvolume='@', keymap=KEYMAP)
-    commandline = CMDLINE.read_text().strip()
-    if not commandline or '\n' in commandline or '"' in commandline or '\\' in commandline:
-        raise RuntimeError(f'{CMDLINE}: expected one plain kernel command line')
-    tokens = shlex.split(commandline)
-    if any(token.startswith('rd.luks.') and not token.startswith(('rd.luks.uuid=', 'rd.luks.name=')) for token in tokens):
-        raise RuntimeError(f'{CMDLINE}: only passphrase-based rd.luks.uuid/name inputs are supported')
-    if any(token.startswith('root_trim=') and token != 'root_trim=yes' for token in tokens):
-        raise RuntimeError(f'{CMDLINE}: the minimal initramfs policy enables discards; root_trim must be yes')
-    def one(key):
-        matches = [token.split('=', 1)[1] for token in tokens if token.startswith(key + '=')]
-        if len(matches) != 1:
-            raise RuntimeError(f'{CMDLINE}: expected exactly one {key}= argument')
-        return matches[0]
-    def same_uuid(value, expected, prefix='UUID='):
-        if not value.startswith(prefix) or identifier(value[len(prefix):]) != expected:
-            raise RuntimeError(f'{CMDLINE}: boot identifiers disagree with the mounted root; correct the local command line')
-    same_uuid(one('root'), identity['root_uuid'])
-    if one('rootfstype') != 'btrfs' or one('rootflags') != 'subvol=@':
-        raise RuntimeError(f'{CMDLINE}: expected rootfstype=btrfs rootflags=subvol=@')
-    crypt = [token for token in tokens if token.startswith('crypt_root=')]
-    dracut = [token for token in tokens if token.startswith(('rd.luks.uuid=', 'rd.luks.name='))]
-    if crypt:
-        same_uuid(one('crypt_root'), identity['luks_uuid'])
-    if dracut:
-        same_uuid(one('rd.luks.uuid'), identity['luks_uuid'], 'luks-')
-        if one('rd.luks.name') != identity['luks_uuid'] + '=' + mapper:
-            raise RuntimeError(f'{CMDLINE}: rd.luks.name disagrees with the mounted mapping')
-    if not crypt and not dracut:
-        raise RuntimeError(f'{CMDLINE}: expected crypt_root or rd.luks root identification')
-    unsupported = [token for token in tokens if token.startswith(('initrd=', 'resume=', 'rd.luks.key=', 'cryptkey='))]
-    unsupported += [token for token in tokens if token.startswith('init=') and token != 'init=/sbin/init']
-    if unsupported:
-        raise RuntimeError(f'{CMDLINE}: unsupported boot inputs: {unsupported}; review initramfs policy first')
-    # Preserve the established minimal-builder discard policy explicitly.
-    identity['allow_discards'] = True
-    identity['cmdline'] = commandline
     return identity
 
 
 def expectations(values, identity):
     return {**values, 'CONFIG_CMDLINE_BOOL': 'y', 'CONFIG_CMDLINE_OVERRIDE': 'n',
             'CONFIG_CMDLINE': json.dumps(identity['cmdline'])}
-
-
-def specialize_cmdline(baseline, identity):
-    """Retain baseline boot policy while replacing installation-specific inputs."""
-    replacements = {
-        'root': 'UUID=' + identity['root_uuid'],
-        'rootfstype': 'btrfs',
-        'rootflags': 'subvol=' + identity['subvolume'],
-        'crypt_root': 'UUID=' + identity['luks_uuid'],
-        'rd.luks.uuid': 'luks-' + identity['luks_uuid'],
-        'rd.luks.name': identity['luks_uuid'] + '=' + identity['mapper'],
-    }
-    # Keep quoted policy arguments intact rather than stripping their quotes.
-    source = baseline if baseline.strip() else 'ro'
-    token_pattern = r'(?:[^\s"]|"[^"]*")+'
-    if not re.fullmatch(r'\s*(?:' + token_pattern + r'\s*)*', source):
-        raise RuntimeError('starting CONFIG_CMDLINE contains unmatched quotes')
-    result, replaced = [], set()
-    for token in re.findall(token_pattern, source):
-        key = token.split('=', 1)[0]
-        if key in replacements:
-            if key not in replaced:
-                result.append(key + '=' + replacements[key])
-                replaced.add(key)
-        else:
-            if token.startswith(('initrd=', 'resume=', 'cryptkey=')) or (
-                    token.startswith('rd.luks.') and key not in replacements) or (
-                    token.startswith('root_trim=') and token != 'root_trim=yes') or (
-                    token.startswith('init=') and token != 'init=/sbin/init'):
-                raise RuntimeError(f'starting CONFIG_CMDLINE has unsupported initramfs policy: {token}')
-            result.append(token)
-    required = ['root', 'rootfstype', 'rootflags']
-    if replaced.intersection(('rd.luks.uuid', 'rd.luks.name')):
-        required.extend(('rd.luks.uuid', 'rd.luks.name'))
-    elif 'crypt_root' not in replaced:
-        required.append('crypt_root')
-    result.extend(key + '=' + replacements[key] for key in required if key not in replaced)
-    return ' '.join(result)
 
 
 def check_expected(actual, expected):

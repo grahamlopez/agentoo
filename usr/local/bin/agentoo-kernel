@@ -47,6 +47,7 @@ def build_parser():
             'workspace (default: find this label under /dev/shm)').completion = 'directories'
         child.add_argument('--yes', action='store_true', help='accept displayed plans; does not answer Kconfig or sudo prompts')
         if name == 'config':
+            child.add_argument('--cmdline', default='ro console=tty0 loglevel=5', metavar='TEXT', help='embedded kernel command line (default: %(default)s); supply storage arguments for custom archives')
             child.add_argument('--target-host', metavar='NAME', help='host profile (default: selected Agentoo Portage profile); builds still target this machine')
             child.add_argument('--config', metavar='FILE', help='starting config (default: /proc/config.gz); plain or gzip').completion = 'files'
             child.add_argument('--sources', default='/usr/src/linux', metavar='DIR', help='kernel sources (default: /usr/src/linux)').completion = 'directories'
@@ -149,18 +150,6 @@ def parse_config(text):
     return values
 
 
-def empty_initramfs(work):
-    # Keep INITRAMFS_SOURCE nonempty so Kconfig retains its dependent policy.
-    # Kernel's directory input is valid even before a real archive is generated.
-    directory = work / 'empty-initramfs'
-    if directory.is_symlink():
-        raise RuntimeError(f'{directory}: placeholder must be a real empty directory')
-    directory.mkdir(exist_ok=True)
-    if any(directory.iterdir()):
-        raise RuntimeError(f'{directory}: placeholder must remain empty')
-    return directory
-
-
 def paths(work, data):
     return work / 'kernel' / data['release'], work / 'modules' / data['release']
 
@@ -199,7 +188,7 @@ def make(work, data, *arguments, capture=False, root=False, umask=-1):
     for key in ('KCONFIG_CONFIG', 'KBUILD_OUTPUT', 'KBUILD_EXTMOD', 'CROSS_COMPILE', 'ARCH', 'MAKEFLAGS', 'MFLAGS', 'LOCALVERSION'):
         env.pop(key, None)
     env['KCFLAGS'] = data['kcflags']
-    command = ['make', '--no-print-directory', '-C', data['sources'], f'O={output}', 'LOCALVERSION=']
+    command = ['make', '--no-print-directory', '-C', data['sources'], f'O={output}', 'LOCALVERSION=', f'EXTRAVERSION={data["extraversion"]}']
     if root:
         command += [f'KCFLAGS={data["kcflags"]}']
     return run([*command, *arguments], capture=capture, root=root, env=env, umask=umask)
@@ -241,7 +230,7 @@ def validate_inputs(work, data):
 def load(work, label, completed=False):
     data = json.loads((work / METADATA).read_text())
     if not isinstance(data, dict) or any(not isinstance(data.get(key), str) for key in
-                                        ('label', 'release', 'sources', 'kcflags', 'source_makefile_sha256')):
+                                        ('label', 'release', 'sources', 'kcflags', 'extraversion', 'source_makefile_sha256')):
         raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
     if data.get('label') != label or not data.get('configured'):
         raise RuntimeError(f'{work}: not a configured workspace for label {label}')
@@ -319,9 +308,7 @@ def configure(args):
         raise RuntimeError('oldconfig needs a terminal; use --accept-defaults to accept new defaults')
     host, profile, profile_text, host_values = kernel_host.read_profile(args.target_host)
     identity = kernel_host.resolve_identity(run)
-    identity['local_cmdline'] = identity['cmdline']
-    identity['cmdline'] = kernel_host.specialize_cmdline(
-        json.loads(parse_config(text).get('CONFIG_CMDLINE', '""')), identity)
+    identity['cmdline'] = args.cmdline
     expected = kernel_host.expectations(host_values, identity)
     notice(f'Host profile:     {host} ({profile})\nKernel command line: {identity["cmdline"]}\n'
            f'Encrypted root:   PARTUUID={identity["partuuid"]} -> {identity["mapper"]}\n'
@@ -330,7 +317,7 @@ def configure(args):
     notice(f'EXTRAVERSION:     {extra!r} -> {upstream_extra!r}' if extra != upstream_extra else f'EXTRAVERSION:     {extra!r}')
     confirm('Proceed', args.yes)
     work.mkdir(parents=True, exist_ok=True)
-    data = dict(label=args.label, release=release, sources=str(sources), kcflags=os.environ.get('KCFLAGS', DEFAULT_FLAGS))
+    data = dict(label=args.label, release=release, extraversion=upstream_extra, sources=str(sources), kcflags=os.environ.get('KCFLAGS', DEFAULT_FLAGS))
     data.update(host=host, identity=identity, host_settings=expected,
                 config_origin=str(origin), config_input_sha256=hashlib.sha256(raw).hexdigest(),
                 profile_origin=str(profile), profile_sha256=hashlib.sha256(profile_text.encode()).hexdigest())
@@ -346,20 +333,12 @@ def configure(args):
             inherited.append(line)
     (output / '.config').write_text('\n'.join(inherited) + '\n' +
                                   '\n'.join(f'{key}={value}' for key, value in expected.items()) + '\n')
-    if extra != upstream_extra:
-        original = sources / 'Makefile'
-        backup = sources / f'Makefile.agentoo-{time.time_ns()}.bak'
-        run(['cp', '--preserve=mode', '--', original, backup], root=True)
-        changed = re.sub(r'^EXTRAVERSION\s*=.*$', 'EXTRAVERSION = ' + upstream_extra, original.read_text(), flags=re.M)
-        with tempfile.NamedTemporaryFile(mode='w') as temporary:
-            temporary.write(changed)
-            temporary.flush()
-            run(['install', '-m', '0644', '--', temporary.name, original], root=True)
-        notice(f'Original source Makefile saved to {backup}')
+    placeholder = work / 'empty-initramfs'
+    placeholder.mkdir()
     edit_config(work, data, '--set-str', 'LOCALVERSION', '-' + args.label,
                 '--disable', 'LOCALVERSION_AUTO', '--enable', 'EFI_STUB', '--enable', 'BLK_DEV_INITRD',
                 '--enable', 'IKCONFIG', '--enable', 'IKCONFIG_PROC',
-                '--set-str', 'INITRAMFS_SOURCE', str(empty_initramfs(work)))
+                '--set-str', 'INITRAMFS_SOURCE', str(placeholder))
     notice('New Kconfig options:')
     make(work, data, 'listnewconfig')
     make(work, data, 'olddefconfig' if args.accept_defaults else 'oldconfig')
@@ -418,19 +397,6 @@ def build(args):
     confirm('Proceed', args.yes)
     data['built'] = False
     save(work, data)
-    edit_config(work, data, '--set-str', 'INITRAMFS_SOURCE', str(empty_initramfs(work)))
-    make(work, data, 'olddefconfig')
-    values = check_config(work, data)
-    make(work, data, f'-j{args.jobs}')
-    # Remove stale modules when rebuilding with a different driver selection.
-    if staging.exists():
-        shutil.rmtree(staging)
-    make(work, data, 'modules_install', f'INSTALL_MOD_PATH={staging}', 'INSTALL_MOD_STRIP=1', umask=0o022)
-    if values.get('CONFIG_MODULES') != 'y':
-        # Kernel omits this list with no modules; depmod still needs it for indexing.
-        order = staged_modules(work, data) / 'modules.order'
-        order.write_bytes(b'')
-        order.chmod(0o644)
     # Regenerate this disposable subtree on every build/retry.
     if initramfs_work.exists():
         shutil.rmtree(initramfs_work)
@@ -447,6 +413,15 @@ def build(args):
     if final.get('CONFIG_INITRAMFS_SOURCE') != json.dumps(str(archive)):
         raise RuntimeError('resolved config does not embed the selected initramfs')
     make(work, data, f'-j{args.jobs}')
+    # Remove stale modules when rebuilding with a different driver selection.
+    if staging.exists():
+        shutil.rmtree(staging)
+    make(work, data, 'modules_install', f'INSTALL_MOD_PATH={staging}', 'INSTALL_MOD_STRIP=1', umask=0o022)
+    if final.get('CONFIG_MODULES') != 'y':
+        # Kernel omits this list with no modules; depmod still needs it for indexing.
+        order = staged_modules(work, data) / 'modules.order'
+        order.write_bytes(b'')
+        order.chmod(0o644)
     image = output / 'arch/x86/boot/bzImage'
     if (output / 'include/config/kernel.release').read_text().strip() != data['release']:
         raise RuntimeError('compiled kernel release differs from the planned release')

@@ -27,7 +27,6 @@ sys-apps/usbutils
 sys-boot/efibootmgr
 sys-fs/cryptsetup
 sys-fs/dosfstools
-sys-kernel/genkernel
 sys-kernel/gentoo-kernel
 sys-kernel/gentoo-sources
 sys-kernel/linux-firmware

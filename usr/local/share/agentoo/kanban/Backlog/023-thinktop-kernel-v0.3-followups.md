@@ -47,7 +47,7 @@ Local first-boot evidence is in
 especially `REVIEW.txt` and `first-boot-findings.json`. The review includes the
 operator's later camera/audio/suspend acceptance.
 
-[Initramfs keyboard policy](020-initramfs-keyboard-policy.md) remains separate
+[Initramfs keyboard policy](../Open/020-initramfs-keyboard-policy.md) remains separate
 work; a fresh initramfs alone does not establish that its keyboard policy was
 corrected. Common validation and held reductions belong to the
 [shared follow-ups](027-shared-kernel-v0.3-followups.md).

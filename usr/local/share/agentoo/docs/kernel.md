@@ -3,9 +3,9 @@
 `agentoo kernel` carries an existing complete config to new Gentoo sources,
 builds a local x86_64 EFI kernel with an embedded initramfs, and installs it under
 a versioned filename. Each subcommand also works through `agentoo-kernel`.
-Run as your normal user; the command uses sudo for source Makefile changes,
-system module installation, ESP writes and firmware registration. Initramfs builders run
-as the build user and create user-owned workspace files.
+Run as your normal user; the command uses sudo for system module installation,
+ESP writes and firmware registration. Initramfs builders run as the build user
+and create user-owned workspace files.
 
 ```sh
 agentoo kernel config --label agentoo-v0.4 \
@@ -28,52 +28,42 @@ The starting config supplies the shared driver/capability union. Host fragments
 set explicit embedded firmware names, their absolute directory, CPU microcode
 support and any justified Kconfig exceptions. They do not contain command lines,
 initramfs paths or release labels. Complete saved configs remain useful baseline
-snapshots, but their old boot identifiers and embedded firmware are replaced.
+snapshots, but their command line and embedded firmware are replaced.
+The shared snapshot was checked against the running minimal-initramfs v0.4
+config and resolved with native Kconfig. Its archive path and firmware list are
+empty; the workspace and selected host fragment provide those inputs.
 Adding a host must not prune the shared driver union. A future bequiet profile
 can enable modules for NVIDIA; external-module building is still separate work.
 
-`/etc/kernel/cmdline` is local installation data, never a tracked host UUID list.
-Config reads it and inspects the mounted root through findmnt, lsblk and sysfs.
-The supported layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed
-by a GPT partition. Filesystem/LUKS/partition UUIDs and the actual mapping name
-are recorded together. The local command line must contain matching `root=UUID=...`,
-`rootfstype=btrfs`, `rootflags=subvol=@`, and either matching `crypt_root=UUID=...`
-or the installer's `rd.luks.uuid=luks-...` plus `rd.luks.name=...=...`. If both
-styles appear, both must match. Stale, duplicate or conflicting identifiers fail
-with an explanation; correct the local file and retry. There is no automatic
-rewrite of this file, fstab or storage. Block-device and dm sysfs access are
-required; a restricted container is not a substitute for running on the host.
+Config inspects the mounted root through findmnt, lsblk and sysfs. The supported
+layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed by a GPT
+partition. Filesystem/LUKS/partition UUIDs and the actual mapping name are recorded
+together. These checks target the installed root directly; the distribution
+kernel's local `/etc/kernel/cmdline` is independent and is neither read nor changed.
+Block-device and dm sysfs access are required.
 
-The starting config's command line supplies boot policy: console, logging,
-`ro`, `root_trim=yes` and other non-storage arguments are retained in order.
-Only root filesystem, encrypted-root and mapping/subvolume arguments are
-specialized using the validated local identity. The baseline's encrypted-root
-argument style is retained: `crypt_root` stays `crypt_root`, and dracut arguments
-are updated only if the baseline explicitly includes them. The local distribution
-kernel's `rd.luks.*` arguments are not imported into the custom kernel.
-Missing root/layout arguments are supplied; when no encrypted-root style is
-specified, config adds `crypt_root`. An empty baseline gets those storage arguments
-and `ro`, without importing local boot policy. Old baseline UUIDs are replaced.
-Unsupported initramfs policy fails explicitly rather
-than being silently carried into an incompatible build.
+The embedded command line defaults to `ro console=tty0 loglevel=5`. Config does
+not import command-line arguments from the starting config. Use `config --cmdline TEXT`
+to select console/logging policy, or supply the storage arguments required by an
+explicit custom archive. Custom archives and their command lines are operator
+inputs; their internal storage policy is not inspected or rewritten.
 
 Config enables the built-in command line and disables `CONFIG_CMDLINE_OVERRIDE`.
 On x86, firmware/bootloader arguments follow the built-in defaults; precedence
-for repeated arguments depends on the parameter. Existing workspaces retain
-their recorded override setting. Configure a fresh workspace to adopt this policy.
+for repeated arguments depends on the parameter.
 
-The minimal initramfs uses the recorded PARTUUID and mapping name, US/Caps-to-Control
-keymap, passphrase unlock, discards, `@` and `/sbin/init`. It accepts either boot
-identifier style because its storage selection comes from those recorded inputs.
-Alternative roots/layouts, token/key-file unlock, hibernation, nonstandard init,
-or conflicting discard policy require separately scoped initramfs support.
-Custom archives remain explicit operator inputs and their internal storage policy is not inspected.
+The minimal initramfs uses the recorded PARTUUID and mapping name,
+US/Caps-to-Control keymap, passphrase unlock, Btrfs `@` and `/sbin/init`.
+It opens the encrypted mapping with `cryptsetup --allow-discards`; this policy
+lives in the initramfs, without a kernel command-line switch. Periodic TRIM is
+separate host configuration (`fstrim.timer`); this command does not enable it.
+Alternative roots/layouts, token/key-file unlock and hibernation require a
+separately supplied initramfs.
 
 Config saves the original baseline, host fragment snapshot and provenance hashes,
 resolved boot/storage identity and required host settings in the workspace.
-Build uses this recorded policy even if the selected profile/local command line
-later changes. It checks host settings after each Kconfig resolution and refuses
-silent changes. To adopt new host policy or boot identity, configure a fresh
+Build uses this recorded policy even if the selected profile later changes.
+It checks host settings after each Kconfig resolution and refuses silent changes. To adopt new host policy or boot identity, configure a fresh
 workspace.
 
 Installed firmware remains independent: follow the native savedconfig procedure
@@ -108,8 +98,8 @@ last-workspace pointer is created.
 After showing the plan and confirming, config:
 
 1. Saves the starting config inside the workspace.
-2. Removes the source Makefile's Gentoo EXTRAVERSION suffix, backing up the
-   original Makefile beside it when a change is needed.
+2. Records the upstream EXTRAVERSION without Gentoo's suffix and passes it to
+   every kernel make invocation. The source Makefile remains untouched.
 3. Sets `CONFIG_LOCALVERSION="-<label>"`, disables automatic SCM release suffixes,
    and enables EFI-stub, initramfs and `/proc/config.gz` support. It replaces
    embedded firmware and command-line settings with the selected host inputs,
@@ -189,23 +179,18 @@ in the environment to override them at config or build time. Builds target the
 machine running the command; a shared driver config does not make these binaries
 portable to other CPUs. Jobs default to the CPUs available to the process.
 
-Build replaces the embedded-initramfs input with a workspace-owned empty directory,
-resolves the config and compiles
-the initial kernel and any selected in-tree modules. It then runs
-`modules_install INSTALL_MOD_STRIP=1` only into the workspace, under
-`modules/<release>/lib/modules/<release>/`. Old staged modules are
-removed on rebuild so disabled drivers do not linger. This stage runs even with
+Build creates or copies the archive first, sets `CONFIG_INITRAMFS_SOURCE`,
+resolves the config and compiles the kernel and selected in-tree modules once.
+It then runs `modules_install INSTALL_MOD_STRIP=1` only into the workspace,
+under `modules/<release>/lib/modules/<release>/`. Old staged modules are removed
+on rebuild so disabled drivers do not linger. This stage runs even with
 `CONFIG_MODULES=n`, which stages built-in-module metadata. **Build does not write
 to the system's `/lib/modules` or request sudo.**
 
-Keeping a nonempty source path preserves Kconfig's dependent initramfs owner IDs,
-compression choice and built-in ACPI override setting during configuration and
-the initial build. The placeholder directory must remain empty. The final pass
-replaces it with the newly generated or explicitly supplied archive; an old
-archive is never reused implicitly.
-Reconfigure from the original baseline in a fresh workspace if an earlier run
-cleared `INITRAMFS_SOURCE` to an empty string: that run may already have dropped
-the dependent settings, and the new placeholder cannot recover their old values.
+Only config uses an empty directory as its temporary `INITRAMFS_SOURCE`, keeping
+Kconfig's dependent owner IDs, compression and built-in ACPI override settings
+available before an archive exists. Build replaces it with the archive before
+its single configuration resolution and compile.
 
 By default, build runs the minimal initramfs builder in
 `<workspace>/initramfs/<release>/`. It extracts the cached
@@ -247,9 +232,8 @@ agentoo kernel build --label agentoo-v0.4 --initramfs /path/to/custom.cpio
 `<workspace>/initramfs/<release>/initramfs.cpio`. The old config's initramfs
 path is never selected implicitly.
 
-Finally, build embeds the archive, resolves the config and compiles again. It
-checks release consistency and records the completed config/image hashes and a
-manifest of staged module files and symlinks in the workspace. Before recording
+After compilation and module staging, build checks release consistency and
+records the completed config/image hashes and a manifest of staged module files and symlinks in the workspace. Before recording
 the manifest, staged directories are normalized to `0755` and files to `0644`;
 symlinks are preserved. It prints the final `bzImage` path on stdout. Interrupted builds retain
 their workspace for inspection/retry; install rejects incomplete or changed

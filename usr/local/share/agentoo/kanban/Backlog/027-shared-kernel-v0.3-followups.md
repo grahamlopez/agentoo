@@ -112,7 +112,7 @@ Retain these deferred workflow items for later scoping:
   signing remains separately deferred, not a condition for the completed CLI.
 
 This does not revive the retired general kernel-reduction project. Link
-[initramfs keyboard policy](020-initramfs-keyboard-policy.md) and
+[initramfs keyboard policy](../Open/020-initramfs-keyboard-policy.md) and
 firmware maintenance (completed card 018) when relevant.
 
 For each remaining host build use its own boot/firmware/microcode inputs and

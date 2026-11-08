@@ -1,6 +1,6 @@
 # Override the legacy scan 0x1a -> F20 mapping seen with genkernel-built images.
 # Remove after validating corrected initramfs policy without this workaround.
-# See kanban/Backlog/020-initramfs-keyboard-policy.md.
+# See kanban/Open/020-initramfs-keyboard-policy.md.
 # Defer the builtin until assignments finish: IMPORT runs before ENV assignments.
 ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", \
   ATTRS{name}=="ThinkPad Extra Buttons", \
