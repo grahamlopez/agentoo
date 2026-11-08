@@ -1,6 +1,7 @@
-# Kernel sources and core hardware inspection tools.
+# Kernel sources, Agentoo initramfs generator and hardware inspection tools.
 # For source selection and builds, see agentoo/docs/kernel.md.
 sys-kernel/gentoo-sources
+sys-kernel/agentoo-initramfs
 sys-apps/usbutils
 sys-apps/pciutils
 sys-apps/dmidecode

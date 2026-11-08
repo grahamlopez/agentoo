@@ -23,7 +23,7 @@ Kernel
 
 - [Firmware maintenance and diagnostics](firmware.md)
 - [Custom kernel rebuild commands](kernel.md)
-- [Minimal initramfs building and smoke checks](../initramfs/README.md)
+- [Agentoo initramfs packaging, development and smoke checks](initramfs.md)
 
 User facing tools and configuration
 

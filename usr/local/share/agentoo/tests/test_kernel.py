@@ -391,7 +391,7 @@ p.write_text(text)
         self.tool('minimal-initramfs', '''
 import sys
 assert '--check' in sys.argv
-print('BusyBox source archive missing', file=sys.stderr)
+print('compiled BusyBox missing', file=sys.stderr)
 sys.exit(2)
 ''')
         start = len(self.calls())

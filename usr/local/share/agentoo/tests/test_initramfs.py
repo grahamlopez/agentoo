@@ -12,35 +12,41 @@ import sys
 import tempfile
 import unittest
 
-HERE = Path(__file__).resolve().parents[1] / 'initramfs'
+HERE = Path(__file__).resolve().parents[1] / 'portage/sys-kernel/agentoo-initramfs/files'
 
 
 class BuilderArgumentsTest(unittest.TestCase):
     def test_check_mode_validates_inputs_without_building_or_creating_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = root / 'source'
-            source.mkdir()
+            busybox = root / 'busybox'
             work = root / 'output'
             keymap = root / 'keymap'
             keymap.touch()
             command = [sys.executable, str(HERE / 'build'), '--check', '--work', str(work),
                        '--partuuid', '33333333-3333-4333-8333-333333333333',
-                       '--busybox-source', str(source), '--keymap', str(keymap)]
+                       '--busybox', str(busybox), '--keymap', str(keymap)]
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
-            self.assertIn('source tree missing Makefile', result.stderr)
+            self.assertIn('compiled BusyBox missing or not executable', result.stderr)
             self.assertFalse(work.exists())
-            (source / 'Makefile').touch()
+            busybox.write_text('#!/bin/sh\nprintf "%s\\n" sh mount mkdir sleep switch_root loadkmap umount\n')
+            busybox.chmod(0o755)
             tools = root / 'bin'
             tools.mkdir()
-            for name in ('make', 'cc', 'cpio', 'loadkeys', 'strip', 'cryptsetup', 'ldd'):
+            for name in ('cpio', 'loadkeys', 'strip', 'cryptsetup', 'ldd'):
                 tool = tools / name
-                # Only ldd should execute during preflight; compilers/builders must not run.
+                # Only ldd and BusyBox should execute during preflight.
                 tool.write_text('#!/bin/sh\nexit ' + ('0' if name == 'ldd' else '99') + '\n')
                 tool.chmod(0o755)
             result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PATH': str(tools)})
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(work.exists())
+            busybox.write_text('#!/bin/sh\necho sh\n')
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    env={**os.environ, 'PATH': str(tools)})
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('missing required applets', result.stderr)
             self.assertFalse(work.exists())
             keymap.unlink()
             result = subprocess.run(command, capture_output=True, text=True)

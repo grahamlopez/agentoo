@@ -56,3 +56,6 @@ games-misc/lavat::agentoo ~amd64 ~arm64
 dev-perl/Term-Animation::agentoo ~amd64
 dev-python/asciimatics::agentoo ~amd64 ~arm64
 dev-python/pyfiglet::agentoo ~amd64 ~arm64
+
+# Agentoo custom initramfs generator and private static BusyBox.
+sys-kernel/agentoo-initramfs::agentoo ~amd64

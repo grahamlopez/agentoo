@@ -23,6 +23,11 @@ Status: Open — implementation complete; host acceptance pending
   intentionally unchanged at the user's request.
 - Updated regression tests, CLI help and kernel/initramfs documentation.
 
+The subsequent `sys-kernel/agentoo-initramfs` packaging work moves the generator
+and boot scripts into the overlay package. The kernel continues generating the
+archive before its single make pass; see the [initramfs guide](../../docs/initramfs.md).
+The host acceptance below remains outstanding for this kernel simplification work.
+
 ## Retained mechanisms
 
 The configure-time empty directory keeps Kconfig's dependent initramfs settings

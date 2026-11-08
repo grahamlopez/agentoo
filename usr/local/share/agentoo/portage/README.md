@@ -37,6 +37,16 @@ Use profile `package.use` for managed hardware feature defaults and native
 USE flags are involved. See [host selection](../../../../../etc/agentoo/README.md#host-selection)
 for commands, consumers and the host onboarding checklist.
 
+## Agentoo initramfs
+
+`sys-kernel/agentoo-initramfs` is selected by `@kernel-dev`. It builds a private
+static BusyBox and installs the generator and early-boot scripts under
+`/usr/libexec/agentoo-initramfs`. It does not install the normal BusyBox commands
+or generate/deploy a host boot image during emerge.
+
+See [the initramfs guide](../docs/initramfs.md) for package ownership, installation,
+development, archive generation and testing.
+
 ## Gentoo zsh completion fix
 
 Agentoo supplies a version-independent user patch at

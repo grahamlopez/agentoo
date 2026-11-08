@@ -25,7 +25,7 @@ WORKSPACES = Path('/dev/shm')
 MODULES_ROOT = Path('/lib/modules')
 METADATA = 'agentoo-kernel.json'
 DEFAULT_FLAGS = '-march=native -O2 -pipe'
-INITRAMFS_BUILDER = Path(__file__).resolve().parent.parent / 'share/agentoo/initramfs/build'
+INITRAMFS_BUILDER = Path('/usr/libexec/agentoo-initramfs/build')
 
 
 def build_parser():

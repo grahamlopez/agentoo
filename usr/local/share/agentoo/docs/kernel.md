@@ -192,34 +192,29 @@ Kconfig's dependent owner IDs, compression and built-in ACPI override settings
 available before an archive exists. Build replaces it with the archive before
 its single configuration resolution and compile.
 
-By default, build runs the minimal initramfs builder in
-`<workspace>/initramfs/<release>/`. It extracts the cached
-`/var/cache/distfiles/busybox-1.36.1.tar.bz2`, builds a minimal static BusyBox,
-and bundles installed cryptsetup and its libraries. The complete subtree is
-regenerated on each build/retry; no network download is performed. The archive is
-`<workspace>/initramfs/<release>/initramfs.cpio`.
+Install `@kernel-dev` before building; it includes `sys-kernel/agentoo-initramfs`.
+By default, build invokes `/usr/libexec/agentoo-initramfs/build` to assemble
+`<workspace>/initramfs/<release>/initramfs.cpio` from the package's private static
+BusyBox and installed cryptsetup/libraries. It regenerates this disposable
+subtree on each build/retry. Generation does not compile BusyBox or download
+sources.
 
-Before compiling or changing build metadata, build invokes the minimal builder's
-`--check` mode to check source availability, the keymap, required tools and
-cryptsetup's linked libraries. This checks inputs, not static-link toolchain or
-boot acceptance. Cache the pinned source once using the matching Gentoo ebuild:
+Before changing build metadata or compiling, build invokes the generator's
+`--check` mode to validate its binary, required applets, keymap, required tools
+and cryptsetup's linked libraries. This checks inputs, not boot acceptance.
+After fixing a missing prerequisite, retry build in the same workspace; there
+is no need to rerun config or discard existing kernel objects.
 
-```sh
-sudo emerge --fetchonly --nodeps '=sys-apps/busybox-1.36.1-r4'
-```
+The generator receives explicit `--partuuid`, `--mapper` and `--keymap` arguments
+from the identity recorded by config. It does not query the current Portage
+profile or rediscover storage. The default requires `CONFIG_MODULES=n` and
+built-in boot drivers. See the [initramfs guide](initramfs.md) for the package
+boundary, standalone development and smoke testing.
 
-Portage must use `/var/cache/distfiles` as its DISTDIR for this default path.
-This fetches/verifies sources without installing BusyBox. If a previous build
-stopped at the missing-source check, rerun `agentoo kernel build --label LABEL`
-in the same workspace; compiled kernel objects remain available for incremental
-make. There is no need to rerun config or discard that workspace for this error.
-
-This default uses the host identity recorded by config, with Btrfs `@`
-and the US/Caps-to-Control console map. It requires
-`CONFIG_MODULES=n` and built-in boot drivers. See the
-[minimal initramfs instructions](../initramfs/README.md) for dependencies and
-smoke tests. The builder receives explicit `--partuuid`, `--mapper` and `--keymap`
-arguments; it has no implicit thinktop partition UUID.
+Initramfs-only changes still require kernel build/install because the archive is
+embedded. Reuse the configured workspace for incremental make; unchanged kernel
+objects can be reused, while the archive and affected kernel image are rebuilt.
+Emerging the package alone does not update an existing boot image.
 
 Module-enabled configs require an explicitly supplied archive. External NVIDIA
 module rebuilding is not implemented.

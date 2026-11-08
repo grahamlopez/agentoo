@@ -55,8 +55,11 @@ for scope, local exclusions, bare work trees, and output contracts.
 `agentoo kernel config|build|install --label LABEL` rebuilds a configured custom
 EFI kernel from updated sources. See [kernel rebuilding](kernel.md)
 for temporary workspaces, minimal and custom initramfs inputs, module installation
-and optional firmware registration. The embedded command line defaults to `ro console=tty0 loglevel=5`;
-use `config --cmdline TEXT` for console policy or arguments needed by a custom archive.
+and optional firmware registration. The default build invokes the installed
+`sys-kernel/agentoo-initramfs` generator; see [initramfs development](initramfs.md)
+for standalone generation and testing. The embedded command line defaults to
+`ro console=tty0 loglevel=5`; use `config --cmdline TEXT` for console policy or
+arguments needed by a custom archive.
 
 ## Implementation conventions
 
