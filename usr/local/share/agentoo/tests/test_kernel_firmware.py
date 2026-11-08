@@ -33,8 +33,9 @@ class FirmwareTests(unittest.TestCase):
             change = patch.object(firmware, name, path)
             change.start()
             self.addCleanup(change.stop)
-        selector = self.root / 'target-host'
-        selector.write_text('GENTOO_TARGET_HOST="flattop"\n')
+        selection = patch.object(firmware.kernel_host, 'read_host', return_value='flattop')
+        selection.start()
+        self.addCleanup(selection.stop)
         profiles = self.root / 'profiles'
         profiles.mkdir()
         (profiles / 'flattop.config').write_text('CONFIG_EXTRA_FIRMWARE="device.bin regulatory.db"\nCONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"\n')
@@ -42,8 +43,7 @@ class FirmwareTests(unittest.TestCase):
         config.write_bytes(gzip.compress(b'CONFIG_EXTRA_FIRMWARE="device.bin regulatory.db"\nCONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"\n'))
         microcode = self.root / 'microcode'
         microcode.write_text('0x1234\n')
-        for module, name, value in ((firmware.kernel_host, 'SELECTOR', selector),
-                                    (firmware.kernel_host, 'HOSTS', profiles),
+        for module, name, value in ((firmware.kernel_host, 'HOSTS', profiles),
                                     (firmware, 'KERNEL_CONFIG', config), (firmware, 'MICROCODE', microcode)):
             change = patch.object(module, name, value)
             change.start()

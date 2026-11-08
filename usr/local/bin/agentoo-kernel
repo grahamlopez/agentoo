@@ -47,7 +47,7 @@ def build_parser():
             'workspace (default: find this label under /dev/shm)').completion = 'directories'
         child.add_argument('--yes', action='store_true', help='accept displayed plans; does not answer Kconfig or sudo prompts')
         if name == 'config':
-            child.add_argument('--host', metavar='NAME', help='host profile (default: /etc/agentoo/target-host); builds still target this machine')
+            child.add_argument('--target-host', metavar='NAME', help='host profile (default: selected Agentoo Portage profile); builds still target this machine')
             child.add_argument('--config', metavar='FILE', help='starting config (default: /proc/config.gz); plain or gzip').completion = 'files'
             child.add_argument('--sources', default='/usr/src/linux', metavar='DIR', help='kernel sources (default: /usr/src/linux)').completion = 'directories'
             child.add_argument('--accept-defaults', action=argparse.BooleanOptionalAction, default=False,
@@ -317,7 +317,7 @@ def configure(args):
         raise ValueError(f'{origin}: no kernel configuration settings found')
     if not args.accept_defaults and not sys.stdin.isatty():
         raise RuntimeError('oldconfig needs a terminal; use --accept-defaults to accept new defaults')
-    host, profile, profile_text, host_values = kernel_host.read_profile(args.host)
+    host, profile, profile_text, host_values = kernel_host.read_profile(args.target_host)
     identity = kernel_host.resolve_identity(run)
     identity['local_cmdline'] = identity['cmdline']
     identity['cmdline'] = kernel_host.specialize_cmdline(

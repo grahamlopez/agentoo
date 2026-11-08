@@ -9,15 +9,17 @@ configuration support only; installation and hardware acceptance are separate.
 - [ ] **`usr/local/share/agentoo/installer/gentoo-install.sh`** — add the name to
   `valid_target_host()` and update every supported-name list in help and errors
   (including internal dispatch validation). Hostname alone does not select policy.
-- [ ] **`etc/portage/make.conf.d/90-<host>`** — add the selected Portage fragment.
-  Set only justified differences: `COMMON_FLAGS`, `RUSTFLAGS`, `VIDEO_CARDS`,
-  `PORTAGE_TMPDIR` and `MAKEOPTS`. `etc/portage/make.conf` derives C/C++/Fortran
-  flags from `COMMON_FLAGS` after sourcing this fragment. An empty/comment-only
-  fragment is valid when common defaults suffice. The path is sourced dynamically;
-  `etc/portage/make.conf` needs no host-specific edit.
+- [ ] **`usr/local/share/agentoo/portage/profiles/hosts/<host>/`** — add a native
+  profile with `eapi` and `parent`, and only justified `make.defaults`,
+  `package.use` and unstarred `packages` additions. Inherit `../../common` or an
+  appropriate shared hardware parent. The common profile inherits Gentoo's
+  desktop/systemd baseline; `etc/portage/make.conf` derives language flags from
+  profile `COMMON_FLAGS`. Register the host in `profiles/profiles.desc` so native
+  `eselect profile set agentoo:hosts/<host>` works. No selector file or loader
+  mapping is needed.
 - [ ] **`usr/local/share/agentoo/tests/test_installer.py`** — extend the accepted
   target list in `test_supported_targets_validate` and add coverage for any new
-  installer behavior. Existing generic host loaders need no new name registry.
+  installer behavior. The shared native profile adapter needs no new name registry.
 - [ ] **`etc/agentoo/README.md`** — update supported selectors. Record hardware
   assumptions and the selected host policy in
   `usr/local/share/agentoo/docs/hosts/<host>.md`.
@@ -27,8 +29,8 @@ configuration support only; installation and hardware acceptance are separate.
 - [ ] **`etc/agentoo/kernel/hosts/<host>.config`** — add the host Kconfig fragment:
   explicit `CONFIG_EXTRA_FIRMWARE`, `CONFIG_EXTRA_FIRMWARE_DIR`, microcode support
   and justified host exceptions. Derive firmware names from this hardware, not
-  another host's profile. Kernel host selection is file-based; no CLI host list
-  needs updating.
+  another host's profile. The selected Portage profile supplies the default host;
+  no CLI host list needs updating.
 - [ ] **`usr/local/share/agentoo/docs/kernel-shared-v04-config`** — review the
   shared baseline for missing required drivers/capabilities. Edit only if the
   shared union needs additions; preserve other hosts' requirements. Keep local
@@ -45,21 +47,18 @@ external-module integration; a host fragment alone does not provide that workflo
 
 - [ ] **`etc/dracut.conf.d/<host>.conf`** — add distribution-initramfs policy
   only for demonstrated requirements. Dracut sources every `.conf` file as
-  shell configuration; explicitly check `/etc/agentoo/target-host` before
+  shell configuration; query the shared `host_selection.py` adapter before
   applying host settings, as `startop.conf` does for early i915 loading.
   Rebuild affected distribution initramfs images after changing policy.
-- [ ] **`etc/portage/sets/host-<host>`** — add only for packages this hardware
-  needs beyond the common sets, such as `sys-firmware/sof-firmware`. The installer
-  emerges it during kernel-foundation. CPU microcode package selection comes from
-  installer `--microcode`/CPU detection, not this set. This is separate from
-  custom-kernel embedded firmware.
-- [ ] **`etc/agentoo/firmware/<host>.list`** and
-  **`etc/portage/make.conf.d/90-<host>`** — for reviewed installed-firmware trimming,
-  add explicit package-relative paths and set
-  `AGENTOO_LINUX_FIRMWARE_USE="savedconfig -deduplicate -compress-xz -compress-zstd"`.
-  Otherwise inherit broad coverage. `etc/portage/package.env/kernel` and
-  `etc/portage/env/linux-firmware.conf` already consume this variable; no per-host
-  wiring is needed. Do not add conflicting package.use flags. See [firmware](firmware.md).
+- [ ] **Host profile `packages`** — add hardware requirements such as SOF
+  firmware here. Portage includes them automatically in `@profile` and `@world`,
+  independently of GUI installation. Reuse hardware parents for shared requirements.
+  CPU microcode selection remains installer `--microcode`/CPU detection.
+- [ ] **`etc/agentoo/firmware/<host>.list`** and **host profile `package.use`** —
+  for reviewed installed-firmware trimming, add explicit package-relative paths
+  and enable `sys-kernel/linux-firmware savedconfig -deduplicate -compress-xz -compress-zstd`
+  in the profile. Otherwise inherit broad coverage. Do not duplicate managed
+  policy in `/etc/portage/package.use`. See [firmware](firmware.md).
 - [ ] **`etc/xdg/hypr/hosts/<host>.lua`** — add monitor/scaling or key-binding
   differences. `etc/xdg/hypr/hyprland.lua` selects it automatically; missing host
   files retain shared behavior.
@@ -76,8 +75,9 @@ external-module integration; a host fragment alone does not provide that workflo
   document their scope rather than assuming filename-based host selection.
 - [ ] **`etc/portage/sets/`**, **`etc/portage/package.use/`** and
   **`etc/portage/package.accept_keywords/`** — add missing package capabilities
-  only where needed. Existing shared sets are reusable; host selection does not
-  automatically install a set. These paths have no host-name selection mechanism.
+  only where needed. Existing shared sets are reusable; host hardware requirements
+  belong in profile `packages`, not extra sets. These paths have no host-name
+  selection mechanism.
 - [ ] **`usr/local/share/agentoo/installer/gentoo-install.sh`**
   (`print_physical_kernel_boot_commands`) and
   **`etc/kernel/install.d/99-agentoo-boot-guidance.install`** — edit both if a new
@@ -96,9 +96,9 @@ external-module integration; a host fragment alone does not provide that workflo
 These are installation-specific inputs or generated state, not files to copy
 from another host into Git.
 
-- [ ] **`/etc/agentoo/target-host`** — installer-written
-  `GENTOO_TARGET_HOST="<host>"`; selects Portage, kernel, firmware and desktop
-  fragments independently of the hostname.
+- [ ] **`/etc/portage/make.profile`** — installer-selected native symlink to
+  `agentoo:hosts/<host>`; selects Portage, kernel, firmware and desktop policy
+  independently of the hostname. Inspect with `eselect --brief --colour=no profile show`.
 - [ ] **`/etc/kernel/cmdline`**, **`/etc/kernel/gentoo-dist-esp.uuid`** and
   **`/etc/fstab`** — local
   storage/boot identity. Custom kernel configuration validates the actual layout
@@ -110,7 +110,7 @@ from another host into Git.
 - [ ] **`/etc/agentoo/secrets/<host>.conf`** and
   **`/etc/wpa_supplicant/wpa_supplicant-<interface>.conf`** — local secret mapping
   and credentials. Secrets profiles are explicitly chosen by file path, not
-  selected from `target-host`. See [secrets](../secrets/README.md).
+  selected from the Portage profile. See [secrets](../secrets/README.md).
 
 ## Current host coverage
 
@@ -118,7 +118,7 @@ from another host into Git.
 | --- | --- | --- | --- | --- |
 | Thinktop | Present | Present | Present | Hyprland and Kitty |
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
-| Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Shared defaults |
+| Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Hyprland; Kitty defaults |
 | Bequiet | Missing | Missing; NVIDIA modules needed | Broad default | Shared defaults |
 
 Startop selects Arrow Lake compiler targets and Intel graphics, with a

@@ -115,7 +115,7 @@ hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"))
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"))
 
--- Standard key meanings; laptops install @laptop for acpilight.
+-- Standard key meanings; laptop profiles select acpilight.
 hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("agentoo display backlight up"), { repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("agentoo display backlight down"), { repeating = true })
 hl.bind("SHIFT + XF86MonBrightnessUp", hl.dsp.exec_cmd("agentoo desktop transparency down"), { repeating = true })

@@ -28,7 +28,7 @@ __pycache__/
 /etc/systemd/system/getty@tty1.service.d/autologin.conf
 
 # Machine-local host selection, storage identity, and native firmware state.
-/etc/agentoo/target-host
+/etc/portage/make.profile
 /etc/fstab
 /etc/kernel/cmdline
 /etc/kernel/gentoo-dist-esp.uuid

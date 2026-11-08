@@ -1278,7 +1278,7 @@ cleanup_portage_foundation_failure() {
 # Use the official binhost configuration supplied by the Gentoo stage3.
 # Only installer commands enable binaries; use Gentoo's normal signing trust helper.
 prepare_install_binpkgs() {
-  local root=${1:-/} profile
+  local root=${1:-/}
   (( INSTALL_BINPKGS )) || return 0
   [[ -r ${root%/}/etc/portage/binrepos.conf/gentoo.conf ]] \
     || die 'binary installation requires the Gentoo stage3 binrepos.conf/gentoo.conf'
@@ -1297,20 +1297,37 @@ if (repo['sync-uri'].rstrip('/') !=
         or repo['location'] != '/var/cache/binhost/gentoo'):
     sys.exit(1)
 PY
-  profile=$(readlink "${root%/}/etc/portage/make.profile")
-  [[ $profile == */23.0/desktop/systemd ]] \
-    || die 'official install binhost requires the AMD64 23.0 desktop/systemd profile'
+  [[ $(selected_target_host "$root") == "$TARGET_HOST" ]] \
+    || die 'binary installation target differs from the selected Agentoo profile'
   chroot "$root" /usr/bin/getuto
 }
 
+# Stage3 supplies app-admin/eselect and its profile module. A wrong-target retry
+# must stop before changing the checkout or destination boot configuration.
+verify_profile_target() {
+  local profile
+  profile=$(run_privileged chroot "$1" /usr/bin/eselect --brief --colour=no profile show) \
+    || die 'stage3 cannot report its selected Portage profile'
+  profile=${profile//[[:space:]]/}
+  if [[ $profile == agentoo:hosts/* && $profile != agentoo:hosts/$TARGET_HOST ]]; then
+    die "existing profile $profile differs from target $TARGET_HOST"
+  fi
+}
+
+select_target_profile() {
+  verify_profile_target /
+  eselect profile set "agentoo:hosts/$TARGET_HOST"
+  [[ $(selected_target_host /) == "$TARGET_HOST" ]] || die 'could not select target profile'
+}
+
 portage_foundation_chroot() {
-  local profile locale_choice normalized_locale available_locale
+  local locale_choice normalized_locale available_locale
 
   (( EUID == 0 )) || die 'the internal Portage phase must run as root'
   [[ -r /etc/gentoo-release ]] || die 'the internal Portage phase is not running in a Gentoo target'
   valid_target_host "$TARGET_HOST" || die "unsupported target host: $TARGET_HOST"
-  [[ -r /etc/portage/make.conf.d/90-$TARGET_HOST ]] \
-    || die "configuration repository does not provide target host: $TARGET_HOST"
+  [[ -d /usr/local/share/agentoo/portage/profiles/hosts/$TARGET_HOST ]] \
+    || die "configuration repository does not provide target profile: $TARGET_HOST"
   [[ -r /usr/share/zoneinfo/$TARGET_TIMEZONE ]] \
     || die "timezone is unavailable in the target: $TARGET_TIMEZONE"
   [[ $TARGET_LOCALE =~ ^[A-Za-z][A-Za-z_]*\.(UTF-8|utf8)$ ]] \
@@ -1320,10 +1337,9 @@ portage_foundation_chroot() {
     require_command "$command"
   done
 
-  # Verify that Portage can parse the common and selected native fragments
-  # before repository or locale state is changed.
+  select_target_profile
   portageq envvar COMMON_FLAGS >/dev/null \
-    || die 'Portage could not evaluate the installed make.conf layers'
+    || die 'Portage could not evaluate the selected profile'
 
   [[ -d /var/db/repos/gentoo/.git ]] \
     || die 'the installation host did not provide the Gentoo Git work tree'
@@ -1331,10 +1347,6 @@ portage_foundation_chroot() {
     || die 'Portage does not report Git synchronization for the Gentoo repository'
   portageq repos_config / | grep -Fq 'sync-uri = https://github.com/gentoo-mirror/gentoo.git' \
     || die 'Portage does not report the expected Gentoo Git synchronization endpoint'
-
-  profile=$(eselect profile show)
-  [[ $profile == *desktop/systemd* ]] \
-    || die "stage3 profile is not an AMD64 desktop/systemd profile: $profile"
 
   ln -snf "../usr/share/zoneinfo/$TARGET_TIMEZONE" /etc/localtime
   printf '%s\n' "$TARGET_TIMEZONE" >/etc/timezone
@@ -1363,7 +1375,7 @@ portage_foundation_chroot() {
   cat <<EOF
 
 Configuration target: $TARGET_HOST
-Gentoo profile:       ${profile##*$'\n'}
+Gentoo profile:       $(eselect --brief --colour=no profile show)
 Timezone:             $TARGET_TIMEZONE
 Locale:               $TARGET_LOCALE
 
@@ -1409,8 +1421,8 @@ Portage foundation: live configuration and Git synchronization
 The configuration repository is a bare Git database whose work tree is the
 installed system itself. Files below /etc and /usr/local are therefore both
 operational configuration and tracked files; no deployment copy or symlink
-farm separates edits from version control. Common Portage policy is loaded
-before the explicitly selected host fragment.
+farm separates edits from version control. The selected Agentoo host profile
+inherits shared defaults and Gentoo's desktop/systemd baseline. Native make.conf settings remain local overrides.
 
 Install the configuration work tree
 -----------------------------------
@@ -1426,8 +1438,6 @@ git --git-dir=/var/lib/agentoo/repository.git config branch.main.remote origin
 git --git-dir=/var/lib/agentoo/repository.git config branch.main.merge refs/heads/main
 printf '%s\n' '/*' '!/README.md' '!/AGENTS.md' | git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ sparse-checkout set --no-cone --stdin
 git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ checkout --force main
-printf '%s\n' 'GENTOO_TARGET_HOST="qemu"' >/etc/agentoo/target-host
-
 mkdir -p /mnt/gentoo/var/db/repos
 git clone --depth 1 https://github.com/gentoo-mirror/gentoo.git /mnt/gentoo/var/db/repos/gentoo
 GNUPGHOME=/tmp/gentoo-repository-keys
@@ -1441,7 +1451,8 @@ Configure the target from inside the chroot
 
 chroot /mnt/gentoo /bin/bash
 portageq repos_config /
-eselect profile show
+eselect --brief --colour=no profile show
+eselect profile set agentoo:hosts/qemu
 ln -snf ../usr/share/zoneinfo/America/New_York /etc/localtime
 printf '%s\n' America/New_York >/etc/timezone
 printf '%s UTF-8\n' en_US.UTF-8 >/etc/locale.gen
@@ -1477,7 +1488,7 @@ EOF
   resolve_target_partitions
 
   if [[ $MODE == dry-run ]]; then
-    planned_profile='existing AMD64 desktop/systemd profile (verified during execution)'
+    planned_profile='stage3 profile (reported during execution)'
   else
     require_command chroot
     (( EUID == 0 )) || require_command sudo
@@ -1493,15 +1504,16 @@ EOF
 
 Portage foundation plan
 Configuration target: $TARGET_HOST
-Gentoo profile:       $planned_profile
+Existing profile:     $planned_profile
+Selected profile:     agentoo:hosts/$TARGET_HOST
 Timezone:             $TARGET_TIMEZONE
 Locale:               $TARGET_LOCALE
 
   * install configuration branch $CONFIG_BRANCH from $CONFIG_SOURCE;
   * apply managed file permissions and enable Git permission hooks;
-  * select the common plus $TARGET_HOST Portage layers;
+  * select agentoo:hosts/$TARGET_HOST through eselect;
   * clone and authenticate the Gentoo Git repository;
-  * verify the existing profile and configure timezone and locale; and
+  * verify the selected profile and configure timezone and locale; and
   * stop before the initial @world update.
 EOF
   if [[ $MODE == dry-run ]]; then
@@ -1524,15 +1536,20 @@ EOF
 
   confirm_phase 'Portage foundation'
   trap 'cleanup_portage_foundation_failure $?' ERR EXIT
+  # On a retry the Gentoo tree is already available for native profile reporting.
+  # Fresh stage3 profiles can be reported after that tree is cloned below.
+  if [[ -d $MOUNT_ROOT/var/db/repos/gentoo/.git ]]; then
+    verify_profile_target "$MOUNT_ROOT"
+  fi
+
 
   # A retry must keep the original policy selection, rather than silently
   # relabeling an existing checkout as a different source, branch, or host.
   local record expected
-  for record in source branch target-host; do
+  for record in source branch; do
     case $record in
       source) expected=$CONFIG_SOURCE ;;
       branch) expected=$CONFIG_BRANCH ;;
-      target-host) expected="GENTOO_TARGET_HOST=\"$TARGET_HOST\"" ;;
     esac
     if run_privileged test -s "$MOUNT_ROOT/etc/agentoo/$record"; then
       [[ $(run_privileged cat "$MOUNT_ROOT/etc/agentoo/$record") == "$expected" ]] ||
@@ -1568,8 +1585,6 @@ EOF
   run_privileged git --git-dir="$config_git_dir" config core.hooksPath /usr/local/share/agentoo/git-hooks
 
   run_privileged install -d -m 755 "$MOUNT_ROOT/etc/agentoo"
-  printf 'GENTOO_TARGET_HOST="%s"\n' "$TARGET_HOST" \
-    | run_privileged tee "$MOUNT_ROOT/etc/agentoo/target-host" >/dev/null
   printf '%s\n' "$CONFIG_SOURCE" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/source" >/dev/null
   printf '%s\n' "$CONFIG_BRANCH" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/branch" >/dev/null
   printf '%s\n' "$config_revision" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/revision" >/dev/null
@@ -1646,10 +1661,8 @@ system_update_chroot() {
   (( EUID == 0 )) || die 'the internal system update must run as root'
   [[ -r /etc/gentoo-release && -d /var/lib/agentoo/repository.git ]] \
     || die 'system-update requires the Gentoo target and configuration repository'
-  [[ -r /etc/portage/make.conf.d/90-$TARGET_HOST ]] \
-    || die 'the selected target configuration is missing'
   valid_target_host "$TARGET_HOST" || die 'unsupported system-update target'
-  grep -Fxq "GENTOO_TARGET_HOST=\"$TARGET_HOST\"" /etc/agentoo/target-host \
+  [[ $(selected_target_host /) == "$TARGET_HOST" ]] \
     || die 'system-update target differs from the installed Portage foundation'
   require_command emerge
   require_command portageq
@@ -1825,16 +1838,9 @@ resolve_kernel_firmware_policy() {
   esac
 }
 
-# Print the target's optional native Portage set for host-specific packages.
-# Sets live in the installed configuration, never in installer defaults.
-host_package_set() {
-  local root=$1 set
-  valid_target_host "$TARGET_HOST" || die "unsupported kernel target: $TARGET_HOST"
-  set=${root%/}/etc/portage/sets/host-$TARGET_HOST
-  if [[ -e $set || -L $set ]]; then
-    [[ -f $set && ! -L $set ]] || die "host package set is not a regular file: $set"
-    printf '@host-%s\n' "$TARGET_HOST"
-  fi
+# Query inside the destination: never select policy from the installation host.
+selected_target_host() {
+  chroot "$1" /usr/bin/python3 /usr/local/share/agentoo/lib/host_selection.py
 }
 
 # Record target boot parameters or ESP identity, allowing retries with the same value.
@@ -2078,7 +2084,7 @@ INSTRUCTIONS
 # Establish update policy, install tools/firmware, rebuild modules and initramfs,
 # then validate the selected release without writing firmware boot entries.
 kernel_foundation_chroot() {
-  local root_uuid luks_uuid efi_uuid cmdline atom version pending host_set
+  local root_uuid luks_uuid efi_uuid cmdline atom version pending
   require_command emerge
   require_command portageq
   local -a tools=(sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr)
@@ -2087,9 +2093,8 @@ kernel_foundation_chroot() {
   [[ -r /etc/gentoo-release && -d /var/lib/agentoo/repository.git ]] \
     || die 'kernel-foundation requires the Gentoo target and configuration repository'
   valid_target_host "$TARGET_HOST" || die 'unsupported kernel target'
-  grep -Fxq "GENTOO_TARGET_HOST=\"$TARGET_HOST\"" /etc/agentoo/target-host \
+  [[ $(selected_target_host /) == "$TARGET_HOST" ]] \
     || die 'kernel target differs from the installed Portage foundation'
-  host_set=$(host_package_set /)
   [[ -s /etc/portage/package.use/00cpu-flags ]] || die 'run system-update before kernel-foundation'
   pending=$(pending_config_updates)
   [[ -z $pending ]] || die "resolve protected configuration updates first: $pending"
@@ -2110,7 +2115,6 @@ kernel_foundation_chroot() {
   kernel_target_data /etc/kernel/cmdline "$cmdline"
   kernel_target_data /etc/kernel/gentoo-dist-esp.uuid "$efi_uuid"
   [[ $TARGET_MICROCODE != intel ]] || packages+=(sys-firmware/intel-microcode)
-  [[ -z $host_set ]] || packages+=("$host_set")
   # Keep the binary provider in every transaction to prevent an OR dependency
   # (firmware -> virtual/dist-kernel) from selecting the source provider.
   # Explicit packages, rather than @early_install (which also contains sources
@@ -2166,13 +2170,7 @@ kernel_foundation_chroot() {
 install_kernel_foundation() {
   local source status=0
   log 'Phase: kernel-foundation'
-  local host_set
   resolve_kernel_firmware_policy
-  if [[ $MODE == dry-run && ! -d $MOUNT_ROOT/etc/portage/sets ]]; then
-    host_set='from target configuration (available after Portage foundation)'
-  else
-    host_set=$(host_package_set "$MOUNT_ROOT")
-  fi
   [[ $TARGET_HOST == qemu || -z $QEMU_VARS ]] || die '--qemu-vars is only valid for target qemu'
   if (( VERBOSE )); then
     cat <<'NOTES'
@@ -2217,11 +2215,11 @@ or roll back earlier changes in the phase.
 
 Install prerequisites, then firmware and the kernel together
 -----------------------------------------------------------------
-Example commands inside the target chroot (Intel system with a host set):
+Example commands inside the target chroot (Intel system):
 
-emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode @host-thinktop sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin
+emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin
 emerge --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr
-emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode @host-thinktop sys-kernel/gentoo-kernel-bin
+emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode sys-kernel/gentoo-kernel-bin
 emerge --oneshot @module-rebuild
 emerge --config =sys-kernel/gentoo-kernel-bin-6.18.54
 
@@ -2234,11 +2232,12 @@ including NVIDIA when installed; no GPU driver is selected automatically.
 
 Read the target's host package set
 ----------------------------------
-A host set is optional and describes the target hardware, independent of the
-CPU or audio hardware visible on the installation host. Emerging it records the
-set in the world file, so ordinary updates keep it installed.
+The selected Agentoo profile supplies hardware requirements through @profile,
+independent of the CPU or audio hardware visible on the installation host.
+The initial @world update installs them and later world updates retain them.
 
-cat /etc/portage/sets/host-thinktop
+eselect --brief --colour=no profile show
+cat /usr/local/share/agentoo/portage/profiles/hosts/thinktop/packages
 
 Inspect actual target boot ingredients
 -------------------------------------
@@ -2327,7 +2326,7 @@ Target root:          $MOUNT_ROOT
 Configuration target: $TARGET_HOST
 Kernel:               sys-kernel/gentoo-kernel-bin (stable AMD64 fallback)
 CPU microcode:        $TARGET_MICROCODE
-Host package set:     ${host_set:-none}
+Hardware packages:    selected automatically by @profile
 EFI files:            /boot/EFI/Gentoo/kernel-VERSION.efi and initramfs-VERSION.img
 QEMU firmware store:  ${QEMU_VARS:-not specified; used only for target qemu}
 
@@ -2439,7 +2438,7 @@ firstboot_offline() {
   local root=$MOUNT_ROOT root_uuid esp_uuid hostname=$TARGET_HOSTNAME command unit
   [[ -r $root/etc/gentoo-release && -d $root/var/lib/agentoo/repository.git ]] \
     || die 'first-boot-foundation requires the configured Gentoo target'
-  grep -Fxq "GENTOO_TARGET_HOST=\"$TARGET_HOST\"" "$root/etc/agentoo/target-host" \
+  [[ $(selected_target_host "$root") == "$TARGET_HOST" ]] \
     || die 'target-host differs from the installed configuration'
   [[ -x $root/usr/lib/systemd/systemd-timesyncd ]] || die 'target systemd lacks timesyncd'
   [[ -s $root/etc/kernel/cmdline ]] || die 'run kernel-foundation first'

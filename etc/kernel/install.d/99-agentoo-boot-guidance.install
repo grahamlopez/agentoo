@@ -13,7 +13,8 @@ part=$(lsblk -dnro PARTN "$esp") || exit 0
 [[ -n $parent && $part =~ ^[0-9]+$ ]] || exit 0
 cmdline=$(cat /etc/kernel/cmdline) || exit 0
 options=()
-grep -Fxq 'GENTOO_TARGET_HOST="startop"' /etc/agentoo/target-host && options+=(--full-dev-path)
+host=$(python3 /usr/local/share/agentoo/lib/host_selection.py) || exit 1
+[[ $host != startop ]] || options+=(--full-dev-path)
 guidance=$(
   printf '\nNew distribution kernel: %s\nManual EFI registration (inspect existing entries first):\n' "$version"
   printf 'sudo efibootmgr --create-only'

@@ -24,6 +24,19 @@ The Gentoo repository must also be configured because this overlay inherits it.
 Check that Portage recognizes the overlay with `portageq get_repo_path / agentoo`;
 it should print `/usr/local/share/agentoo/portage`.
 
+## Host profiles
+
+The overlay supplies `agentoo:hosts/{generic,qemu,flattop,startop,thinktop}`.
+Native `profiles.desc` exposes them to `eselect profile list` and
+`eselect profile set`. They inherit Gentoo's AMD64 23.0 desktop/systemd baseline,
+shared Agentoo defaults, and hardware parents where needed. `profile-set` in
+`metadata/layout.conf` enables unstarred profile `packages` entries in `@profile`;
+these are automatically included in world updates and protected from depclean.
+Use profile `package.use` for managed hardware feature defaults and native
+`/etc/portage` settings for local overrides. No generated sets or host-identity
+USE flags are involved. See [host selection](../../../../../etc/agentoo/README.md#host-selection)
+for commands, consumers and the host onboarding checklist.
+
 ## Gentoo zsh completion fix
 
 Agentoo supplies a version-independent user patch at

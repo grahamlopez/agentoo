@@ -1,0 +1,5 @@
+# Shared Intel laptop build and graphics policy.
+PORTAGE_TMPDIR="/dev/shm"
+MAKEOPTS="-j12"
+# Replace upstream's broad driver defaults; local make.conf can override this.
+VIDEO_CARDS="-* intel"

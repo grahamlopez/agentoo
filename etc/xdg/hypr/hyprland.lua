@@ -25,19 +25,13 @@ local function include_optional(path)
     end
 end
 
--- Reuse the installer-managed host selection; no second selector is needed.
--- Parse its documented assignment as data, never execute shell contents.
-local selector = "/etc/agentoo/target-host"
-local file, message, code = io.open(selector, "r")
-if file then
-    local contents = file:read("*a")
-    file:close()
-    local host = contents:match('^%s*GENTOO_TARGET_HOST="([%w][%w_-]*)"%s*$')
-    assert(host, selector .. ': expected GENTOO_TARGET_HOST="name"')
-    include_optional("/etc/xdg/hypr/hosts/" .. host .. ".lua")
-elseif code ~= 2 then
-    error(message)
-end
+-- Use the same native profile selection as Portage and Agentoo's other tools.
+local target = assert(io.popen("python3 /usr/local/share/agentoo/lib/host_selection.py", "r"))
+local host = target:read("*a"):match("^%s*([%w][%w_-]*)%s*$")
+-- Hyprland reaps children itself; pclose may report ECHILD after a successful query.
+target:close()
+assert(host, "could not determine the selected Agentoo host profile")
+include_optional("/etc/xdg/hypr/hosts/" .. host .. ".lua")
 
 -- Personal settings follow shared and host settings; this is a real local file.
 local config_home = os.getenv("XDG_CONFIG_HOME")

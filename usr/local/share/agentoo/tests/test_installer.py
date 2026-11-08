@@ -43,17 +43,74 @@ class InstallerTest(unittest.TestCase):
             self.assertIn('--disk is required', result.stderr)
             self.assertNotIn('--target-host', result.stderr)
 
-    def test_host_package_set_is_optional_and_must_be_regular(self):
-        harness = 'TARGET_HOST=$2; host_package_set "$1"'
+    def test_profile_query_runs_inside_the_requested_destination(self):
+        result = self.run_installer('/mnt/target', harness='''
+chroot() { printf '%s\\n' "$@"; }
+selected_target_host "$1"
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), ['/mnt/target', '/usr/bin/python3',
+            '/usr/local/share/agentoo/lib/host_selection.py'])
+
+    def test_native_profile_selection_preserves_wrong_target_guard(self):
+        for current, status in [('default/linux/amd64/23.0/desktop/systemd', 0),
+                                ('agentoo:hosts/thinktop', 0), ('agentoo:hosts/flattop', 1)]:
+            with self.subTest(current=current):
+                result = self.run_installer(current, harness='''
+TARGET_HOST=thinktop
+current=$1
+run_privileged() { "$@"; }
+chroot() { shift 2; eselect "$@"; }
+eselect() {
+  case "$1" in
+    --brief) printf '  %s\\n' "$current" ;;
+    profile) echo selected ;;
+    *) return 99 ;;
+  esac
+}
+selected_target_host() { echo thinktop; }
+select_target_profile
+''')
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual('selected' in result.stdout, status == 0)
+
+    def test_profile_reporting_failure_stops_before_selection(self):
+        result = self.run_installer(harness='''
+TARGET_HOST=thinktop
+run_privileged() { "$@"; }
+chroot() { return 1; }
+select_target_profile
+''')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('cannot report', result.stderr)
+
+    def test_signed_binhost_uses_native_compatibility_not_profile_path(self):
         with tempfile.TemporaryDirectory() as directory:
-            sets = Path(directory) / 'etc/portage/sets'
-            sets.mkdir(parents=True)
-            (sets / 'host-thinktop').write_text('sys-firmware/sof-firmware\n')
-            (sets / 'host-qemu').symlink_to(sets / 'host-thinktop')
-            for host, code, stdout in [('thinktop', 0, '@host-thinktop\n'), ('flattop', 0, ''), ('qemu', 1, '')]:
-                with self.subTest(host=host):
-                    result = self.run_installer(directory, host, harness=harness)
-                    self.assertEqual((result.returncode, result.stdout), (code, stdout), result.stderr)
+            config = Path(directory) / 'etc/portage/binrepos.conf/gentoo.conf'
+            config.parent.mkdir(parents=True)
+            for profile, signed, status in [('thinktop', True, 0), ('flattop', True, 1),
+                                              ('thinktop', False, 1)]:
+                config.write_text('[gentoo]\n'
+                    'sync-uri = https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64\n'
+                    f'verify-signature = {str(signed).lower()}\nlocation = /var/cache/binhost/gentoo\n')
+                with self.subTest(profile=profile, signed=signed):
+                    result = self.run_installer(directory, profile, harness='''
+TARGET_HOST=thinktop
+profile=$2
+selected_target_host() { printf '%s\\n' "$profile"; }
+chroot() {
+  local root=$1
+  shift
+  case $1 in
+    /usr/bin/python3) python3 - "$root$3" ;;
+    /usr/bin/getuto) echo trust-initialized ;;
+    *) return 99 ;;
+  esac
+}
+prepare_install_binpkgs "$1"
+''')
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    self.assertEqual('trust-initialized' in result.stdout, status == 0)
 
     def test_offline_masks_use_target_tools_without_host_systemctl(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -8,7 +8,7 @@ installer under one roof, with a local overlay for custom ebuilds.
 
 System
 
-- [Host selectors and configuration policy](../../../../../etc/agentoo/README.md)
+- [Host profiles and configuration policy](../../../../../etc/agentoo/README.md)
 - [Installation, first boot, and user setup](installation.md)
 - [Target host configuration checklist](host-onboarding.md)
   and [Flattop hardware baseline](hosts/flattop.md)
@@ -50,9 +50,9 @@ repository at `/var/lib/agentoo/repository.git` with `/` as the work tree:
 editing a tracked file changes the live configuration and appears in Git.
 
 Prefer **system defaults → selected host includes → local user overrides**,
-using application-native includes, drop-ins, and matching rules. Actual
-precedence is application-specific and must be checked when adding
-configuration.
+using native Portage profile inheritance and application-native includes,
+drop-ins, and matching rules. Actual precedence is application-specific and must
+be checked when adding configuration.
 
 - Put shared behavior on the system side wherever the application supports it.
 - Ebuilds own packaged software and dependencies; avoid giving Git and Portage
@@ -75,8 +75,8 @@ separate home work tree remains open. Secrets and generated runtime state stay
 outside Git.
 
 See [host selection and configuration policy](../../../../../etc/agentoo/README.md#host-selection)
-for installer selection, the local selector file, and how shared and host-specific
-configuration is loaded.
+for native profile selection during installation and how shared and
+host-specific configuration is loaded.
 
 ## Checks and verification
 

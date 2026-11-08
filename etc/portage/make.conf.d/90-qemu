@@ -1,4 +1,0 @@
-# QEMU initially inherits the generic policy. Kernel and graphics choices will
-# be added only when their installation phases can validate those assumptions.
-
-# RAM-backed installation builds are an installer option, not a guest default.

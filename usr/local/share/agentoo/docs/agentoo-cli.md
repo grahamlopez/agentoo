@@ -182,3 +182,11 @@ python3 usr/local/share/agentoo/tests/run_tests.py
 
 The unified Python suite includes font selection tests. Lua regression tests
 are reported as skipped when the Lua interpreter is unavailable.
+
+## Kernel target selection
+
+`agentoo kernel config --target-host NAME` explicitly chooses a reviewed Kconfig
+fragment for that configuration operation. Without it, the command uses the
+selected `agentoo:hosts/NAME` Portage profile, reported by native eselect. The
+option does not change the persistent profile or enable cross-building. Firmware
+commands always use the selected profile. See [kernel builds](kernel.md).

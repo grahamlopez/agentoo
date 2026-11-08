@@ -1,0 +1,2 @@
+# Keep reviewed savedconfig inputs uncompressed for custom-kernel embedding.
+sys-kernel/linux-firmware savedconfig -deduplicate -compress-xz -compress-zstd

@@ -1,0 +1,4 @@
+# Host hardware baseline, independent of GUI installation.
+media-libs/libva-intel-media-driver
+media-video/libva-utils
+sys-power/acpilight

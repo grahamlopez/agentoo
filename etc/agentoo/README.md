@@ -8,10 +8,9 @@ to omit the root `README.md` and `AGENTS.md`; ordinary development clones includ
 both files.
 
 Universal policy belongs in native common fragments. Host-specific policy
-belongs in a native fragment named for the host and is selected through
-`/etc/agentoo/target-host`. Do not copy a complete common file into a host
-variant, and do not make a common file silently depend on the machine where it
-was edited.
+belongs in a native fragment named for the host and is selected by the native
+Agentoo Portage profile. Do not copy a complete common file into a host variant,
+and do not make a common file silently depend on the machine where it was edited.
 
 Prefer native fragment, include, matching, and drop-in mechanisms. If a future
 configuration format cannot express a common layer plus a selected host layer,
@@ -21,40 +20,64 @@ copies or symlinks. See `/usr/local/share/agentoo/docs/README.md` for the config
 
 ## Host selection
 
-The installer selects the host configuration explicitly with `--target-host`;
-it does not infer it from the hostname or installation machine. Supported
-selectors are `generic`, `qemu`, `thinktop`, `startop`, and `flattop`.
+The installer selects the host explicitly with `--target-host`; it does not
+infer policy from the hostname or installation machine. Supported targets are
+`generic`, `qemu`, `thinktop`, `startop`, and `flattop`.
 
-It writes `/etc/agentoo/target-host`, containing the Portage-compatible assignment
-`GENTOO_TARGET_HOST="qemu"`, for example. This file is intentionally untracked
-local state because its value differs between installations. Portage's
-`/etc/portage/make.conf` sources `/etc/portage/make.conf.d/00-common`, this
-selector, then `/etc/portage/make.conf.d/90-${GENTOO_TARGET_HOST}`. It derives
-`CFLAGS`, `CXXFLAGS`, `FCFLAGS` and `FFLAGS` from the selected `COMMON_FLAGS`
-afterward. All host fragments remain visible on every host.
+The sole persistent selection is Portage's native `/etc/portage/make.profile`
+symlink. Agentoo profiles live under
+`/usr/local/share/agentoo/portage/profiles/hosts/<name>` and are listed in the
+overlay's `profiles/profiles.desc`. Select and inspect a profile with:
 
-Use one double-quoted assignment, with no spaces around `=`. Host names start
-with an ASCII letter or digit and contain only letters, digits, `_`, and `-`.
-Python and Lua consumers read this assignment as data; malformed selectors
-are errors. A missing selector leaves desktop defaults in effect. Kernel
-configuration requires the selector or an explicit `--host`; firmware commands
-require the selector.
+```sh
+eselect profile list
+eselect profile set agentoo:hosts/thinktop
+eselect --brief --colour=no profile show
+emerge --ask --update --deep --newuse @world
+```
 
-Hyprland also reads that assignment as data and automatically loads the tracked
-`/etc/xdg/hypr/hosts/name.lua` fragment when present; no separate Hyprland host
-selector is required.
+Select the profile appropriate to the destination hardware and review the emerge
+plan. Selection changes configuration, not running services or installed packages;
+apply the affected kernel, initramfs and desktop configuration separately.
+The symlink is local state, excluded from the system Git work tree. There is no
+second host selector, generated configuration deployment, or host-identity USE flag.
 
-Host-specific packages belong in an optional native Portage set,
-`/etc/portage/sets/host-<name>`. The installer emerges the selected host's set
-during kernel-foundation, which records it in the world file; `host-thinktop`
-supplies SOF firmware for its audio DSP. Sets describe the target hardware,
-independent of the installation host.
+Native inheritance supplies Gentoo's AMD64 23.0 desktop/systemd baseline,
+Agentoo common defaults, the shared Intel laptop layer where appropriate, and
+host differences. `make.defaults`, `package.use` and `packages` hold their normal
+Portage meanings. `/etc/portage/make.conf` derives C/C++/Fortran flags once from
+profile `COMMON_FLAGS`; native make.conf and package.use settings remain local
+overrides. Override individual language flags there when needed. Put shared
+managed defaults in profiles rather than shadowing them with duplicate settings
+under `/etc/portage`.
 
-Custom kernel builds separately select native Kconfig fragments under
-`/etc/agentoo/kernel/hosts/<name>.config` through the same target-host selector
-(or `agentoo kernel config --host NAME`). These fragments own embedded firmware
-and host Kconfig exceptions. Local `/etc/kernel/cmdline` and discovered storage
-identity supply boot identifiers; UUIDs are not tracked host policy. See the
+Host hardware requirements are unstarred `packages` entries in the profiles.
+Portage's native `profile-set` support includes them in `@profile`, already part
+of `@world`, so no hardware set needs recording in `world_sets`. Intel laptop
+profiles select the Intel media driver, VA-API diagnostics and acpilight whether
+or not a GUI is installed. Thinktop also selects SOF firmware. `@terminal-env`,
+`@gui-base` and `@gui-desktop` remain explicit environment choices.
+
+Non-Portage consumers use `/usr/local/share/agentoo/lib/host_selection.py`, which
+calls `eselect --brief --colour=no profile show`, trims whitespace and accepts
+`agentoo:hosts/<name>`. It can be imported by Python or invoked with `python3` by
+Lua and shell consumers. It does not resolve symlinks, parse profile inheritance,
+or maintain another host registry. Failed, unset and unrelated profile selections
+are errors; an absent optional application fragment leaves shared defaults intact.
+Stage3 supplies `app-admin/eselect`, including its profile module; the installer
+checks reporting before selecting the Agentoo profile.
+
+Hyprland and Kitty load their native `/etc/xdg/{hypr,kitty}/hosts/<name>`
+fragments through that shared adapter. Dracut's early-i915 exception and the
+kernel-install EFI guidance also use it. Custom kernel commands select native
+Kconfig fragments under `/etc/agentoo/kernel/hosts/<name>.config` and reviewed
+firmware lists through the same profile. `agentoo kernel config --target-host NAME`
+is an explicit configuration-operation override; it does not change the selected
+Portage profile or turn the build into a cross-build. Generic and QEMU have
+Portage profiles but no reviewed custom-kernel fragments.
+
+Local `/etc/kernel/cmdline` and discovered storage identity supply boot
+identifiers; UUIDs are not tracked host policy. See the
 [kernel guide](../../usr/local/share/agentoo/docs/kernel.md#host-specialization).
 
 ## Related guides

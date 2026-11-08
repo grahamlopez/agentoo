@@ -6,6 +6,20 @@ source and `--verbose` output describe each phase. For QEMU targets, follow the
 
 ## Installer policy
 
+The explicit `--target-host NAME` selects `agentoo:hosts/NAME` with native
+`eselect profile set` during Portage foundation, after both repositories are
+available and before the initial world update. `/etc/portage/make.profile` is the
+only persistent host selector. Stage3's base system already supplies
+`app-admin/eselect` and its profile module; the installer checks native profile
+reporting before selecting the destination profile. Later phases reject a target
+that differs from the selected profile. See [host selection](../../../../../etc/agentoo/README.md#host-selection).
+
+Hardware packages come from the selected profile's `@profile` membership; GUI
+and terminal sets remain optional environment choices. Installer transactions
+prefer signed official binaries and let Portage check USE/dependency compatibility
+and fall back to source builds. Agentoo profiles inherit the supported upstream
+baseline; no exact upstream profile symlink is required by the binhost check.
+
 Physical installation runs on the destination hardware. The live environment may
 use OpenRC: offline service masks, presets, and enablement use the target
 stage3's `systemctl --root=/` through chroot. Hostname setup uses the target's

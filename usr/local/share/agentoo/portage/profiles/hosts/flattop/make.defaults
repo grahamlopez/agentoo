@@ -1,0 +1,4 @@
+# Framework Laptop (13th Gen Intel Core), Intel Core i7-1360P, 16 logical CPUs.
+# Inventory: kernel-inventory-flattop-20261024T135738Z.tar.gz (2026-10-24).
+COMMON_FLAGS="-march=raptorlake -O2 -pipe"
+RUSTFLAGS="${RUSTFLAGS} -C target-cpu=raptorlake"

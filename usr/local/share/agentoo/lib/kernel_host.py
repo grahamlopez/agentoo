@@ -8,7 +8,7 @@ import re
 import shlex
 import uuid
 
-from host_selection import HOST_NAME, SELECTOR, read_host
+from host_selection import HOST_NAME, read_host
 
 HOSTS = Path('/etc/agentoo/kernel/hosts')
 CMDLINE = Path('/etc/kernel/cmdline')
@@ -18,7 +18,7 @@ SYS_BLOCK = Path('/sys/class/block')
 
 def selected_host(host=None):
     if host is None:
-        return read_host(SELECTOR)
+        return read_host()
     if not re.fullmatch(HOST_NAME, host):
         raise ValueError('invalid host name')
     return host

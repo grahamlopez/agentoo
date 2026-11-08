@@ -1,3 +1,0 @@
-# Thinktop's Intel audio DSP requires Sound Open Firmware. The installer emerges
-# this set during kernel-foundation; it describes the target hardware.
-sys-firmware/sof-firmware

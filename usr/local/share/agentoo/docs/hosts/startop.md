@@ -7,7 +7,7 @@ device is PCI `8086:7d51`, bound to i915 on the distribution kernel
 iwlwifi. The Arrow Lake audio controller (`8086:7728`) uses snd_hda_intel;
 driver binding alone does not establish working audio.
 
-The host Portage fragment selects GCC `-march=arrowlake`, Rust
+The host Portage profile selects GCC `-march=arrowlake`, Rust
 `-C target-cpu=arrowlake` and `VIDEO_CARDS="intel"`. The active GCC 16.2.1 and
 Rust 1.98.1 both identify the native CPU as Arrow Lake. Builds use `/dev/shm`
 (32 GiB at inspection) and `MAKEOPTS="-j12"`. Package-specific memory needs may
@@ -16,7 +16,7 @@ require lower concurrency or disk-backed build storage.
 The installer writes detected CPU feature flags to the local native
 `/etc/portage/package.use/00cpu-flags`. Its values match cpuid2cpuflags on this
 installation; keep that local definition rather than duplicating it in the
-tracked host fragment. Installed linux-firmware now uses the reviewed Startop savedconfig selection
+tracked host profile. Installed linux-firmware now uses the reviewed Startop savedconfig selection
 described below.
 
 First-boot verification and checkpointing are reported complete. On 2026-11-05
@@ -32,7 +32,7 @@ The first desktop autostart on Hyprland 0.57.0 failed because no DRM GPU was
 available yet. The boot journal records Hyprland's abort at 9.08 seconds and
 i915 DRM registration at 9.16 seconds; a manual launch succeeded afterward.
 The native dracut fragment `/etc/dracut.conf.d/startop.conf` checks the existing
-host selector and forces early i915 loading only for Startop, so graphics
+native Agentoo Portage profile and forces early i915 loading only for Startop, so graphics
 initialization precedes tty1 autologin. After applying this configuration and
 rebuilding the distribution initramfs, the user confirmed successful desktop
 autostart on reboot on 2026-11-03. The running session's `hyprctl deprecated-config`

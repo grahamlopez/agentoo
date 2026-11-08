@@ -48,8 +48,8 @@ class ActiveRuleTests(unittest.TestCase):
         self.personal.mkdir(parents=True)
         self.hosts = self.root / 'hosts'
         self.hosts.mkdir()
-        self.selector = self.root / 'target-host'
-        self.selector.write_text('GENTOO_TARGET_HOST="test"\n')
+        target = self.root / 'target.py'
+        target.write_text("print('test')\n")
         self.state = self.root / 'state/agentoo/appearance.json'
         self.state.parent.mkdir(parents=True)
         self.outside = self.root / 'outside.lua'
@@ -62,7 +62,7 @@ class ActiveRuleTests(unittest.TestCase):
         defaults = self.root / 'defaults.lua'
         defaults.write_text('hl.config({decoration={active_opacity=0.85,blur={enabled=false,size=8,passes=1}}})\n')
         entry = (HYPR / 'hyprland.lua').read_text()
-        entry = entry.replace('/etc/agentoo/target-host', str(self.selector)).replace(
+        entry = entry.replace('/usr/local/share/agentoo/lib/host_selection.py', str(target)).replace(
             '/etc/xdg/hypr/hosts/', str(self.hosts) + '/')
         for name in ('appearance-rules', 'window-classes'):
             entry = entry.replace(f'/etc/xdg/hypr/{name}.lua', str(HYPR / f'{name}.lua'))

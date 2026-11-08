@@ -16,11 +16,12 @@ agentoo kernel install --label agentoo-v0.4
 
 ## Host specialization
 
-Configure on the destination host. `/etc/agentoo/target-host` selects the tracked
-native Kconfig fragment `/etc/agentoo/kernel/hosts/<name>.config`; `--host NAME`
-overrides the selection, not the destination hardware or storage. Missing or
-malformed profiles fail before workspace/source changes. Thinktop, flattop and startop
-profiles are supplied; Startop has build/boot and peripheral acceptance. Other hosts
+Configure on the destination host. The default target comes from the selected
+Agentoo Portage profile and chooses the tracked native Kconfig fragment
+`/etc/agentoo/kernel/hosts/<name>.config`. `--target-host NAME` overrides the
+selection, not the destination hardware or storage. Missing or malformed profiles
+fail before workspace/source changes. Thinktop, flattop and startop profiles are
+supplied; Startop has build/boot and peripheral acceptance. Other hosts
 need reviewed profiles first.
 
 The starting config supplies the shared driver/capability union. Host fragments
@@ -70,7 +71,7 @@ Custom archives remain explicit operator inputs and their internal storage polic
 
 Config saves the original baseline, host fragment snapshot and provenance hashes,
 resolved boot/storage identity and required host settings in the workspace.
-Build uses this recorded policy even if the selector/profile/local command line
+Build uses this recorded policy even if the selected profile/local command line
 later changes. It checks host settings after each Kconfig resolution and refuses
 silent changes. To adopt new host policy or boot identity, configure a fresh
 workspace.

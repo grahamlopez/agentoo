@@ -125,8 +125,9 @@ p.write_text(text)
         hosts = self.root / 'hosts'
         hosts.mkdir()
         (hosts / 'testhost.config').write_text('CONFIG_EXTRA_FIRMWARE=""\nCONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"\n')
-        selector = self.root / 'target-host'
-        selector.write_text('GENTOO_TARGET_HOST="testhost"\n')
+        selection = patch.object(kernel.kernel_host, 'read_host', return_value='testhost')
+        selection.start()
+        self.addCleanup(selection.stop)
         cmdline = self.root / 'cmdline'
         cmdline.write_text(TEST_CMDLINE + '\n')
         sysblock = self.root / 'sysblock'
@@ -134,7 +135,7 @@ p.write_text(text)
         dm.mkdir(parents=True)
         (dm / 'name').write_text('cryptroot\n')
         (dm / 'uuid').write_text('CRYPT-LUKS2-test\n')
-        for name, value in dict(HOSTS=hosts, SELECTOR=selector, CMDLINE=cmdline, SYS_BLOCK=sysblock).items():
+        for name, value in dict(HOSTS=hosts, CMDLINE=cmdline, SYS_BLOCK=sysblock).items():
             change = patch.object(kernel.kernel_host, name, value)
             change.start()
             self.addCleanup(change.stop)
@@ -280,7 +281,7 @@ p.write_text(text)
             kernel.empty_initramfs(other)
 
     def test_bad_host_and_mismatched_boot_identity_fail_before_source_changes(self):
-        for suffix in (['--host', '../thinktop'], ['--host', 'missing']):
+        for suffix in (['--target-host', '../thinktop'], ['--target-host', 'missing']):
             args = kernel.build_parser().parse_args(['config', '--label', 'test', '--config', str(self.start),
                                                     '--sources', str(self.sources), '--accept-defaults', '--yes', *suffix])
             with self.assertRaises((ValueError, RuntimeError)):
@@ -297,7 +298,7 @@ p.write_text(text)
     def test_profile_overrides_are_frozen_and_enforced_during_build(self):
         profile = kernel.kernel_host.HOSTS / 'alternate.config'
         profile.write_text('CONFIG_EXTRA_FIRMWARE=""\nCONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"\nCONFIG_MODULES=y\n')
-        self.invoke('config', '--label', 'test', '--host', 'alternate', '--config', str(self.start),
+        self.invoke('config', '--label', 'test', '--target-host', 'alternate', '--config', str(self.start),
                     '--sources', str(self.sources), '--accept-defaults', '--yes')
         data = kernel.load(self.work, 'test')
         profile.unlink()

@@ -6,14 +6,14 @@ integrated graphics, AX211 Wi-Fi, Intel USB Bluetooth, and WD NVMe storage.
 This baseline comes from `kernel-inventory-flattop-20261024T135738Z.tar.gz`,
 collected on 2026-10-24 while running `6.12.21-gentoo-lopez64`.
 
-The host Portage fragment selects Intel graphics, GCC `-march=raptorlake`,
+The host Portage profile selects Intel graphics, GCC `-march=raptorlake`,
 Rust `-C target-cpu=raptorlake`, and Thinktop's operator-selected build policy:
 `PORTAGE_TMPDIR="/dev/shm"` and `MAKEOPTS="-j12"`. The inventory does not report
 RAM capacity. Installer transactions also default to RAM-backed builds;
 `--no-ram-builds` selects disk-backed storage for an installer invocation.
 
 The captured boot used i915, iwlwifi, btusb, nvme, and snd_hda_intel, with an
-IDT 92HD95 audio codec. Flattop has no host set for SOF firmware; a DSP-detected
+IDT 92HD95 audio codec. Flattop's profile does not select SOF firmware; a DSP-detected
 log line alone does not establish that SOF was used. Subsequent distribution
 and custom-kernel boot evidence supports the reviewed Flattop savedconfig list,
 `/etc/agentoo/firmware/flattop.list` (see [firmware](../firmware.md)). Applying

@@ -1,11 +1,11 @@
 # Firmware maintenance
 
-Host firmware has three owners, each selected by `/etc/agentoo/target-host`:
+Host firmware has three owners, each selected by the native Agentoo Portage profile:
 
 | Concern | Host file | Consumer |
 | --- | --- | --- |
-| Extra firmware packages, such as SOF | `/etc/portage/sets/host-<name>` | installer kernel-foundation, then Portage world updates |
-| Installed linux-firmware trimming | `/etc/agentoo/firmware/<name>.list` plus `AGENTOO_LINUX_FIRMWARE_USE` in `/etc/portage/make.conf.d/90-<name>` | `agentoo kernel firmware apply`, then Portage |
+| Extra firmware packages, such as SOF | profile `packages` | Portage `@profile` and world updates |
+| Installed linux-firmware trimming | `/etc/agentoo/firmware/<name>.list` plus native profile `package.use` | `agentoo kernel firmware apply`, then Portage |
 | Firmware embedded in a custom kernel | `CONFIG_EXTRA_FIRMWARE` in `/etc/agentoo/kernel/hosts/<name>.config` | `agentoo kernel config` ([kernel guide](kernel.md#host-specialization)) |
 
 CPU microcode follows the installer's `--microcode` choice. The rest of this guide
@@ -14,11 +14,10 @@ covers installed linux-firmware trimming.
 Thinktop, Flattop and Startop have reviewed native savedconfig lists under
 `/etc/agentoo/firmware/`. Startop has operator acceptance on both 6.18.60
 boot paths after trimming; see its [acceptance record](hosts/startop.md#installed-firmware-acceptance).
-Their host Portage fragments enable savedconfig through `AGENTOO_LINUX_FIRMWARE_USE`;
-the common fragment sets `-savedconfig`, and `package.env/kernel` applies the
-variable only to linux-firmware. Do not add a conflicting package.use setting: it
-takes precedence over package.env. Apply the matching list locally before
-rebuilding. Other targets retain broad coverage.
+Their shared Intel laptop profile enables the native `savedconfig` USE flag
+through `package.use`; the common profile defaults to `-savedconfig`. Native
+`/etc/portage/package.use` settings override these profile defaults. Apply the
+matching list locally before rebuilding. Other targets retain broad coverage.
 SOF audio firmware, CPU microcode and wireless regulatory data belong to separate
 packages and are not trimmed by this list. Installed files, initramfs copies and
 firmware embedded in a custom kernel are separate maintenance concerns.
@@ -236,8 +235,10 @@ For a one-time recovery rebuild, use the applicable package version:
 sudo env USE="-savedconfig" emerge --oneshot --usepkg=n '=sys-kernel/linux-firmware-20260622'
 ```
 
-For persistent broad coverage, set `AGENTOO_LINUX_FIRMWARE_USE="-savedconfig"`
-in the affected host's `/etc/portage/make.conf.d/90-<host>` and rebuild. Check distribution
+For persistent broad coverage on this machine, add
+`sys-kernel/linux-firmware -savedconfig` to `/etc/portage/package.use/local`
+and rebuild. Change the host profile's `package.use` instead when revising
+managed policy for every installation of that profile. Check distribution
 initramfs regeneration and recreate affected custom artifacts. Keep a known
 working boot path or installation media: the fallback kernel shares the same
 root firmware directory.

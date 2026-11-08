@@ -1,0 +1,5 @@
+amd64 hosts/generic exp
+amd64 hosts/qemu exp
+amd64 hosts/flattop exp
+amd64 hosts/startop exp
+amd64 hosts/thinktop exp

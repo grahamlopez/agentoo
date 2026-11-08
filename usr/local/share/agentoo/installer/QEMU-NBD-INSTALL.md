@@ -266,4 +266,7 @@ guest port 22. In the guest, check `systemctl status sshd`; from the host use
 Installation prefers signed official binaries with matching USE flags, building
 unmatched packages from source. Add `--no-install-binpkgs` for source-only
 installation, including when resuming a phase. Ordinary post-install package
-operations remain source-based. Every invocation requires `--target-host`.
+operations remain source-based. Every invocation requires `--target-host`. Portage foundation selects
+`agentoo:hosts/qemu` in the destination chroot through `eselect`;
+`/etc/portage/make.profile` is the sole persistent selection, including for
+kernel, firmware and desktop consumers. The target stage3 supplies eselect.

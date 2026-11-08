@@ -75,7 +75,7 @@ screen locking does not protect the tty1 recovery shell after a compositor exit.
 ### GPU readiness at boot
 
 The native dracut fragment `/etc/dracut.conf.d/startop.conf` checks
-`/etc/agentoo/target-host` and forces early i915 loading only for Startop.
+the selected Agentoo Portage profile and forces early i915 loading only for Startop.
 Dracut sources every `.conf` fragment; filenames do not select hosts.
 Without early loading, fast tty1 autologin can
 launch Hyprland before the DRM GPU is registered: Startop's first launch
@@ -154,19 +154,10 @@ emerge --ask --verbose @gui-base
 
 ### Intel video acceleration
 
-There is no compatibility package set for the former `@gui-base-thinktop` name;
-replace the old set name in `/var/lib/portage/world_sets` with `gui-base-intel`
-if present, preserving the entry syntax.
+The Flattop, Startop and Thinktop Portage profiles select Intel's VA-API media
+driver and `vainfo` automatically through `@profile`. These are hardware baseline
+packages, independent of installing `@gui-base` or `@gui-desktop`.
 
-On the Intel graphics laptops, install `@gui-base-intel` instead of `@gui-base`.
-This set includes the shared base plus Intel's VA-API media driver and `vainfo`:
-
-```sh
-emerge --ask --verbose @gui-base-intel
-```
-
-If `@gui-base` is already recorded in world_sets, installing the Intel set
-also records its host additions; the shared base remains included either way.
 Keep `VIDEO_CARDS="intel"`. Intel video decoding uses the separate media
 driver, rather than Mesa's `vaapi` feature. Identify the Intel render node via
 `/sys/class/drm/renderD*/device/vendor` (`0x8086`), then verify it with
@@ -234,7 +225,7 @@ not guarantee power-off. See the [kernel PCI sysfs documentation](https://docs.k
 
 Review configuration-protected files with `dispatch-conf`. Keep agentoo defaults
 when an incoming file only restores an upstream example; assess substantive
-package changes. Thinktop's `@host-thinktop` set already selects SOF
+package changes. Thinktop's Portage profile selects SOF
 firmware, but verify it is installed and loaded on this target. A successful
 dependency plan does not establish audio or graphics hardware support.
 
@@ -277,7 +268,7 @@ is required. The shared entry loads, in order:
 
 1. `/etc/xdg/hypr/agentoo.lua`: tracked universal defaults and bindings.
 2. `/etc/xdg/hypr/hosts/NAME.lua`, when present, selected automatically by the
-   existing installer-managed `/etc/agentoo/target-host`.
+   selected native Agentoo Portage profile.
 3. `$XDG_CONFIG_HOME/hypr/agentoo-local.lua`, or
    `~/.config/hypr/agentoo-local.lua`: optional real personal override.
 4. `/etc/xdg/hypr/transparency.lua`: remembered Agentoo transparency overrides,
@@ -289,12 +280,10 @@ is required. The shared entry loads, in order:
 
 Monitors use preferred modes and auto placement/scaling by default. Host-specific
 exceptions belong in tracked `/etc/xdg/hypr/hosts/NAME.lua` fragments. The shared
-entry reads the documented `GENTOO_TARGET_HOST="name"` assignment from
-`/etc/agentoo/target-host` as data and loads that host's fragment if present.
-The installer already creates this one local host identity; no separate Hyprland
-selector or manual include is needed. Missing selectors/fragments retain shared
-defaults; malformed selectors produce a configuration error. The former
-`/etc/agentoo/hyprland-host.lua` selector is no longer read and may be removed.
+entry calls the shared `/usr/local/share/agentoo/lib/host_selection.py` adapter,
+which uses `eselect --brief --colour=no profile show`. No separate Hyprland
+selector or manual include is needed. A missing host fragment retains shared
+defaults; an unset, unrelated or failed profile query is a configuration error.
 Personal scalar settings override earlier values; bindings and
 monitor rules have their own semantics, so check duplicates when extending them.
 
@@ -370,11 +359,10 @@ requires enough monitor space at the selected font size and display scale.
 
 Kitty loads `/etc/xdg/kitty/kitty.conf` before user configuration. Its native
 `geninclude` runs `/usr/local/share/agentoo/lib/kitty/host_config.py` when configuration
-is loaded, including on startup and reload. The helper reads
-`/etc/agentoo/target-host` as data and outputs the selected
-`/etc/xdg/kitty/hosts/<name>.conf` fragment. Missing selectors or host fragments
-leave Kitty's defaults in effect; malformed selectors and other read errors are
-reported. The helper must be executable, as recorded in the permissions policy.
+is loaded, including on startup and reload. The helper uses the shared native
+Portage profile adapter and outputs `/etc/xdg/kitty/hosts/<name>.conf`.
+Missing host fragments leave Kitty's defaults in effect; profile query failures,
+unset or unrelated profiles, and other read errors are reported. The helper must be executable, as recorded in the permissions policy.
 
 `/etc/xdg/kitty/hosts/thinktop.conf` sets Thinktop's font size. Other hosts
 retain Kitty's default size.
@@ -390,9 +378,8 @@ for inheritance, reset, conflict handling, and validation.
 
 ### Laptop brightness
 
-Laptop utilities live in the independent `@laptop` set, initially containing
-`sys-power/acpilight`; keep future sensor/power utilities here when selected.
-Do not require this set on desktops. As root, install `emerge --ask @laptop`
+The Intel laptop profiles select `sys-power/acpilight` automatically through
+`@profile`, independently of GUI installation. No separate laptop set is needed.
 The user setup script `/root/002-agentoo-setup-user.sh` installs the packaged
 `video` group and adds Graham on initial setup and reruns. For existing users
 without rerunning setup, use `usermod -aG video USER` as root.
@@ -459,7 +446,7 @@ configuration reloads leave only one watcher.
 `@gui-desktop` extends `@gui-base` with desktop conveniences, initially
 screenshots, wallpapers, and text clipboard history. Install it with
 `sudo emerge --ask @gui-desktop`; keep `@gui-base` as the minimal graphics/audio
-foundation and `@laptop` as an independent hardware-utility set. Run
+foundation; host profiles supply hardware utilities. Run
 `agentoo screenshot full` to capture all outputs in one image, or
 `agentoo screenshot region` to drag a rectangle. Files are saved under
 `~/Downloads/Screenshots`, created on demand, with timestamped unique PNG names
@@ -471,7 +458,7 @@ user's Hyprland terminal after installing the updated set, then test the keys.
 Thinktop's physical F9 emits Print Screen; its F10 becomes Linux KEY_F16 through
 keyd, then XF86Launch7 in the default evdev XKB map. The tracked
 `/etc/xdg/hypr/hosts/thinktop.lua` binds that XF86Launch7 region alias and is
-loaded automatically when the existing target-host assignment names thinktop.
+loaded automatically when `agentoo:hosts/thinktop` is selected.
 Reload Hyprland after deployment. Other hosts use Print Screen,
 Shift+Print Screen or the standard region-capture symbol unless a demonstrated
 input quirk requires a host alias. Do not bind ordinary F10 universally.
