@@ -1000,6 +1000,8 @@ download_file() {
   else
     run_privileged wget --https-only --secure-protocol=TLSv1_2 --output-document="$destination" "$url"
   fi
+  # The caller checks these public downloads without elevated privileges.
+  run_privileged chmod 644 "$destination"
 }
 
 verify_pinned_release_signature() {
@@ -1017,6 +1019,9 @@ verify_pinned_release_signature() {
     $1 == "[GNUPG:]" && $2 == "VALIDSIG" && toupper($12) == expected { found = 1 }
     END { exit !found }
   ' || die "signature is not made by Gentoo's pinned automated-release key: ${signed_file##*/}"
+  # A restrictive host umask makes GnuPG's root-owned output private. The caller
+  # parses this public manifest without privileges after checking the pinned key.
+  run_privileged chmod 644 "$verified_file"
 }
 
 cleanup_stage3_bootstrap_failure() {
@@ -1159,7 +1164,7 @@ EOF
     return 0
   fi
 
-  for command in awk find grep tar gzip gpg sha256sum stat mount mountpoint cp mktemp; do
+  for command in awk find grep tar gzip gpg sha256sum stat mount mountpoint install chmod mktemp; do
     require_command "$command"
   done
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
@@ -1169,10 +1174,16 @@ EOF
   for source in /etc/resolv.conf /proc /sys /dev /run; do
     [[ -e $source ]] || die "live environment prerequisite is unavailable: $source"
   done
-  [[ ! -d $MOUNT_ROOT/var/lib/agentoo/repository.git ]] || die 'stage3 extraction is bootstrap-only; resume a later phase on a configured target'
+  if run_privileged test -d "$MOUNT_ROOT/var/lib/agentoo/repository.git"; then
+    die 'stage3 extraction is bootstrap-only; resume a later phase on a configured target'
+  fi
 
   confirm_phase 'stage3 bootstrap'
   verify_disk_setup || die 'stage3-bootstrap requires a verified disk-setup layout'
+  # Btrfs subvolumes inherit the creator's umask. These mounted filesystem
+  # roots must be traversable before unprivileged manifest reads, including
+  # retries of layouts created with a private host umask.
+  run_privileged chmod 755 "$MOUNT_ROOT" "$MOUNT_ROOT/home"
   confirm_expected_bootstrap_target_state
 
   STAGE_WORKDIR=$(run_privileged mktemp -d "$MOUNT_ROOT/.stage3-bootstrap.XXXXXX")
@@ -1229,7 +1240,7 @@ EOF
 
   log 'Extracting verified stage3 archive'
   run_privileged tar xpf "$archive" --xattrs-include='*.*' --numeric-owner -C "$MOUNT_ROOT"
-  run_privileged cp --dereference /etc/resolv.conf "$MOUNT_ROOT/etc/resolv.conf"
+  run_privileged install -m 644 /etc/resolv.conf "$MOUNT_ROOT/etc/resolv.conf"
   mountpoint -q "$MOUNT_ROOT/proc" || run_privileged mount --types proc /proc "$MOUNT_ROOT/proc"
   mountpoint -q "$MOUNT_ROOT/sys" || run_privileged mount --rbind /sys "$MOUNT_ROOT/sys"
   run_privileged mount --make-rslave "$MOUNT_ROOT/sys"
@@ -1558,7 +1569,8 @@ EOF
   done
   run_privileged install -d -m 755 "$MOUNT_ROOT/var/lib/agentoo"
   if [[ ! -d $MOUNT_ROOT/var/lib/agentoo/repository.git ]]; then
-    run_privileged git clone --bare --single-branch --branch "$CONFIG_BRANCH" \
+    run_privileged /bin/bash -c 'umask 022; exec git "$@"' "$PROGRAM-clone" \
+      clone --bare --single-branch --branch "$CONFIG_BRANCH" \
       "$CONFIG_SOURCE" "$MOUNT_ROOT/var/lib/agentoo/repository.git"
   fi
   config_git_dir=$MOUNT_ROOT/var/lib/agentoo/repository.git
@@ -1580,6 +1592,7 @@ EOF
   esp_uuid=$(run_privileged findmnt -rn -o UUID --mountpoint "$MOUNT_ROOT/boot")
   [[ -n $esp_uuid ]] || die 'mounted ESP UUID is missing'
   printf '%s\n' "$esp_uuid" | run_privileged tee "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid" >/dev/null
+  run_privileged chmod 644 "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid"
   apply_optional_systemd_policy
   # Enable only after first checkout: hooks use the target's absolute live paths.
   run_privileged git --git-dir="$config_git_dir" config core.hooksPath /usr/local/share/agentoo/git-hooks
@@ -1588,12 +1601,14 @@ EOF
   printf '%s\n' "$CONFIG_SOURCE" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/source" >/dev/null
   printf '%s\n' "$CONFIG_BRANCH" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/branch" >/dev/null
   printf '%s\n' "$config_revision" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/revision" >/dev/null
+  run_privileged chmod 644 "$MOUNT_ROOT/etc/agentoo/"{source,branch,revision}
 
   [[ -r $MOUNT_ROOT/usr/share/openpgp-keys/gentoo-release.asc ]] \
     || die 'the stage3 does not provide the Gentoo release-key bundle'
   run_privileged install -d -m 755 "$MOUNT_ROOT/var/db/repos"
   if [[ ! -d $MOUNT_ROOT/var/db/repos/gentoo/.git ]]; then
-    run_privileged git clone --depth 1 "$GENTOO_REPOSITORY_URL" "$MOUNT_ROOT/var/db/repos/gentoo"
+    run_privileged /bin/bash -c 'umask 022; exec git "$@"' "$PROGRAM-clone" \
+      clone --depth 1 "$GENTOO_REPOSITORY_URL" "$MOUNT_ROOT/var/db/repos/gentoo"
   fi
   PORTAGE_REPOSITORY_GPG_HOME=$(run_privileged mktemp -d "$MOUNT_ROOT/.gentoo-repository-keys.XXXXXX")
   run_privileged gpg --batch --homedir "$PORTAGE_REPOSITORY_GPG_HOME" --import \
@@ -2739,6 +2754,10 @@ main() {
     BINARY_INSTALL_OPTIONS=(--no-install-binpkgs)
   fi
   if (( INTERNAL_PORTAGE_CHROOT || INTERNAL_UPDATE_CHROOT || INTERNAL_KERNEL_CHROOT || INTERNAL_FIRSTBOOT_OFFLINE )); then
+    # env -i does not reset umask. Target configuration and package operations
+    # must not inherit private file modes from the installation host.
+    # Credential writers and temporary helpers set their own private modes.
+    umask 022
     valid_target_host "$TARGET_HOST" || die '--target-host must explicitly select generic, qemu, thinktop, startop, or flattop'
   else
     validate_arguments

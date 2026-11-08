@@ -9,6 +9,79 @@ INSTALLER = Path(__file__).resolve().parents[1] / 'installer/gentoo-install.sh'
 
 
 class InstallerTest(unittest.TestCase):
+    def test_public_download_modes_do_not_depend_on_host_umask(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'download'
+            for downloader in ['curl', 'wget']:
+                with self.subTest(downloader=downloader):
+                    result = self.run_installer(str(destination), downloader, harness='''
+umask 077
+downloader=$2
+command() {
+  if [[ $1 == -v && $2 == curl && $downloader == wget ]]; then return 1; fi
+  builtin command "$@"
+}
+run_privileged() { "$@"; }
+curl() { printf 'public archive\\n' >"$7"; }
+wget() { printf 'public archive\\n' >"${3#--output-document=}"; }
+download_file https://example.invalid/archive "$1"
+''')
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(destination.read_text(), 'public archive\n')
+                    self.assertEqual(destination.stat().st_mode & 0o777, 0o644)
+                    destination.unlink()
+
+    def test_internal_phases_reset_inherited_private_umask(self):
+        for phase, function in [('portage', 'portage_foundation_chroot'),
+                                ('update', 'system_update_chroot'),
+                                ('kernel', 'kernel_foundation_chroot'),
+                                ('firstboot-offline', 'firstboot_offline')]:
+            with tempfile.TemporaryDirectory() as directory, self.subTest(phase=phase):
+                flag = ('--internal-firstboot-offline' if phase == 'firstboot-offline'
+                        else f'--internal-{phase}-chroot')
+                result = self.run_installer(flag, '--disk', '/dev/null', '--target-host', 'generic',
+                    '--no-ram-builds', harness=f'''
+umask 077
+{function}() {{
+  kernel_target_data "$CHECK_DIRECTORY/boot-data" 'public boot data'
+  mktemp "$CHECK_DIRECTORY/private.XXXXXX"
+}}
+main "$@"
+''', CHECK_DIRECTORY=directory)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                public = Path(directory) / 'boot-data'
+                private = next(Path(directory).glob('private.*'))
+                self.assertEqual(public.stat().st_mode & 0o777, 0o644)
+                self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+
+    def test_verified_release_manifest_is_readable_after_pinned_signature_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            verified = Path(directory) / 'manifest.verified'
+            for fingerprint, success in [('WRONG', False),
+                                         ('PINNED', True)]:
+                with self.subTest(fingerprint=fingerprint):
+                    result = self.run_installer(str(verified), fingerprint, harness='''
+STAGE_GPG_HOME=unused
+run_privileged() { "$@"; }
+gpg() {
+  local output
+  while (($#)); do
+    if [[ $1 == --output ]]; then output=$2; shift; fi
+    shift
+  done
+  printf 'authenticated manifest\\n' >"$output"
+  chmod 600 "$output"
+  printf '[GNUPG:] VALIDSIG subkey date timestamp expiry version reserved algorithm hash class %s\\n' "$signer"
+}
+signer=$2
+[[ $signer != PINNED ]] || signer=$GENTOO_AUTOMATED_RELEASE_FINGERPRINT
+verify_pinned_release_signature unused "$1"
+''')
+                    self.assertEqual(result.returncode == 0, success, result.stderr)
+                    self.assertEqual(verified.stat().st_mode & 0o777,
+                                     0o644 if success else 0o600)
+                    self.assertEqual(verified.read_text(), 'authenticated manifest\n')
+
     def run_installer(self, *args, harness=None, **env):
         command = ['bash', str(INSTALLER), *args]
         script = None
