@@ -61,6 +61,12 @@ for standalone generation and testing. The embedded command line defaults to
 `ro console=tty0 loglevel=5`; use `config --cmdline TEXT` for console policy or
 arguments needed by a custom archive.
 
+`agentoo kernel gen-efi-cmd --image FILE [--args TEXT] [--label TEXT]` prints a
+shell-quoted EFI registration command for an installed image on a mounted ESP.
+It uses the selected host profile and needs no build workspace. Running the
+printed command creates a new boot entry and places it first; see
+[EFI command generation](kernel.md#generate-an-efi-registration-command).
+
 ## Implementation conventions
 
 The concise command policy lives in
@@ -193,4 +199,5 @@ are reported as skipped when the Lua interpreter is unavailable.
 fragment for that configuration operation. Without it, the command uses the
 selected `agentoo:hosts/NAME` Portage profile, reported by native eselect. The
 option does not change the persistent profile or enable cross-building. Firmware
-commands always use the selected profile. See [kernel builds](kernel.md).
+commands and `gen-efi-cmd` use the selected profile. Install uses the host
+recorded in its workspace. See [kernel builds](kernel.md).

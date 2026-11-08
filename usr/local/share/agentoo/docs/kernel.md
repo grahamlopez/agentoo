@@ -300,6 +300,46 @@ Creation uses a child-process umask of `022` so a restrictive inherited umask
 does not remove the read permissions requested by efibootmgr. An existing
 root-only variable is not automatically chmodded by registration.
 
+## Generate an EFI registration command
+
+For an installed image, print a registration command independently of its build
+workspace:
+
+```sh
+agentoo kernel gen-efi-cmd \
+  --image /boot/EFI/Gentoo/kernel-RELEASE.efi
+```
+
+`--args TEXT` optionally supplies firmware-passed kernel arguments. `--label TEXT`
+sets the boot-entry display name; its default is the image filename without the
+extension. For example:
+
+```sh
+agentoo kernel gen-efi-cmd \
+  --image /boot/EFI/Gentoo/kernel-RELEASE.efi \
+  --label 'Agentoo debug' --args 'loglevel=7 ignore_loglevel'
+```
+
+The image must exist on a mounted FAT GPT EFI System Partition. The command
+inspects that mount and partition to determine the disk, partition number and
+firmware-relative loader path. The currently selected Agentoo Portage profile
+supplies host registration policy, including Startop's `--full-dev-path`.
+It needs no build workspace, kernel sources, root authorization or `efibootmgr`
+installation to print the command, and does not mount the ESP or write firmware.
+
+Stdout contains one shell-quoted `sudo efibootmgr --create ...` command; review
+and run it separately. Running it creates a new entry and places it first in
+BootOrder, retaining existing entries. It does not edit an existing entry's
+arguments. Omitting `--args`, or supplying an empty string, creates an entry
+with no firmware-supplied arguments. Nonempty arguments use Unicode encoding
+and follow an option delimiter so they cannot become efibootmgr options.
+
+For Agentoo-built kernels, firmware arguments supplement the embedded command
+line. Repeated parameters have parameter-specific behavior; these arguments do
+not remove embedded settings. Use `config --cmdline TEXT` and rebuild when the
+embedded defaults themselves need changing. The minimal initramfs still uses
+its embedded storage identity, independently of firmware arguments.
+
 ## Secure Boot
 
 The kernel command does not sign images or enroll firmware keys. Signing and

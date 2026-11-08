@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -675,6 +676,59 @@ sys.exit(2)
                 kernel.install(args)
             self.assertFalse(kernel.MODULES_ROOT.exists())
             self.assertFalse(destination.exists())
+
+    def test_gen_efi_cmd_without_arguments_needs_no_workspace_or_privileges(self):
+        destination = self.fake_esp()
+        destination.mkdir(parents=True)
+        image = destination / 'kernel-6.18.57-test.efi'
+        image.write_text('installed image')
+        for extra in ((), ('--args', '')):
+            with self.subTest(extra=extra), \
+                    patch.object(kernel, 'select_workspace', side_effect=AssertionError('workspace access')), \
+                    patch.object(kernel, 'authorize_sudo', side_effect=AssertionError('sudo access')), \
+                    patch.object(kernel, 'run', wraps=kernel.run) as run:
+                stdout, stderr = self.invoke('gen-efi-cmd', '--image', str(image), *extra)
+                self.assertEqual(shlex.split(stdout), [
+                    'sudo', 'efibootmgr', '--create', '--disk', '/dev/test', '--part', '1',
+                    '--label', 'kernel-6.18.57-test', '--loader', r'\EFI\Gentoo\kernel-6.18.57-test.efi',
+                ])
+                self.assertIn('first in BootOrder', stderr)
+                self.assertEqual([call.args[0][0] for call in run.call_args_list], ['findmnt', 'lsblk'])
+                self.assertTrue(all(not call.kwargs.get('root') for call in run.call_args_list))
+
+    def test_gen_efi_cmd_quotes_arguments_and_uses_selected_host_workaround(self):
+        destination = self.fake_esp()
+        destination.mkdir(parents=True)
+        image = destination / 'kernel with spaces.efi'
+        image.write_text('installed image')
+        label = "Thinktop's debug kernel"
+        arguments = 'quiet loglevel=3 test="two words" literal=$HOME;$(touch marker)'
+        with patch.object(kernel.kernel_host, 'read_host', return_value='startop'):
+            stdout, stderr = self.invoke('gen-efi-cmd', '--image', str(image),
+                                        '--label', label, '--args', arguments)
+        self.assertEqual(shlex.split(stdout), [
+            'sudo', 'efibootmgr', '--create', '--full-dev-path', '--disk', '/dev/test', '--part', '1',
+            '--label', label, '--loader', r'\EFI\Gentoo\kernel with spaces.efi', '--unicode', '--', arguments,
+        ])
+        self.assertIn('supplement the embedded', stderr)
+        stdout, _ = self.invoke('gen-efi-cmd', '--image', str(image), '--args=--delete-bootorder')
+        self.assertEqual(shlex.split(stdout)[-3:], ['--unicode', '--', '--delete-bootorder'])
+
+    def test_gen_efi_cmd_rejects_missing_image_and_non_esp_storage(self):
+        args = kernel.build_parser().parse_args(['gen-efi-cmd', '--image', str(self.root / 'missing.efi')])
+        with patch.object(kernel, 'inspect_esp', side_effect=AssertionError('inspect missing image')), \
+                self.assertRaisesRegex(RuntimeError, 'EFI image not found'):
+            kernel.gen_efi_cmd(args)
+        for settings, message in (({'fstype': 'ext4'}, 'mounted FAT'),
+                                  ({'parttype': 'not-an-esp'}, 'GPT EFI System Partition')):
+            with self.subTest(settings=settings):
+                destination = self.fake_esp(**settings)
+                destination.mkdir(parents=True, exist_ok=True)
+                image = destination / 'kernel.efi'
+                image.write_text('installed image')
+                args.image = str(image)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    kernel.gen_efi_cmd(args)
 
     def test_firmware_registration_preserves_other_entry_order(self):
         self.prepare()

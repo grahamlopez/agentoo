@@ -67,6 +67,13 @@ def build_parser():
                                description='Apply the current host list to the installed linux-firmware version. Back up overriding native savedconfigs and rebuild from source; keep custom kernel images unchanged.')
     apply.add_argument('--yes', action='store_true', help='accept the displayed plan; sudo authentication may still be required')
     apply.add_argument('--dry-run', action='store_true', help='show the apply plan without confirmation, sudo or changes')
+    efi = sub.add_parser('gen-efi-cmd', help='Print an EFI registration command for an installed image',
+                         description='Inspect a mounted ESP and print a shell-quoted efibootmgr command; no firmware changes.',
+                         epilog='Running the printed command creates a new entry and places it first in BootOrder. '
+                                'Firmware arguments supplement the embedded kernel command line.')
+    efi.add_argument('--image', required=True, metavar='FILE', help='installed EFI kernel image on a mounted ESP').completion = 'files'
+    efi.add_argument('--args', default='', metavar='TEXT', help='firmware-passed kernel arguments (default: none)')
+    efi.add_argument('--label', metavar='TEXT', help='boot entry display label (default: image filename without its extension)')
     return parser
 
 
@@ -445,7 +452,7 @@ def efi_entries(report):
 
 
 def inspect_esp(destination):
-    """Inspect the mounted destination before changing installed modules or images."""
+    """Resolve an image's mounted ESP, partition identity and firmware loader path."""
     ancestor = destination
     while not ancestor.exists():
         ancestor = ancestor.parent
@@ -462,6 +469,29 @@ def inspect_esp(destination):
     relative = destination.relative_to(Path(mount['target']))
     loader = '\\' + str(relative).replace('/', '\\')
     return device, loader
+
+
+def efi_create_command(device, loader, label, host):
+    command = ['efibootmgr', '--create', '--disk', device['pkname'], '--part', str(device['partn']),
+               '--label', label, '--loader', loader]
+    if host == 'startop':
+        command.insert(2, '--full-dev-path')
+    return command
+
+
+def gen_efi_cmd(args):
+    require_tools('findmnt', 'lsblk')
+    image = Path(args.image).expanduser().resolve()
+    if not image.is_file():
+        raise RuntimeError(f'EFI image not found: {image}')
+    device, loader = inspect_esp(image)
+    command = efi_create_command(device, loader, args.label if args.label is not None else image.stem,
+                                 kernel_host.selected_host())
+    if args.args:
+        command.extend(['--unicode', '--', args.args])
+    notice('Running this command creates a new entry and places it first in BootOrder; existing entries remain.')
+    notice('Firmware arguments supplement the embedded kernel command line; repeated parameters have parameter-specific behavior.')
+    print(shlex.join(['sudo', *command]))
 
 
 def install(args):
@@ -515,12 +545,10 @@ def install(args):
                'Inspect the paths above before retrying.')
         raise
     run(['rm', '-rf', '--', staging_root], root=True)
-    command = ['efibootmgr', '--create', '--disk', device['pkname'], '--part', str(device['partn']),
-               '--label', f'{data["label"]}-{data["release"].removesuffix("-" + data["label"])}', '--loader', loader]
     # Use the configured host, not a selector that may have changed since config.
     # Match the standalone installer's physical-registration workaround.
-    if data['host'] == 'startop':
-        command.insert(2, '--full-dev-path')
+    command = efi_create_command(device, loader,
+                                 f'{data["label"]}-{data["release"].removesuffix("-" + data["label"])}', data['host'])
     if args.efi_add_entry:
         before = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
         order, entries = efi_entries(before)
@@ -558,7 +586,7 @@ def main():
     if args.operation is None:
         parser.print_help()
         return 0
-    if args.operation != 'firmware' and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.label):
+    if args.operation in ('config', 'build', 'install') and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.label):
         parser.error('--label must start with a letter/digit and contain only letters, digits, dots, underscores or hyphens')
     if args.operation == 'build':
         if args.jobs < 1:
@@ -573,7 +601,7 @@ def main():
             return 0
         if platform.machine() not in ('x86_64', 'amd64'):
             raise RuntimeError('this workflow currently supports local x86_64 EFI kernels')
-        {'config': configure, 'build': build, 'install': install}[args.operation](args)
+        {'config': configure, 'build': build, 'install': install, 'gen-efi-cmd': gen_efi_cmd}[args.operation](args)
         return 0
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         notice(f'agentoo kernel: {error}')
