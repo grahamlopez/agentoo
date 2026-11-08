@@ -12,6 +12,10 @@ Rust `-C target-cpu=raptorlake`, and Thinktop's operator-selected build policy:
 RAM capacity. Installer transactions also default to RAM-backed builds;
 `--no-ram-builds` selects disk-backed storage for an installer invocation.
 
+The profile accepts the testing keyword for `app-laptop/framework_tool`.
+Install the Framework hardware control utility with
+`emerge --ask app-laptop/framework_tool` after selecting flattop's profile.
+
 The captured boot used i915, iwlwifi, btusb, nvme, and snd_hda_intel, with an
 IDT 92HD95 audio codec. Flattop's profile does not select SOF firmware; a DSP-detected
 log line alone does not establish that SOF was used. Subsequent distribution
