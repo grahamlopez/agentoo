@@ -1,0 +1,8 @@
+# Host prerequisites for QEMU/NBD installation and VM boot.
+@installation
+app-emulation/qemu[qemu_softmmu_targets_x86_64,slirp]
+app-emulation/virt-firmware
+sys-firmware/edk2-bin[qemu_softmmu_targets_x86_64]
+app-misc/jq
+sys-process/psmisc
+sys-apps/kmod
