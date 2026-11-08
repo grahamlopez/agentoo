@@ -542,6 +542,11 @@ configuration reloads do not start another instance. Super+L runs
 locker defined only in `/etc/xdg/hypr/hypridle.conf`. Repeated lock requests
 leave an existing Hyprlock process in place.
 
+After the session is locked, Hypridle's `on_lock_cmd` runs `agentoo display off`.
+The command waits one second for key release, then turns off all outputs through
+DPMS. Keyboard input wakes the displays with the session still locked; mouse
+movement does not. There is no additional timeout or inactivity listener.
+
 Before logind suspends the machine, Hypridle requests the same session lock.
 `inhibit_sleep = 3` holds a delay inhibitor until Hyprland reports the session
 locked. Logind's `InhibitDelayMaxSec` still bounds that wait: a missing, failed,
