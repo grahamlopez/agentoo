@@ -226,6 +226,26 @@ This allows sbctl to clear the Linux immutable attributes before writing its
 enrollment variables. It does not bypass the option-ROM safety checks. Do not
 clear immutable flags across all of efivarfs or delete the retained databases.
 
+Some firmware does not expose its default certificate databases. On Thinktop,
+enrollment with `--firmware-builtin` failed with
+`could not enroll built-in firmware keys: open .../dbDefault-...: no such file or directory`.
+This is separate from immutable-attribute handling: `--ignore-immutable` cannot
+supply a missing firmware database. If this occurs, confirm Setup Mode is still
+enabled and that step 4 successfully staged the original db/KEK certificates
+and Gentoo certificate. Then retry without `--firmware-builtin`:
+
+```sh
+sudo sbctl status
+sudo sbctl enroll-keys --microsoft --custom --ignore-immutable
+sudo sbctl list-enrolled-keys
+sudo sbctl status
+```
+
+This enrolls your keys, Microsoft's bundled certificates and the staged custom
+certificates, without reading firmware defaults. The preserved certificates
+remain essential; `--microsoft` alone does not replace all original trust. If
+the exports or staging failed, stop and resolve that before enrollment.
+
 Expected: enrollment succeeds, Setup Mode becomes disabled, and the enrolled
 list includes your db certificate, Gentoo's certificate and retained Windows
 trust. Compare their SHA256 fingerprints with those recorded earlier. Stop on
