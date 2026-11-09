@@ -28,25 +28,37 @@ encrypted. Keep Windows Boot Manager on its existing drive/ESP.
 sudo emerge --ask app-crypt/sbctl app-crypt/sbsigntools
 sudo sbctl status
 sudo efibootmgr -v
-sudo sbctl export-enrolled-keys --dir /var/lib/sbctl/enrolled-before-esl --format esl
-sudo sbctl export-enrolled-keys --dir /var/lib/sbctl/enrolled-before-der --format der
+sudo sbctl --disable-landlock export-enrolled-keys --dir /var/lib/sbctl/enrolled-before-esl --format esl
+sudo sbctl --disable-landlock export-enrolled-keys --dir /var/lib/sbctl/enrolled-before-der --format der
 ```
 
-Expected: UEFI is available and Secure Boot is disabled. The two export
+Expected before key creation: `Installed: sbctl is not installed` is normal;
+it refers to sbctl's local setup, not the installed executable. Setup Mode
+should be disabled while the existing PK remains enrolled, and Secure Boot
+disabled. Leave firmware settings unchanged at this stage. The two export
 directories must not already exist. Save the boot-entry report and firmware
 settings. DER exports supply certificates for reenrollment; ESL exports preserve
 the original PK, KEK and db lists. If DER export warns about unsupported entries,
 resolve their preservation before replacing trust. Do not clear the revocation
 database (`dbx`).
 
+The export commands disable sbctl's Landlock sandbox for those invocations only:
+sbctl 0.16 otherwise tries to sandbox the output directory before creating it.
+Do not pre-create the directories; export also rejects existing destinations.
+Successful ESL export creates `PK.esl`, `KEK.esl` and `db.esl`; DER export creates
+`PK`, `KEK` and `DB` subdirectories containing certificates.
+
 Create keys once; reuse existing sbctl keys if already configured:
 
 ```sh
 sudo sbctl create-keys
+sudo sbctl status
 sudo openssl x509 -in /var/lib/sbctl/keys/db/db.pem -noout -subject -fingerprint -sha256
 ```
 
-Expected: key creation succeeds and the certificate fingerprint prints. Back up
+Expected: key creation succeeds, status reports sbctl installed with an Owner
+GUID, and the certificate fingerprint prints. Creating keys does not enroll
+them: Setup Mode and Secure Boot remain unchanged. Back up
 `/var/lib/sbctl` to secure offline storage before continuing; it contains private
 keys. Use your mounted backup destination below, replacing the example path:
 
@@ -161,6 +173,30 @@ only disables verification. Follow the machine's key-management controls rather
 than assuming Custom must be enabled throughout. Do not switch back to Standard
 if that action restores factory keys.
 
+### Flattop firmware menu
+
+Verified on Flattop, Framework Laptop 13 (13th Gen Intel Core), Insyde BIOS
+03.16, on 2026-11-09:
+
+1. Press **F2** during startup and open **Administer Secure Boot**.
+2. Open **PK Options → Delete PK**, select the existing certificate, and
+   confirm **Delete this signature**. Use Delete, not Enroll: Enroll opens a
+   file chooser and is not needed for this step.
+3. Leave KEK, DB and DBX intact. Do not use **Erase all Secure Boot Settings**
+   or restore factory keys.
+4. Press **F10** to save and exit, then boot the tested signed Agentoo entry.
+
+The resulting `sudo sbctl status` reported **Setup Mode: Enabled** and
+**Secure Boot: Disabled**, with vendor keys `microsoft builtin-db builtin-KEK`.
+sbctl displays a cross beside Setup Mode Enabled; that is the expected state
+for enrollment, not a failure. The two **Add UEFI CA 2023** and
+**Add UEFI CA Option ROM 2023** options had also been enabled; those additions
+alone did not enter Setup Mode. **Select a UEFI file as trusted for execution**
+was not used. This confirms entry into Setup Mode; enrollment and enforced
+Secure Boot acceptance are separate steps below.
+
+### Enroll the prepared certificates
+
 Save changes and boot the tested signed Agentoo entry. Then run:
 
 ```sh
@@ -176,6 +212,19 @@ sudo sbctl enroll-keys --microsoft --firmware-builtin --custom
 sudo sbctl list-enrolled-keys
 sudo sbctl status
 ```
+
+If enrollment reports immutable KEK/db files (observed on Flattop after deleting
+only PK), retry with sbctl's scoped immutable-attribute handling:
+
+```sh
+sudo sbctl enroll-keys --microsoft --firmware-builtin --custom --ignore-immutable
+sudo sbctl list-enrolled-keys
+sudo sbctl status
+```
+
+This allows sbctl to clear the Linux immutable attributes before writing its
+enrollment variables. It does not bypass the option-ROM safety checks. Do not
+clear immutable flags across all of efivarfs or delete the retained databases.
 
 Expected: enrollment succeeds, Setup Mode becomes disabled, and the enrolled
 list includes your db certificate, Gentoo's certificate and retained Windows
