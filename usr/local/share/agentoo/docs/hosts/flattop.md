@@ -33,3 +33,23 @@ and normal peripherals. Validate display, Wi-Fi, Bluetooth, speakers/headphones,
 microphone, touchpad, and suspend/resume on the new kernel. The inventory reports
 s2idle and deep sleep availability but does not exercise either. Display scaling,
 fingerprint setup, and other desktop preferences remain unconfigured.
+
+## Custom-kernel boot message cleanup
+
+The Flattop kernel fragment disables AMD KVM, ITE IT87 GPIO, IBM ACPI PCI
+hotplug, and AMD CCP crypto offload. With these drivers built in, the observed
+6.18.57-agentoo-v0.4 boot reports probe failures for hardware absent on this host.
+The shared baseline retains these capabilities for other platforms.
+
+The fragment also disables the Chrome EC USB-PD charger driver, which reports
+an invalid port count and fails with `-71` on both the custom and distribution
+6.18.57 kernels. Framework uses ACPI battery/mains reporting; Chrome EC support
+remains enabled. After rebuilding with this fragment, verify charger detection,
+charging on the supported USB-C ports, and suspend/resume. These changes require
+a fresh kernel configuration/build and a boot test; they are not yet accepted
+on hardware.
+
+The ACPI errors referencing missing `RP28.PXSX.WIST` and aborting `CNVW.IFUN`
+and `CNVW._DSM` also occur with the distribution kernel. They remain a separate
+firmware/kernel investigation; this fragment does not suppress them or alter
+console logging policy.
