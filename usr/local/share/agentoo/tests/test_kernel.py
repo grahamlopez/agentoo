@@ -811,6 +811,49 @@ sys.exit(2)
                 self.assertEqual([call.args[0][0] for call in run.call_args_list], ['findmnt', 'lsblk'])
                 self.assertTrue(all(not call.kwargs.get('root') for call in run.call_args_list))
 
+    def test_gen_efi_cmd_distribution_includes_storage_and_matching_initramfs(self):
+        destination = self.fake_esp()
+        destination.mkdir(parents=True)
+        cmdline = self.root / 'cmdline'
+        storage = f'root=UUID={TEST_ROOT_UUID} rd.luks.uuid=luks-{TEST_LUKS_UUID} rootflags=subvol=@ ro'
+        cmdline.write_text(storage + '\n')
+        for suffix in ('gentoo-dist', 'gentoo-dist-bin'):
+            image = destination / f'kernel-6.18.57-{suffix}.efi'
+            image.write_text('installed image')
+            initramfs = destination / f'initramfs-6.18.57-{suffix}.img'
+            initramfs.write_text('installed archive')
+            for extra in ('', 'quiet loglevel=3'):
+                with self.subTest(suffix=suffix, extra=extra), \
+                        patch.object(kernel, 'DIST_CMDLINE', cmdline), \
+                        patch.object(kernel, 'authorize_sudo', side_effect=AssertionError('sudo access')):
+                    stdout, _ = self.invoke('gen-efi-cmd', '--image', str(image), '--args', extra)
+                command = shlex.split(stdout)
+                expected = storage + rf' initrd=\EFI\Gentoo\{initramfs.name}' + (f' {extra}' if extra else '')
+                self.assertEqual(command[-3:], ['--unicode', '--', expected])
+                self.assertEqual(command[2], '--create')
+
+    def test_gen_efi_cmd_distribution_rejects_missing_boot_inputs(self):
+        destination = self.fake_esp()
+        destination.mkdir(parents=True)
+        image = destination / 'kernel-6.18.57-gentoo-dist-bin.efi'
+        image.write_text('installed image')
+        initramfs = destination / 'initramfs-6.18.57-gentoo-dist-bin.img'
+        cmdline = self.root / 'cmdline'
+        args = kernel.build_parser().parse_args(['gen-efi-cmd', '--image', str(image)])
+        with patch.object(kernel, 'DIST_CMDLINE', cmdline), redirect_stdout(io.StringIO()) as output:
+            with self.assertRaisesRegex(RuntimeError, 'distribution initramfs'):
+                kernel.gen_efi_cmd(args)
+            initramfs.write_text('')
+            with self.assertRaisesRegex(RuntimeError, 'distribution initramfs'):
+                kernel.gen_efi_cmd(args)
+            initramfs.write_text('installed archive')
+            with self.assertRaises(FileNotFoundError):
+                kernel.gen_efi_cmd(args)
+            cmdline.write_text('\n')
+            with self.assertRaisesRegex(RuntimeError, 'command line is empty'):
+                kernel.gen_efi_cmd(args)
+        self.assertEqual(output.getvalue(), '')
+
     def test_gen_efi_cmd_quotes_arguments_and_uses_selected_host_workaround(self):
         destination = self.fake_esp()
         destination.mkdir(parents=True)

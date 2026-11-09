@@ -63,7 +63,9 @@ arguments needed by a custom archive.
 
 `agentoo kernel gen-efi-cmd --image FILE [--args TEXT] [--label TEXT]` prints a
 shell-quoted EFI registration command for an installed image on a mounted ESP.
-It uses the selected host profile and needs no build workspace. Running the
+It uses the selected host profile and needs no build workspace. Standard Gentoo
+distribution image names automatically include local `/etc/kernel/cmdline` and
+the matching initramfs path; `--args` supplies extra arguments. Running the
 printed command creates a new boot entry and places it first; see
 [EFI command generation](kernel.md#generate-an-efi-registration-command).
 

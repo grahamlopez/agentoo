@@ -329,7 +329,7 @@ agentoo kernel gen-efi-cmd \
   --image /boot/EFI/Gentoo/kernel-RELEASE.efi
 ```
 
-`--args TEXT` optionally supplies firmware-passed kernel arguments. `--label TEXT`
+`--args TEXT` optionally supplies extra firmware-passed kernel arguments. `--label TEXT`
 sets the boot-entry display name; its default is the image filename without the
 extension. For example:
 
@@ -346,11 +346,39 @@ supplies host registration policy, including Startop's `--full-dev-path`.
 It needs no build workspace, kernel sources, root authorization or `efibootmgr`
 installation to print the command, and does not mount the ESP or write firmware.
 
+For distribution images named `kernel-<release>-gentoo-dist.efi` or
+`kernel-<release>-gentoo-dist-bin.efi`, the command automatically reads the local
+`/etc/kernel/cmdline` and adds `initrd=` pointing to the matching
+`initramfs-…-gentoo-dist.img` or `initramfs-…-gentoo-dist-bin.img` beside the
+image on the ESP.
+Both the command-line file and archive must exist and be nonempty. `--args`
+adds options after these distribution boot arguments. For example:
+
+```sh
+agentoo kernel gen-efi-cmd \
+  --image /boot/EFI/Gentoo/kernel-6.18.62-gentoo-dist-bin.efi
+```
+
+The generated entry captures these inputs at registration time. Editing
+`/etc/kernel/cmdline` later does not update an existing firmware entry.
+
+To manually correct a distribution entry created without boot arguments, append
+the following to its `efibootmgr --create` command (substitute the installed
+release in the initramfs filename):
+
+```sh
+--unicode -- "$(cat /etc/kernel/cmdline) initrd=\EFI\Gentoo\initramfs-6.18.62-gentoo-dist-bin.img"
+```
+
+This creates a new entry rather than editing the old entry's arguments. Use
+`--create-only` instead of `--create` to leave BootOrder unchanged, then select
+the corrected entry from the firmware boot menu to test it.
+
 Stdout contains one shell-quoted `sudo efibootmgr --create ...` command; review
 and run it separately. Running it creates a new entry and places it first in
 BootOrder, retaining existing entries. It does not edit an existing entry's
-arguments. Omitting `--args`, or supplying an empty string, creates an entry
-with no firmware-supplied arguments. Nonempty arguments use Unicode encoding
+arguments. For other image names, omitting `--args` or supplying an empty string
+creates an entry with no firmware-supplied arguments. Nonempty arguments use Unicode encoding
 and follow an option delimiter so they cannot become efibootmgr options.
 
 For Agentoo-built kernels, firmware arguments supplement the embedded command
