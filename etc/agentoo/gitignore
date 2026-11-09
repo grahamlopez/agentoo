@@ -18,7 +18,8 @@ __pycache__/
 
 # Local secret mappings, templates, and provisioned credentials
 /etc/agentoo/secrets/*
-!/etc/agentoo/secrets/qemu.conf
+!/etc/agentoo/secrets/host-shared.conf
+!/etc/agentoo/secrets/flattop.conf
 /var/lib/agentoo/secrets/
 .config/agentoo/github-token
 .pi/agent/auth.json

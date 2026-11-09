@@ -1,13 +1,14 @@
 # Terminal secrets provisioning
 
-## QEMU GitHub token
+## GitHub repository credentials
 
-The tracked `/etc/agentoo/secrets/qemu.conf` selects the Login item
-`agentoo/qemu-agentoo github-token`. Its Username is your GitHub username and
-Password is your repository-scoped personal access token. Run:
+The profile's `github` row selects a Proton Pass Login item through its source
+reference. Its Username is your GitHub username and Password is your
+repository-scoped personal access token. In the commands below, replace
+`PROFILE` with your profile name and `USER` with the destination user:
 
 ```sh
-sudo agentoo secrets install --profile /etc/agentoo/secrets/qemu.conf --user graham github
+sudo agentoo secrets install --profile /etc/agentoo/secrets/PROFILE.conf --user USER github
 ```
 
 The `github` method writes a root-owned mode `0600` credential file at
@@ -27,7 +28,9 @@ back into the vault.
 For a new local profile, copy `profile.example` to `/etc/agentoo/secrets/local.conf`.
 Edit it to match your vault and destination files. Use a separate profile
 for each host. The profile is plain data, not executable shell configuration.
-The caller explicitly chooses the host profile; no host is inferred.
+The caller explicitly chooses the profile; no host is inferred. Shared and
+host-specific profiles can be installed in separate invocations; profiles do
+not inherit or include other profiles.
 
 Each row means: install this vault field (or rendered template) at this path.
 `HOME/` expands to the selected user's home. `user` makes the file owned by that
@@ -46,7 +49,7 @@ The Pi row is commented out until you supply a template matching your installed
 Pi version. References can use IDs instead of names to avoid duplicate names.
 
 ```sh
-sudo agentoo secrets install --profile /etc/agentoo/secrets/qemu.conf --user graham ssh github
+sudo agentoo secrets install --profile /etc/agentoo/secrets/PROFILE.conf --user USER ssh github
 ```
 
 Use `all` instead of category names to install every row. The script displays
@@ -67,11 +70,11 @@ SIGKILL or power loss cannot run cleanup; `/run` is cleared on reboot. Installed
 files remain on disk and in local checkpoints. Partial installs are possible:
 fix the failed reference and rerun. Avoid execution tracing or logging secret contents.
 
-The QEMU profile is tracked configuration containing only references, not secret
-values; pulling agentoo installs it directly under `/etc/agentoo/secrets/`.
-Other profiles and templates there, the example GitHub token directory, and Pi
-agent credential files are excluded by agentoo's Git ignore policy and remain
-local configuration. Never put secret values in the tracked profile.
+Profiles and templates under `/etc/agentoo/secrets/` are ignored by default.
+Deliberately tracked profiles containing only references have explicit exceptions
+in `/etc/agentoo/gitignore`; pulling agentoo installs them at their tracked paths.
+Provisioned credentials remain excluded from Git. Never put secret values in a
+tracked profile.
 The script expects a trusted profile
 and trusted destination paths; it is deliberately not a general hardened
 deployment engine.

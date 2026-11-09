@@ -89,7 +89,7 @@ external-module integration; a host fragment alone does not provide that workflo
 - [ ] **`etc/agentoo/gitignore`** — extend only when adding new local/generated
   state outside existing exclusions. Local secret profiles are already excluded;
   a deliberately tracked profile containing references only needs an explicit
-  exception, as `qemu.conf` has.
+  exception for its filename in that ignore file.
 
 ## Machine local files outside tracked host policy
 
