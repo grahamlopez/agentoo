@@ -20,6 +20,9 @@ __pycache__/
 /etc/agentoo/secrets/*
 !/etc/agentoo/secrets/host-shared.conf
 !/etc/agentoo/secrets/flattop.conf
+!/etc/agentoo/secrets/flattop.conf
+!/etc/agentoo/secrets/startop.conf
+!/etc/agentoo/secrets/bequiet.conf
 /var/lib/agentoo/secrets/
 .config/agentoo/github-token
 .pi/agent/auth.json
