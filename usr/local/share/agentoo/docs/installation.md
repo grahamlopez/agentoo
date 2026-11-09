@@ -20,8 +20,8 @@ onboarding is deferred.
 
 The initial world update excludes NVIDIA drivers to defer their kernel dependency
 until boot inputs exist. The kernel phase includes `@profile` alongside the
-binary distribution kernel, then rebuilds external modules and regenerates the
-initramfs.
+binary distribution kernel. Native `dist-kernel` dependencies handle external
+module builds; the installer then regenerates the initramfs.
 
 Hardware packages come from the selected profile's `@profile` membership; GUI
 and terminal sets remain optional environment choices. Installer transactions

@@ -2151,7 +2151,6 @@ kernel_foundation_chroot() {
     [[ ! -e $hook ]] || die "unexpected firmware registration hook: $hook"
   done
   install_emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin @profile
-  install_emerge --oneshot --verbose "${PACKAGE_OPTIONS[@]}" @module-rebuild
   atom=$(portageq best_version / sys-kernel/gentoo-kernel-bin)
   [[ -n $atom ]] || die 'binary distribution kernel was not installed'
   # pkg_config regenerates the initramfs after external modules are ready,
@@ -2238,7 +2237,6 @@ Example commands inside the target chroot (Intel system):
 emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin @profile
 emerge --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr
 emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode sys-kernel/gentoo-kernel-bin @profile
-emerge --oneshot @module-rebuild
 emerge --config =sys-kernel/gentoo-kernel-bin-6.18.54
 
 The first install command provides tools needed by Dracut inside the target.

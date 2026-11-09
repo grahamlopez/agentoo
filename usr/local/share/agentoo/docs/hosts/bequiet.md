@@ -35,8 +35,9 @@ tools are prepared. The kernel phase includes `@profile` alongside
 `sys-kernel/gentoo-kernel-bin`, so Portage selects the binary kernel provider
 before building NVIDIA modules. Shared `dist-kernel` USE policy
 and Gentoo's native external-module integration rebuild NVIDIA modules for the
-distribution kernel. The kernel phase runs `@module-rebuild`, regenerates the
-initramfs after modules are ready, and checks their release compatibility.
+distribution kernel. The kernel phase regenerates the initramfs after modules are ready and checks
+their release compatibility. No unconditional external-module rebuild follows
+the package transaction.
 Gentoo's NVIDIA package owns the Nouveau blacklist, DRM modesetting defaults,
 and its Dracut configuration; Agentoo does not duplicate those settings.
 
