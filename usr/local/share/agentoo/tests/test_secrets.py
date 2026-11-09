@@ -8,7 +8,7 @@ import pwd
 import runpy
 import tempfile
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 ENTRY = Path(__file__).resolve().parents[3] / 'bin/agentoo-secrets'
 MODULE = runpy.run_path(str(ENTRY))
@@ -120,7 +120,8 @@ if sys.argv[1] == 'item':
         self.assertEqual(list(parent.iterdir()), [destination])
 
     def test_dry_run_equals_and_interleaved_options_no_effects(self):
-        with patch.object(MODULE['os'], 'execvp', side_effect=AssertionError('sudo')):
+        with patch.object(MODULE['os'], 'geteuid', return_value=1000), \
+             patch.object(MODULE['os'], 'execvp', side_effect=AssertionError('sudo')):
             status, out, err = self.main(['ssh', '--dry-run', 'github', '--no-input'])
         self.assertEqual(status, 0, err)
         self.assertEqual(out, '')
@@ -267,6 +268,25 @@ if sys.argv[1] == 'item':
                 self.main(['ssh', '--dry-run', '--no-input'])
         self.assertEqual(commands[0][:3], ['sudo', '-n', '--'])
         self.assertEqual(commands[0][-3:], ['ssh', '--dry-run', '--no-input'])
+
+    def test_install_prints_plan_once_across_sudo_handoff(self):
+        def elevate(tokens, no_input):
+            with patch.object(MODULE['os'], 'geteuid', return_value=0):
+                raise SystemExit(MODULE['main'](tokens))
+        errors = io.StringIO()
+        perform = Mock()
+        with patch.object(MODULE['os'], 'geteuid', return_value=1000), \
+             patch.object(MODULE['sys'].stdin, 'isatty', return_value=True), \
+             patch.dict(MODULE['main'].__globals__, elevate=elevate, perform=perform), \
+             patch('builtins.input', return_value='y') as answer, \
+             contextlib.redirect_stderr(errors):
+            with self.assertRaises(SystemExit) as exit_:
+                MODULE['main'](self.args + ['ssh'])
+            self.assertEqual(exit_.exception.code, 0)
+            answer.assert_called_once()
+            perform.assert_called_once()
+        self.assertEqual(errors.getvalue().count(f'ssh: replace {self.destination}'), 1)
+        self.assertEqual(errors.getvalue().count('Install these files?'), 1)
 
     def test_no_input_install_rejected_before_read_sudo_or_provider(self):
         def forbidden(*args, **kwargs):
