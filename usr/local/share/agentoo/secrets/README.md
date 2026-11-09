@@ -39,6 +39,10 @@ Existing directories keep their ownership and permissions. Missing parent
 directories are created with the file's owner and group, mode `0700` for user
 destinations and `0755` for root destinations.
 Destination paths cannot contain whitespace; source references may.
+Field retrieval removes the single newline added by Proton Pass CLI's display
+output, preserving the stored field's own line breaks and trailing whitespace.
+Store exact file contents in the vault, including any intended final newline;
+do not add or remove newlines to compensate for CLI output.
 
 For example, the SSH row retrieves the `private key` field and writes it to
 `~/.ssh/id_ed25519`. The example `github` category uses the `field` method and writes only a token;

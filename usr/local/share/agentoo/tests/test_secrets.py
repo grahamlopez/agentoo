@@ -190,7 +190,7 @@ if sys.argv[1] == 'item':
                     if args[0] == 'item':
                         if cancelled:
                             raise KeyboardInterrupt()
-                        return b'fake secret bytes'
+                        return b'fake secret bytes\n'
                 def install(destination, content, uid, gid):
                     writes.append((destination, content, uid, gid))
                 with patch.object(MODULE['os'], 'geteuid', return_value=0), \
@@ -211,6 +211,16 @@ if sys.argv[1] == 'item':
                 if writes:
                     self.assertEqual(writes[0], (str(self.destination), b'fake secret bytes',
                                                 pwd.getpwnam(self.user).pw_uid, pwd.getpwnam(self.user).pw_gid))
+
+    def test_field_output_preserves_stored_whitespace(self):
+        values = (b'owner-guid', b'PEM\n', b'PEM\n\n', b'CRLF\r\n',
+                  b' leading and trailing \t ', b'', 'caf\u00e9'.encode())
+        for value in values:
+            with self.subTest(value=value):
+                provider = self.root / 'pass-cli'
+                provider.write_text('#!/usr/bin/env python3\nimport sys\n'
+                                    f'sys.stdout.buffer.write({value!r} + b"\\n")\n')
+                self.assertEqual(MODULE['read_field']('pass://vault/item/field', os.environ.copy()), value)
 
     def test_failed_logout_still_removes_the_local_session(self):
         work = self.root / 'work'
