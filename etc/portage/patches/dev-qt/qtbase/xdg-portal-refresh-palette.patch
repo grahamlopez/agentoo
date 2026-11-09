@@ -1,0 +1,20 @@
+Refresh the fallback theme's cached palette when the portal color scheme changes.
+Qt 6.11.3 receives Settings.SettingChanged and updates colorScheme(), but the
+delegated system palette otherwise retains its startup colors. The native
+requestColorScheme() hook invalidates that cache before handleThemeChange()
+rebuilds the application palette.
+
+Verified with Qt 6.11.3 Widgets on Wayland, including QProxyStyle as used by PCManFM-Qt.
+Retest without this patch when updating Qt; remove it when upstream handles
+fallback palette invalidation itself.
+
+--- a/src/plugins/platformthemes/xdgdesktopportal/qxdgdesktopportaltheme.cpp
++++ b/src/plugins/platformthemes/xdgdesktopportal/qxdgdesktopportaltheme.cpp
+@@ -75,6 +75,7 @@
+         if (group == appearanceInterface) {
+             if (key == colorSchemeKey) {
+                 colorScheme = colorSchemeFromXdgPref(static_cast<XdgColorschemePref>(value.variant().toUInt()));
++                baseTheme->requestColorScheme(colorScheme);
+                 QWindowSystemInterface::handleThemeChange();
+             } else if (key == contrastKey) {
+                 contrast = static_cast<Qt::ContrastPreference>(value.variant().toUInt());

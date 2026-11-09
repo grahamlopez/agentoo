@@ -2,6 +2,8 @@
 -- Adwaita is an XCursor theme; Hyprland falls back to XCursor for it.
 hl.env("XCURSOR_THEME", "Adwaita")
 hl.env("XCURSOR_SIZE", "24")
+-- Qt follows the same Settings portal as other system-aware applications.
+hl.env("QT_QPA_PLATFORMTHEME", "xdgdesktopportal")
 
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 

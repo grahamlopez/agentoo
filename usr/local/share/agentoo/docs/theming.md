@@ -55,6 +55,53 @@ Subsequent `agentoo theme light` / `dark` changes should switch Kitty live.
 Those automatic files take precedence over other color settings, including
 command-line color overrides. See [Kitty's automatic switching documentation](https://sw.kovidgoyal.net/kitty/kittens/themes/#change-color-themes-automatically-when-the-os-switches-between-light-and-dark).
 
+### Qt applications, including PCManFM-Qt
+
+The shared Hyprland configuration selects Qt's native `xdgdesktopportal`
+platform theme through `QT_QPA_PLATFORMTHEME`. It reads the existing Settings
+portal preference and listens for changes; no separate palette manager is
+needed. The installed Qt must supply `libqxdgdesktopportal.so` in its
+`platformthemes` plugin directory.
+
+Agentoo supplies a native Portage user patch for all Qt versions under
+`/etc/portage/patches/dev-qt/qtbase/`. Without it, Qt 6.11.3 receives mode
+changes but retains its cached startup palette. Deploying configuration alone
+does not apply source patches. Rebuild the installed version after deployment:
+
+```sh
+sudo emerge --ask --oneshot =dev-qt/qtbase-6.11.3
+```
+
+Then close PCManFM-Qt completely and restart it. The patched portal plugin was
+built separately and verified with an isolated Settings portal: a Qt Widgets
+probe on Wayland switched its palette dark → light → dark → light while
+running, including with `QProxyStyle`, which PCManFM-Qt uses. The unpatched
+plugin received the same signals but kept its dark palette. PCManFM-Qt 2.4.1
+was reported to pick up the initial mode but not live changes before this fix.
+After a Portage rebuild on 2026-11-09, the user confirmed PCManFM-Qt starts
+dark and switches live to light and back to dark with the plugin selected.
+Portage applies the patch on subsequent Qt builds, including version updates,
+and stops with an error if it cannot apply it. Successful application does not
+prove compatibility: retest live switching when updating Qt and remove the
+patch once upstream handles palette invalidation.
+
+After deploying this default, log out and back in so terminals and applications
+inherit it. For an immediate check, close PCManFM-Qt completely and launch:
+
+```sh
+QT_QPA_PLATFORMTHEME=xdgdesktopportal pcmanfm-qt
+```
+
+Then run `agentoo theme light` and `agentoo theme dark` from another terminal.
+An already-running PCManFM-Qt process retains its original environment.
+Existing terminals also retain their inherited environment after a Hyprland
+reload. To launch Qt applications normally from such a terminal, first run
+`export QT_QPA_PLATFORMTHEME=xdgdesktopportal`; a fresh login supplies the
+shared default without this manual step.
+Personal `QT_QPA_PLATFORMTHEME`, `QT_STYLE_OVERRIDE`, or application palette
+settings can override this integration.
+See [Qt's portal theme implementation](https://github.com/qt/qtbase/blob/6.11/src/plugins/platformthemes/xdgdesktopportal/qxdgdesktopportaltheme.cpp).
+
 ## Verification
 
 To inspect the public preference from the running desktop session:
