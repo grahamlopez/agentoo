@@ -106,7 +106,7 @@ the distribution kernel for direct EFI boot, then configures first boot.
 
 Required:
   --disk DEVICE              Whole block device to erase, for example /dev/nvme0n1
-  --target-host NAME         Configuration target: generic, qemu, thinktop, startop, or flattop.
+  --target-host NAME         Configuration target: generic, qemu, thinktop, startop, flattop, or bequiet.
 
 Options:
   --dry-run                  Print plans and perform no changes.
@@ -451,8 +451,8 @@ parse_args() {
 validate_arguments() {
   local -a errors=()
   local option value normalized
-  [[ -n $TARGET_HOST ]] || errors+=("--target-host NAME is required; choose generic, qemu, thinktop, startop, or flattop.")
-  [[ -z $TARGET_HOST ]] || valid_target_host "$TARGET_HOST" || errors+=("--target-host '$TARGET_HOST' is unknown; choose generic, qemu, thinktop, startop, or flattop. Use --hostname for a custom machine name.")
+  [[ -n $TARGET_HOST ]] || errors+=("--target-host NAME is required; choose generic, qemu, thinktop, startop, flattop, or bequiet.")
+  [[ -z $TARGET_HOST ]] || valid_target_host "$TARGET_HOST" || errors+=("--target-host '$TARGET_HOST' is unknown; choose generic, qemu, thinktop, startop, flattop, or bequiet. Use --hostname for a custom machine name.")
   case $TARGET_MICROCODE in
     auto|intel|amd|none) ;;
     *) errors+=("--microcode must be auto, intel, amd, or none.") ;;
@@ -1270,7 +1270,7 @@ EOF
 
 valid_target_host() {
   case $1 in
-    generic|qemu|thinktop|startop|flattop) return 0 ;;
+    generic|qemu|thinktop|startop|flattop|bequiet) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -1673,6 +1673,8 @@ resolve_cpu_flags() {
 
 system_update_chroot() {
   local flags pending archive_dir
+  # NVIDIA pulls in a distribution kernel; defer it until boot inputs exist.
+  local -a world_options=(--update --deep --newuse --exclude x11-drivers/nvidia-drivers)
   (( EUID == 0 )) || die 'the internal system update must run as root'
   [[ -r /etc/gentoo-release && -d /var/lib/agentoo/repository.git ]] \
     || die 'system-update requires the Gentoo target and configuration repository'
@@ -1700,9 +1702,9 @@ system_update_chroot() {
   install -d /etc/portage/package.use
   printf '*/* cpu_flags_x86: %s\n' "$flags" >/etc/portage/package.use/00cpu-flags
   printf 'Target CPU flags: %s\n' "$flags"
-  install_emerge --pretend --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
+  install_emerge --pretend --verbose "${world_options[@]}" "${PACKAGE_OPTIONS[@]}" @world
   confirm_phase 'initial world update (review relevant news above)'
-  install_emerge --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
+  install_emerge --verbose "${world_options[@]}" "${PACKAGE_OPTIONS[@]}" @world
 
   pending=$(pending_config_updates)
   if [[ -n $pending ]]; then
@@ -1768,9 +1770,11 @@ Review and update the base system
 ---------------------------------
 
 Show the proposed package changes and ask before proceeding with the update.
+Defer NVIDIA drivers and their kernel dependency until the kernel phase has
+prepared local boot inputs and selected the binary distribution kernel.
 
-emerge --pretend --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
-emerge --verbose --update --deep --newuse "${PACKAGE_OPTIONS[@]}" @world
+emerge --pretend --verbose --update --deep --newuse --exclude x11-drivers/nvidia-drivers "${PACKAGE_OPTIONS[@]}" @world
+emerge --verbose --update --deep --newuse --exclude x11-drivers/nvidia-drivers "${PACKAGE_OPTIONS[@]}" @world
 
 Review configuration and rebuild consumers
 ------------------------------------------
@@ -2130,12 +2134,13 @@ kernel_foundation_chroot() {
   kernel_target_data /etc/kernel/cmdline "$cmdline"
   kernel_target_data /etc/kernel/gentoo-dist-esp.uuid "$efi_uuid"
   [[ $TARGET_MICROCODE != intel ]] || packages+=(sys-firmware/intel-microcode)
+  # Include @profile here to install deferred NVIDIA drivers after boot setup.
   # Keep the binary provider in every transaction to prevent an OR dependency
   # (firmware -> virtual/dist-kernel) from selecting the source provider.
   # kernel-bin is an ebuild containing a prebuilt kernel; this
   # works in both source-only and binary-preferred installation modes.
   prepare_install_binpkgs
-  install_emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
+  install_emerge --pretend --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${tools[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin @profile
   confirm_phase 'distribution kernel packages (review the plan above)'
   # Dracut modules require target-side tools before the kernel postinst runs.
   # This transaction has no firmware -> virtual/dist-kernel dependency.
@@ -2145,7 +2150,7 @@ kernel_foundation_chroot() {
   for hook in /usr/lib/kernel/install.d/*efistub* /etc/kernel/install.d/*efistub*; do
     [[ ! -e $hook ]] || die "unexpected firmware registration hook: $hook"
   done
-  install_emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin
+  install_emerge --verbose --update --newuse "${PACKAGE_OPTIONS[@]}" "${packages[@]}" sys-kernel/gentoo-kernel-bin @profile
   install_emerge --oneshot --verbose "${PACKAGE_OPTIONS[@]}" @module-rebuild
   atom=$(portageq best_version / sys-kernel/gentoo-kernel-bin)
   [[ -n $atom ]] || die 'binary distribution kernel was not installed'
@@ -2199,8 +2204,7 @@ used. The binary kernel and its virtual dependency stay on stable AMD64
 keywords to avoid pulling a testing source kernel during later world updates.
 auto microcode follows the installation host; override it when preparing
 another CPU vendor. Host-specific firmware, such as Thinktop's SOF audio DSP
-firmware, comes from the installed configuration's optional
-/etc/portage/sets/host-TARGET set.
+firmware, comes from the selected native profile's @profile membership.
 Microcode selection is vendor-level: Intel adds intel-microcode, AMD uses
 linux-firmware. Firmware remains broad, with CPU matching performed at boot.
 The none option skips vendor-specific selection and verification; it does not
@@ -2231,9 +2235,9 @@ Install prerequisites, then firmware and the kernel together
 -----------------------------------------------------------------
 Example commands inside the target chroot (Intel system):
 
-emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin
+emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin @profile
 emerge --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr
-emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode sys-kernel/gentoo-kernel-bin
+emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode sys-kernel/gentoo-kernel-bin @profile
 emerge --oneshot @module-rebuild
 emerge --config =sys-kernel/gentoo-kernel-bin-6.18.54
 
@@ -2242,7 +2246,8 @@ Keep kernel-bin explicitly selected in the firmware transaction so its virtual
 dependency cannot choose a source-built provider. The last command regenerates
 the selected installed kernel's initramfs after external modules are built.
 dist-kernel provides ongoing package integration,
-including NVIDIA when installed; no GPU driver is selected automatically.
+including NVIDIA selected by Bequiet's @profile. The @profile transaction also
+installs hardware packages deferred from the initial world update.
 
 Read the target's host package set
 ----------------------------------
@@ -2758,7 +2763,7 @@ main() {
     # must not inherit private file modes from the installation host.
     # Credential writers and temporary helpers set their own private modes.
     umask 022
-    valid_target_host "$TARGET_HOST" || die '--target-host must explicitly select generic, qemu, thinktop, startop, or flattop'
+    valid_target_host "$TARGET_HOST" || die '--target-host must explicitly select generic, qemu, thinktop, startop, flattop, or bequiet'
   else
     validate_arguments
   fi

@@ -12,7 +12,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[5]
 OVERLAY = ROOT / 'usr/local/share/agentoo/portage'
 GENTOO = Path('/var/db/repos/gentoo')
-HOSTS = ('generic', 'qemu', 'flattop', 'startop', 'thinktop')
+HOSTS = ('generic', 'qemu', 'flattop', 'startop', 'thinktop', 'bequiet')
 
 
 @unittest.skipUnless(portage and (GENTOO / 'profiles/default/linux/amd64/23.0/desktop/systemd').is_dir(),
@@ -41,6 +41,8 @@ class ProfileTests(unittest.TestCase):
             settings = self.settings(host)
             packages = {str(atom) for atom in ProfilePackageSet(settings._locations_manager.profiles_complex).getAtoms()}
             expected = set() if host in ('generic', 'qemu') else laptop.copy()
+            if host == 'bequiet':
+                expected = {'>=x11-drivers/nvidia-drivers-580'}
             if host == 'thinktop':
                 expected.add('sys-firmware/sof-firmware')
             with self.subTest(host=host):
@@ -53,15 +55,31 @@ class ProfileTests(unittest.TestCase):
             with self.subTest(host=host):
                 self.assertEqual(settings['ARCH'], 'amd64')
                 self.assertEqual(settings['ABI'], 'amd64')
-                if host not in ('generic', 'qemu'):
+                if host == 'bequiet':
+                    self.assertEqual(settings['VIDEO_CARDS'], 'nvidia')
+                    self.assertEqual(settings['CFLAGS'], '-march=znver2 -O2 -pipe')
+                    self.assertIn('-C target-cpu=znver2', settings['RUSTFLAGS'])
+                elif host not in ('generic', 'qemu'):
                     self.assertEqual(settings['VIDEO_CARDS'], 'intel')
                     cpu = 'raptorlake' if host == 'flattop' else 'arrowlake'
                     self.assertEqual(settings['CFLAGS'], f'-march={cpu} -O2 -pipe')
                 else:
                     self.assertEqual(settings['CFLAGS'], '-O2 -pipe')
                 settings.setcpv('sys-kernel/linux-firmware-20260622')
-                self.assertEqual('savedconfig' in settings['USE'].split(), host not in ('generic', 'qemu'))
+                self.assertEqual('savedconfig' in settings['USE'].split(), host in ('flattop', 'startop', 'thinktop'))
                 self.assertFalse({'compress-xz', 'compress-zstd', 'deduplicate'} & set(settings['USE'].split()))
+
+    def test_bequiet_nvidia_uses_open_modules_and_wayland(self):
+        (self.config / 'package.use').mkdir()
+        (self.config / 'package.use/kernel').write_text(
+            (ROOT / 'etc/portage/package.use/kernel').read_text())
+        settings = self.settings('bequiet')
+        for version in ('580.178.04', '595.104.02'):
+            settings.setcpv(f'x11-drivers/nvidia-drivers-{version}')
+            enabled = set(settings['USE'].split())
+            with self.subTest(version=version):
+                self.assertTrue({'modules', 'tools', 'wayland', 'dist-kernel'} <= enabled)
+                self.assertEqual('kernel-open' in enabled, version.startswith('580.'))
 
     def test_native_local_settings_override_profile_defaults(self):
         with (self.config / 'make.conf').open('a') as file:

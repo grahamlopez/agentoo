@@ -1,0 +1,4 @@
+# AMD Ryzen 9 3950X (Zen 2), 16 cores / 32 logical CPUs.
+COMMON_FLAGS="-march=znver2 -O2 -pipe"
+RUSTFLAGS="${RUSTFLAGS} -C target-cpu=znver2"
+VIDEO_CARDS="-* nvidia"

@@ -119,9 +119,13 @@ from another host into Git.
 | Thinktop | Present | Present | Present | Hyprland and Kitty |
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
 | Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Hyprland; Kitty defaults |
-| Bequiet | Missing | Missing; NVIDIA modules needed | Broad default | Shared defaults |
+| Bequiet | Present; Zen 2 CPU and NVIDIA graphics | Deferred; NVIDIA modules needed | Broad default | Shared defaults |
 
 Startop selects Arrow Lake compiler targets and Intel graphics, with a
 shared-memory build directory and twelve-job build limit. See its
 [hardware baseline](hosts/startop.md). The installer prints its EFI registration
 command with the full device path required by its firmware.
+
+Bequiet uses the distribution kernel and packaged NVIDIA open modules. See its
+[hardware baseline and installation checks](hosts/bequiet.md). Custom-kernel
+onboarding is deferred.

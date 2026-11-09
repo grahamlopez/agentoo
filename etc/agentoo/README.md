@@ -22,7 +22,7 @@ copies or symlinks. See `/usr/local/share/agentoo/docs/README.md` for the config
 
 The installer selects the host explicitly with `--target-host`; it does not
 infer policy from the hostname or installation machine. Supported targets are
-`generic`, `qemu`, `thinktop`, `startop`, and `flattop`.
+`generic`, `qemu`, `thinktop`, `startop`, `flattop`, and `bequiet`.
 
 The sole persistent selection is Portage's native `/etc/portage/make.profile`
 symlink. Agentoo profiles live under
@@ -55,7 +55,9 @@ Host hardware requirements are unstarred `packages` entries in the profiles.
 Portage's native `profile-set` support includes them in `@profile`, already part
 of `@world`, so no hardware set needs recording in `world_sets`. Intel laptop
 profiles select the Intel media driver, VA-API diagnostics and acpilight whether
-or not a GUI is installed. Thinktop also selects SOF firmware. `@terminal-env`,
+or not a GUI is installed. Thinktop also selects SOF firmware. Bequiet selects
+the NVIDIA driver with Wayland support and open kernel modules for its Blackwell
+and Ada GPUs. `@terminal-env`,
 `@gui-base` and `@gui-desktop` remain explicit environment choices.
 
 Non-Portage consumers use `/usr/local/share/agentoo/lib/host_selection.py`, which
@@ -73,7 +75,7 @@ kernel-install EFI guidance also use it. Custom kernel commands select native
 Kconfig fragments under `/etc/agentoo/kernel/hosts/<name>.config` and reviewed
 firmware lists through the same profile. `agentoo kernel config --target-host NAME`
 is an explicit configuration-operation override; it does not change the selected
-Portage profile or turn the build into a cross-build. Generic and QEMU have
+Portage profile or turn the build into a cross-build. Generic, QEMU and Bequiet have
 Portage profiles but no reviewed custom-kernel fragments.
 
 Local `/etc/kernel/cmdline` and discovered storage identity supply boot
@@ -90,3 +92,4 @@ identifiers; UUIDs are not tracked host policy. See the
 - [Checkpoints and subvolume boundaries](../../usr/local/share/agentoo/docs/checkpoints.md)
 - [Target host checklist](../../usr/local/share/agentoo/docs/host-onboarding.md)
 - [Flattop hardware baseline](../../usr/local/share/agentoo/docs/hosts/flattop.md)
+- [Bequiet hardware baseline](../../usr/local/share/agentoo/docs/hosts/bequiet.md)

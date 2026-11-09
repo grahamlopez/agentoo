@@ -110,11 +110,88 @@ verify_pinned_release_signature unused "$1"
 
     def test_supported_targets_validate(self):
         # Disk validation still fails; no supported target should be rejected.
-        for target in ['generic', 'qemu', 'thinktop', 'startop', 'flattop']:
+        for target in ['generic', 'qemu', 'thinktop', 'startop', 'flattop', 'bequiet']:
             result = self.run_installer('--target-host', target, '--dry-run',
                                         '--phase', 'handoff')
             self.assertIn('--disk is required', result.stderr)
             self.assertNotIn('--target-host', result.stderr)
+
+    def test_nvidia_is_deferred_until_kernel_boot_inputs_exist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            atom = 'sys-kernel/gentoo-kernel-bin-6.18.60'
+            for name in ['etc/kernel', 'etc/portage/package.use', 'etc/dracut.conf.d',
+                         'etc/kernel/install.d', 'var/lib/agentoo/repository.git',
+                         f'var/db/pkg/{atom}', 'boot']:
+                (root / name).mkdir(parents=True, exist_ok=True)
+            for name in ['etc/gentoo-release', 'etc/portage/package.use/kernel',
+                         'etc/kernel/install.conf', 'etc/dracut.conf.d/agentoo-dist.conf',
+                         'etc/kernel/install.d/04-agentoo-esp.install']:
+                (root / name).touch()
+            release = root / 'include/config/kernel.release'
+            release.parent.mkdir(parents=True)
+            release.write_text('6.18.60-gentoo-dist-bin\n')
+            (root / f'var/db/pkg/{atom}/CONTENTS').write_text(f'obj {release} hash 0\n')
+            # Run both phase bodies against a disposable target, including as non-root.
+            source = INSTALLER.read_text().removesuffix('main "$@"\n')
+            source = source.replace('(( EUID == 0 )) || die', 'true || die')
+            for prefix in ['/etc/', '/var/', '/boot']:
+                source = source.replace(prefix, directory + prefix)
+            harness = r'''
+TARGET_HOST=bequiet
+TARGET_MICROCODE=amd
+TARGET_CPU_FLAGS='aes sse2'
+PACKAGE_OPTIONS=()
+require_command() { :; }
+selected_target_host() { echo bequiet; }
+prepare_install_binpkgs() { :; }
+emaint() { :; }
+eselect() { :; }
+git() { :; }
+agentoo() { :; }
+pending_config_updates() { :; }
+confirm_phase() { :; }
+mountpoint() { :; }
+findmnt() { if [[ $* == *UUID* ]]; then echo abcd-1234; else echo vfat; fi; }
+resolve_target_partitions() { CRYPT_PARTITION=/dev/test; }
+blkid() { echo abcd-1234; }
+cryptsetup() { echo abcd-1234; }
+portageq() {
+  case $1 in
+    envvar) echo '-O2 -pipe' ;;
+    best_version) echo sys-kernel/gentoo-kernel-bin-6.18.60 ;;
+  esac
+}
+install_emerge() {
+  local arguments
+  printf -v arguments '%s ' "$@"
+  if [[ " $arguments" == *' @profile '* ]]; then
+    [[ -s $CHECK_ROOT/etc/kernel/cmdline && -s $CHECK_ROOT/etc/kernel/gentoo-dist-esp.uuid ]] || exit 90
+  fi
+  printf '%s ' "$@" >>"$CHECK_ROOT/transactions"
+  printf '\n' >>"$CHECK_ROOT/transactions"
+}
+verify_distribution_kernel() { echo "$1" >"$CHECK_ROOT/verified"; }
+print_physical_kernel_boot_commands() { :; }
+system_update_chroot
+kernel_foundation_chroot
+'''
+            result = subprocess.run(['bash', '-s'], input=source + harness,
+                                    capture_output=True, text=True,
+                                    env=dict(os.environ, CHECK_ROOT=directory))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            transactions = (root / 'transactions').read_text().splitlines()
+            world = [line for line in transactions if '@world' in line]
+            kernel = [line for line in transactions if '@profile' in line]
+            self.assertEqual(len(world), 2)
+            self.assertEqual(len(kernel), 2)
+            for line in world:
+                self.assertIn('--exclude x11-drivers/nvidia-drivers', line)
+            for line in kernel:
+                self.assertIn('sys-kernel/gentoo-kernel-bin', line)
+                self.assertNotIn('--exclude', line)
+            self.assertLess(transactions.index(world[-1]), transactions.index(kernel[0]))
+            self.assertEqual((root / 'verified').read_text(), '6.18.60-gentoo-dist-bin\n')
 
     def test_profile_query_runs_inside_the_requested_destination(self):
         result = self.run_installer('/mnt/target', harness='''

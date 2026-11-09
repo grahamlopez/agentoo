@@ -14,6 +14,15 @@ only persistent host selector. Stage3's base system already supplies
 reporting before selecting the destination profile. Later phases reject a target
 that differs from the selected profile. See [host selection](../../../../../etc/agentoo/README.md#host-selection).
 
+Bequiet uses the distribution kernel and packaged NVIDIA open modules; see its
+[hardware baseline and acceptance checks](hosts/bequiet.md). Its custom-kernel
+onboarding is deferred.
+
+The initial world update excludes NVIDIA drivers to defer their kernel dependency
+until boot inputs exist. The kernel phase includes `@profile` alongside the
+binary distribution kernel, then rebuilds external modules and regenerates the
+initramfs.
+
 Hardware packages come from the selected profile's `@profile` membership; GUI
 and terminal sets remain optional environment choices. Installer transactions
 prefer signed official binaries and let Portage check USE/dependency compatibility
