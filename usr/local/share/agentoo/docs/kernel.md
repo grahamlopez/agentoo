@@ -4,8 +4,8 @@
 builds a local x86_64 EFI kernel with an embedded initramfs, and installs it under
 a versioned filename. Each subcommand also works through `agentoo-kernel`.
 Run as your normal user; the command uses sudo for system module installation,
-ESP writes and firmware registration. Initramfs builders run as the build user
-and create user-owned workspace files.
+image signing, ESP writes and firmware registration. Initramfs builders run as
+the build user and create user-owned workspace files.
 
 ```sh
 agentoo kernel config --label agentoo-v0.4 \
@@ -240,9 +240,24 @@ is no second export prompt.
 
 The default image destination is
 `/boot/EFI/Gentoo/kernel-<version>-<label>.efi`; `--dest DIR` changes the directory.
-After confirmation, the command mounts `/boot` through its existing mount
-configuration if necessary, then checks that the destination is on a mounted
-FAT GPT EFI System Partition.
+Installation signs by default using `sbsign` and sbctl's standard file key and
+certificate at `/var/lib/sbctl/keys/db/db.{key,pem}`. Follow
+[initial signing and enrollment](secure-boot.md) to create and back up the keys.
+Missing signing tools or unreadable inputs stop installation; `--yes` does not
+bypass signing. Firmware Secure Boot state does not change this default.
+After confirmation and a privileged check that signing inputs are readable,
+the command mounts `/boot` through its existing mount configuration if necessary,
+then checks that the destination is on a mounted FAT GPT EFI System Partition.
+
+To explicitly install the original image without signing or verification:
+
+```sh
+agentoo kernel install --label agentoo-v0.4 --unsigned
+```
+
+Unsigned installation needs no signing tools or keys. Such images normally
+cannot boot with Secure Boot enabled. Config and build remain independent of
+signing; alternate key layouts and hardware tokens are not supported here.
 
 An installation is identified by kernel version plus label. Reusing both
 replaces that installation, including a changed build; a different version or
@@ -255,7 +270,11 @@ Install copies the validated staged module tree into a temporary root under
 with umask `022`. This produces readable indexes before changing the installed
 tree, including built-in metadata with `CONFIG_MODULES=n`. It does not rerun make
 or require the original sources. The image is also copied to a temporary name
-on the ESP before activation.
+on the ESP before activation. Unless `--unsigned` was supplied, that copy is
+signed, verified against the expected certificate using `sbverify --cert`, and
+set to mode `0644`. The workspace image and recorded build hashes stay unchanged.
+Signing or verification failure leaves the live image and module tree untouched
+and performs no firmware registration; remaining staging files are retained.
 
 The complete module tree replaces `/lib/modules/<release>`; files absent from
 the build, including separately installed external modules, are removed from
@@ -294,7 +313,7 @@ creates one with `--create`, which also adds it to BootOrder. It then puts that
 entry first and preserves the other entries' relative order. It leaves BootNext alone and prints
 the resulting `efibootmgr -u` report. If a firmware operation fails, the installed
 image remains; inspect the reported failure and `efibootmgr -u` before retrying.
-There is no automatic reboot, signing or key enrollment.
+There is no automatic reboot or key enrollment.
 
 Creation uses a child-process umask of `022` so a restrictive inherited umask
 does not remove the read permissions requested by efibootmgr. An existing
@@ -342,9 +361,13 @@ its embedded storage identity, independently of firmware arguments.
 
 ## Secure Boot
 
-The kernel command does not sign images or enroll firmware keys. Signing and
-firmware trust remain separate operator steps; a successful installation does
-not establish that Secure Boot will accept the image.
+See [initial signing and enrollment](secure-boot.md) for commands to sign a
+separate custom image and establish firmware trust for Agentoo, the Gentoo
+fallback and Windows. Install signs by default; key creation and firmware
+enrollment remain explicit operator steps. A successfully verified signature
+does not establish that the firmware trusts that certificate or will accept the
+image. Boot-test each required entry with Secure Boot enabled. The packaged
+Gentoo fallback remains managed independently by Portage/installkernel/dracut.
 
 [Historical baseline and Secure Boot experiments](history/kernel-baseline-build.md#signing-images-for-secure-boot)
 preserve earlier notes on separate signed custom images, a distribution-kernel

@@ -1,7 +1,9 @@
-# Kernel sources, Agentoo initramfs generator and hardware inspection tools.
+# Kernel sources, initramfs generator, EFI signing and hardware inspection tools.
 # For source selection and builds, see agentoo/docs/kernel.md.
 sys-kernel/gentoo-sources
 sys-kernel/agentoo-initramfs
+app-crypt/sbsigntools
+app-crypt/sbctl
 sys-apps/usbutils
 sys-apps/pciutils
 sys-apps/dmidecode

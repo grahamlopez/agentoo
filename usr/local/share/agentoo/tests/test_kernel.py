@@ -87,6 +87,34 @@ a = sys.argv[1:]
 root = pathlib.Path(a[a.index('--basedir') + 1]) / 'lib/modules' if '--basedir' in a else pathlib.Path(os.environ['TEST_MODULES_ROOT'])
 (root / a[-1] / 'modules.builtin.bin').write_text('index')
 ''')
+        signing = self.root / 'signing'
+        signing.mkdir()
+        (signing / 'db.key').write_text('private test key')
+        (signing / 'db.pem').write_text('test certificate')
+        change = patch.object(kernel, 'SIGNING_DIRECTORY', signing)
+        change.start()
+        self.addCleanup(change.stop)
+        self.tool('sbsign', '''
+import json, os, pathlib, sys
+a = sys.argv[1:]
+with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['sbsign', *a]) + '\\n')
+if os.environ.get('FAIL_SBSIGN'): sys.exit(1)
+assert pathlib.Path(a[a.index('--key') + 1]).read_text() == 'private test key'
+assert pathlib.Path(a[a.index('--cert') + 1]).read_text() == 'test certificate'
+payload = pathlib.Path(a[-1]).read_bytes()
+output = pathlib.Path(a[a.index('--output') + 1])
+output.write_bytes(payload + b'\\nTEST SIGNATURE\\n')
+output.chmod(0o600)
+''')
+        self.tool('sbverify', '''
+import json, os, pathlib, sys
+a = sys.argv[1:]
+with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['sbverify', *a]) + '\\n')
+if os.environ.get('FAIL_SBVERIFY'): sys.exit(1)
+assert a[0] == '--cert'
+assert pathlib.Path(a[1]).read_text() == 'test certificate'
+assert pathlib.Path(a[-1]).read_bytes().endswith(b'\\nTEST SIGNATURE\\n')
+''')
         modules_root = patch.object(kernel, 'MODULES_ROOT', self.root / 'system-modules')
         modules_root.start()
         self.addCleanup(modules_root.stop)
@@ -487,6 +515,93 @@ sys.exit(2)
         (modules / 'modules.builtin').unlink()
         with self.assertRaisesRegex(RuntimeError, 'missing modules.builtin'):
             kernel.load(self.work, 'test', completed=True)
+
+    def test_install_signs_by_default_without_changing_workspace(self):
+        args, image, installed = self.prepare_install(existing=True)
+        data = kernel.load(self.work, 'test', completed=True)
+        output, _ = kernel.paths(self.work, data)
+        original = (output / 'arch/x86/boot/bzImage').read_bytes()
+        metadata = (self.work / kernel.METADATA).read_bytes()
+        start = len(self.calls())
+        previous = os.umask(0o077)
+        try:
+            with tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors), redirect_stdout(io.StringIO()):
+                kernel.install(args)  # --yes still requires signing.
+        finally:
+            os.umask(previous)
+        self.assertEqual(image.read_bytes(), original + b'\nTEST SIGNATURE\n')
+        self.assertEqual(image.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(next(image.parent.glob('*.bak')).read_text(), 'working image')
+        self.assertEqual(next(kernel.MODULES_ROOT.glob('*.bak')).joinpath('old.ko').read_text(), 'working modules')
+        self.assertTrue((installed / 'modules.builtin').is_file())
+        self.assertEqual((self.work / kernel.METADATA).read_bytes(), metadata)
+        self.assertEqual(kernel.load(self.work, 'test', completed=True), data)
+        calls = self.calls()[start:]
+        verify = next(i for i, call in enumerate(calls) if call[0] == 'sbverify')
+        moves = [i for i, call in enumerate(calls) if call[0] == 'sudo' and 'mv' in call]
+        self.assertTrue(all(verify < i for i in moves))
+
+    def test_unsigned_install_needs_no_signing_tools_or_keys(self):
+        args, image, _ = self.prepare_install()
+        args.unsigned = True
+        for path in kernel.SIGNING_DIRECTORY.iterdir():
+            path.unlink()
+        original_which = kernel.shutil.which
+        def which(name):
+            return None if name in ('sbsign', 'sbverify', 'chmod', 'test') else original_which(name)
+        start = len(self.calls())
+        with patch.object(kernel.shutil, 'which', side_effect=which), \
+                tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors), redirect_stdout(io.StringIO()):
+            kernel.install(args)
+        output, _ = kernel.paths(self.work, kernel.load(self.work, 'test', completed=True))
+        self.assertEqual(image.read_bytes(), (output / 'arch/x86/boot/bzImage').read_bytes())
+        self.assertFalse(any(call[0] in ('sbsign', 'sbverify') or
+                             (call[0] == 'sudo' and 'test' in call) for call in self.calls()[start:]))
+        self.assertTrue(kernel.build_parser().parse_args(['install', '--label', 'test', '--unsigned']).unsigned)
+
+    def test_missing_signing_inputs_stop_before_system_staging(self):
+        args, image, installed = self.prepare_install(existing=True)
+        args.efi_add_entry = True
+        self.tool('efibootmgr', 'raise AssertionError("must not register firmware")')
+        original_which = kernel.shutil.which
+        for missing in ('sbsign', 'sbverify', 'db.key', 'db.pem'):
+            with self.subTest(missing=missing):
+                path = kernel.SIGNING_DIRECTORY / missing
+                if missing.startswith('db.'):
+                    path.rename(path.with_suffix('.saved'))
+                def which(name):
+                    return None if name == missing else original_which(name)
+                start = len(self.calls())
+                try:
+                    with patch.object(kernel.shutil, 'which', side_effect=which), \
+                            tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors), \
+                            self.assertRaisesRegex(RuntimeError, 'install --unsigned'):
+                        kernel.install(args)
+                finally:
+                    if missing.startswith('db.'):
+                        path.with_suffix('.saved').rename(path)
+                self.assertEqual(image.read_text(), 'working image')
+                self.assertEqual((installed / 'old.ko').read_text(), 'working modules')
+                self.assertFalse(list(image.parent.glob('*.bak')))
+                self.assertFalse(list(kernel.MODULES_ROOT.glob('.agentoo-*')))
+                self.assertFalse(any(call[0] in ('sbsign', 'sbverify', 'depmod') or
+                                     (call[0] == 'sudo' and 'mount' in call) for call in self.calls()[start:]))
+
+    def test_signing_failure_keeps_live_pair_and_does_not_register(self):
+        args, image, installed = self.prepare_install(existing=True)
+        args.efi_add_entry = True
+        self.tool('efibootmgr', 'raise AssertionError("must not register firmware")')
+        for tool, failure in (('sbsign', 'FAIL_SBSIGN'), ('sbverify', 'FAIL_SBVERIFY')):
+            with self.subTest(tool=tool), patch.dict(os.environ, {failure: '1'}), \
+                    tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors), \
+                    self.assertRaisesRegex(RuntimeError, tool + '.*exited 1'):
+                kernel.install(args)
+            self.assertEqual(image.read_text(), 'working image')
+            self.assertEqual([path.name for path in installed.iterdir()], ['old.ko'])
+            self.assertEqual((installed / 'old.ko').read_text(), 'working modules')
+            self.assertFalse(list(image.parent.glob('*.bak')))
+            self.assertFalse(list(kernel.MODULES_ROOT.glob('*.bak')))
+            self.assertTrue(list(image.parent.glob('.*.tmp')))
 
     def test_install_replaces_exact_tree_and_keeps_matching_backups(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))

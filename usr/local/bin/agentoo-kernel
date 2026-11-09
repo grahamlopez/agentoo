@@ -26,6 +26,9 @@ MODULES_ROOT = Path('/lib/modules')
 METADATA = 'agentoo-kernel.json'
 DEFAULT_FLAGS = '-march=native -O2 -pipe'
 INITRAMFS_BUILDER = Path('/usr/libexec/agentoo-initramfs/build')
+SIGNING_DIRECTORY = Path('/var/lib/sbctl/keys/db')
+SIGNING_HELP = ('See /usr/local/share/agentoo/docs/secure-boot.md for signing setup, '
+                'or explicitly use install --unsigned to skip signing.')
 
 
 def build_parser():
@@ -37,7 +40,7 @@ def build_parser():
     descriptions = {
         'config': 'Carry a running or supplied config to new kernel sources',
         'build': 'Build the kernel, stage modules and embed a fresh initramfs',
-        'install': 'Install staged modules and the EFI image; optionally register firmware',
+        'install': 'Sign and install the EFI image and staged modules; optionally register firmware',
     }
     for name, description in descriptions.items():
         child = sub.add_parser(name, help=description, description=description)
@@ -57,6 +60,8 @@ def build_parser():
             child.add_argument('-j', '--jobs', type=int, default=len(os.sched_getaffinity(0)), metavar='N', help='parallel jobs (default: available CPUs)')
             child.add_argument('--initramfs', metavar='FILE', help='embed this archive instead of building the minimal initramfs').completion = 'files'
         else:
+            child.add_argument('--unsigned', action='store_true',
+                               help='skip default image signing and verification (normally cannot boot with Secure Boot enabled)')
             child.add_argument('--dest', default='/boot/EFI/Gentoo', metavar='DIR', help='EFI destination (default: /boot/EFI/Gentoo)').completion = 'directories'
             child.add_argument('--efi-add-entry', action=argparse.BooleanOptionalAction, default=False,
                                help='register the image and put its entry first (default: no)')
@@ -496,6 +501,11 @@ def gen_efi_cmd(args):
 
 def install(args):
     require_tools('findmnt', 'lsblk', 'install', 'cp', 'mv', 'rm', 'mktemp', 'depmod', *(['efibootmgr'] if args.efi_add_entry else []))
+    if not args.unsigned:
+        try:
+            require_tools('sbsign', 'sbverify', 'chmod', 'test')
+        except RuntimeError as error:
+            raise RuntimeError(f'{error}. {SIGNING_HELP}') from error
     work, data = select_workspace(args)
     output, _ = paths(work, data)
     image = output / 'arch/x86/boot/bzImage'
@@ -503,10 +513,19 @@ def install(args):
     modules_destination = MODULES_ROOT / data['release']
     destination = Path(args.dest).expanduser().resolve() / f'kernel-{data["release"]}.efi'
     notice(f'Build directory:  {work}\nKernel image:     {image}\nStaged modules:   {modules}\nInstall modules:  {modules_destination}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
+    key, certificate = SIGNING_DIRECTORY / 'db.key', SIGNING_DIRECTORY / 'db.pem'
+    notice('Image signing:   unsigned (explicit --unsigned)' if args.unsigned else
+           f'Image signing:   required\nCertificate:     {certificate}')
     mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
     if mount_boot:
         notice('Mount /boot using its existing mount configuration.')
     confirm('Proceed', args.yes)
+    if not args.unsigned:
+        for path in (key, certificate):
+            try:
+                run(['test', '-r', path], root=True, capture=True)
+            except RuntimeError as error:
+                raise RuntimeError(f'cannot read signing input {path}: {error}. {SIGNING_HELP}') from error
     if mount_boot:
         run(['mount', '/boot'], root=True)
     device, loader = inspect_esp(destination)
@@ -532,6 +551,12 @@ def install(args):
         run(['cp', '-a', '--no-preserve=ownership', '--', str(modules) + '/.', staged_tree], root=True)
         run(['depmod', '--basedir', staging_root, '-a', data['release']], root=True, umask=0o022)
         run(['install', '-D', '-m', '0644', '--', image, staging], root=True)
+        if not args.unsigned:
+            # Sign only the disposable ESP copy; workspace hashes remain valid.
+            # Both native tools finish before either live artifact is replaced.
+            run(['sbsign', '--key', key, '--cert', certificate, '--output', staging, staging], root=True)
+            run(['sbverify', '--cert', certificate, staging], root=True)
+            run(['chmod', '0644', '--', staging], root=True)
         if backup:
             run(['cp', '--preserve=mode', '--', destination, backup], root=True)
         # Keep the old pair for recovery. Only complete trees/images become live;

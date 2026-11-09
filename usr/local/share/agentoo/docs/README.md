@@ -23,6 +23,7 @@ Kernel
 
 - [Firmware maintenance and diagnostics](firmware.md)
 - [Custom kernel rebuild commands](kernel.md)
+- [Initial Secure Boot signing and enrollment](secure-boot.md)
 - [Agentoo initramfs packaging, development and smoke checks](initramfs.md)
 
 User facing tools and configuration
