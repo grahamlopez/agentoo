@@ -1,2 +1,3 @@
-# Clipboard history from GURU; no repository-wide testing keywords.
+# Approved GURU packages; no repository-wide testing keywords.
 app-misc/cliphist::guru ~amd64 ~arm64
+app-office/obsidian::guru ~amd64 ~arm64

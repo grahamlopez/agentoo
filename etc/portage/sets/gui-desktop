@@ -12,7 +12,7 @@ gui-libs/gdk-pixbuf-loader-webp
 # File-only Wayland screenshots and interactive region selection.
 gui-apps/grim
 gui-apps/slurp
-# Clipboard history; GURU policy permits only this package.
+# Clipboard history from the GURU allowlist.
 app-misc/cliphist::guru
 gui-apps/wl-clipboard
 app-shells/fzf

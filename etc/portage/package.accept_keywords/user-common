@@ -1,6 +1,5 @@
 # miscellaneous upstream (non-agentoo) packages for end-users
 
-app-office/obsidian ~amd64
 # required by app-editors/neovim-0.12.6::gentoo
 # required by @terminal-env
 # required by @selected

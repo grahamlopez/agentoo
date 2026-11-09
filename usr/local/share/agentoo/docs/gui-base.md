@@ -405,7 +405,7 @@ resolution or unsuitable panel curve may need a host-specific adjustment.
 ### Clipboard history
 
 `@gui-desktop` supplies `app-misc/cliphist::guru`, wl-clipboard, and fzf;
-Kitty comes from `@gui-base`. GURU is masked except for cliphist. Sync it with
+Kitty comes from `@gui-base`. GURU is masked except for cliphist and Obsidian. Sync it with
 `sudo emaint sync -r guru` before installing the set.
 
 At Hyprland startup, `wl-paste --type text --watch cliphist store` captures

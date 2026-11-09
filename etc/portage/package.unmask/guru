@@ -1,2 +1,3 @@
-# Clipboard history; keep all other GURU packages masked.
+# Approved GURU packages; keep all others masked.
 app-misc/cliphist::guru
+app-office/obsidian::guru
