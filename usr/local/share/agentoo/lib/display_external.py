@@ -159,21 +159,42 @@ def configure_parser(parser):
     return parser
 
 def connected_outputs():
-    """Connected U5226KW DDC connectors, also used by completion without probing."""
+    """Connected U5226KW connectors, also used by completion without probing."""
     outputs = []
     for path in sorted(DRM.glob('card*-*')):
         if re.match(r'card\d+-(eDP|LVDS|DSI)-', path.name):
             continue
         try:
-            if (path / 'status').read_text().strip() != 'connected' or not (path / 'ddc').exists():
+            if (path / 'status').read_text().strip() != 'connected':
                 continue
             edid = (path / 'edid').read_bytes()
         except OSError:
             continue
-        # DEL/439e identifies the supported monitor, not a particular cable/bus.
-        if len(edid) >= 128 and edid[8:12] == bytes.fromhex('10ac9e43'):
+        # Product IDs vary by input; the EDID model name identifies the monitor.
+        if (len(edid) >= 128 and edid[8:10] == bytes.fromhex('10ac')
+                and any(edid[offset:offset + 5] == b'\0\0\0\xfc\0'
+                        and edid[offset + 5:offset + 18].rstrip(b' \n') == b'DELL U5226KW'
+                        for offset in range(54, 126, 18))):
             outputs.append(path)
     return outputs
+
+
+def detected_buses():
+    """Let ddcutil map DRM connectors to buses across GPU drivers."""
+    try:
+        result = subprocess.check_output(['ddcutil', 'detect', '--terse'],
+                                         text=True, stderr=subprocess.PIPE, timeout=30)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(error.stderr.strip() or 'DDC detection failed') from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('DDC detection timed out') from None
+    buses = {}
+    for block in re.split(r'(?m)^(?:Invalid display|Display \d+).*$', result):
+        bus = re.search(r'I2C bus:\s+/dev/i2c-(\d+)', block)
+        connector = re.search(r'DRM connector:\s+(card\S+)', block)
+        if bus and connector:
+            buses[connector[1]] = int(bus[1])
+    return buses
 
 
 def read_feature(command, code, *, maximum=False):
@@ -368,17 +389,14 @@ def run(args, parser):
     outputs = connected_outputs()
     if args.output is not None:
         outputs = [path for path in outputs if path.name == args.output]
-    if args.bus is not None:
-        outputs = [path for path in outputs if (path / 'ddc').resolve().name == f'i2c-{args.bus}']
+    buses = detected_buses() if outputs else {}
+    outputs = [path for path in outputs if path.name in buses
+               and (args.bus is None or buses[path.name] == args.bus)]
     if not outputs:
-        raise RuntimeError('No connected Dell U5226KW DDC output matches the selection (EDID DEL/439e)')
+        raise RuntimeError('No connected Dell U5226KW DDC output matches the selection')
     if len(outputs) != 1:
         raise RuntimeError('Multiple Dell U5226KW outputs; select --output: ' + ', '.join(path.name for path in outputs))
-    name = (outputs[0] / 'ddc').resolve().name
-    if not re.fullmatch(r'i2c-\d+', name):
-        raise RuntimeError(f'Cannot determine I2C bus for {outputs[0].name}')
-    bus = int(name[4:])
-    command = ['ddcutil', '--bus', str(bus)]
+    command = ['ddcutil', '--bus', str(buses[outputs[0].name])]
     if action == 'layout':
         run_layout(command, args.value, target=getattr(args, 'layout_input', None),
                    secondary=getattr(args, 'layout_secondary', None))

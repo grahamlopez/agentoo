@@ -10,9 +10,14 @@ from test_desktop_commands import load
 
 DISPLAY = load('display')
 EXTERNAL = DISPLAY.display_external
+DETECTED_BUSES = EXTERNAL.detected_buses
 
 class ExternalDisplay(unittest.TestCase):
     def setUp(self):
+        self.buses = {}
+        detection = patch.object(EXTERNAL, 'detected_buses', side_effect=lambda: self.buses)
+        detection.start()
+        self.addCleanup(detection.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -202,14 +207,13 @@ class ExternalDisplay(unittest.TestCase):
     def test_dell_identity_required_for_every_operation(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(EXTERNAL, 'DRM', Path(directory)):
             path = self.output(Path(directory), 'card0-DP-4', bus=13)
-            edid = bytearray(128)
-            edid[8:12] = bytes.fromhex('10ac9e43')
+            edid = bytearray((path / 'edid').read_bytes())
             (path / 'edid').write_bytes(edid)
             args = DISPLAY.build_parser().parse_args(['external', 'brightness', '--bus', '13'])
             with patch.object(EXTERNAL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as ddc:
                 self.assertEqual(EXTERNAL.run(args, None), 0)
             self.assertEqual(ddc.call_args.args[0][:3], ['ddcutil', '--bus', '13'])
-            edid[10] = 0
+            edid[8] = 0
             (path / 'edid').write_bytes(edid)
             for tokens in [('brightness', '40'), ('brightness',), ('volume', 'up'),
                            ('input', '0x19'), ('get', 'E9'), ('set', 'E9', '0'),
@@ -473,11 +477,28 @@ class ExternalDisplay(unittest.TestCase):
         (path / 'status').write_text(status)
         edid = bytearray(128)
         edid[8:12] = bytes.fromhex('10ac9e43')
+        edid[72:90] = b'\0\0\0\xfc\0DELL U5226KW\n'
         (path / 'edid').write_bytes(edid)
-        target = root / f'i2c-{bus}'
-        target.mkdir(exist_ok=True)
-        (path / 'ddc').symlink_to(target)
+        self.buses[name] = bus
         return path
+
+    def test_product_id_varies_without_ddc_link(self):
+        path = EXTERNAL.DRM / 'card0-DP-4'
+        for product in (0x439E, 0x439F):
+            edid = bytearray((path / 'edid').read_bytes())
+            edid[10:12] = product.to_bytes(2, 'little')
+            (path / 'edid').write_bytes(edid)
+            self.assertEqual(EXTERNAL.connected_outputs(), [path])
+        edid[77:90] = b'OTHER MONITOR'
+        (path / 'edid').write_bytes(edid)
+        self.assertEqual(EXTERNAL.connected_outputs(), [])
+
+    def test_detected_buses(self):
+        reply = ("Display 1\n   I2C bus: /dev/i2c-3\n   DRM connector: card0-DP-4\n"
+                 "Display 2\n   I2C bus: /dev/i2c-0\n   DRM connector: card1-HDMI-A-1\n"
+                 "Invalid display\n   I2C bus: /dev/i2c-9\n")
+        with patch.object(EXTERNAL.subprocess, 'check_output', return_value=reply):
+            self.assertEqual(DETECTED_BUSES(), {'card0-DP-4': 3, 'card1-HDMI-A-1': 0})
 
     def test_auto_selection_excludes_internal_disconnected_and_other_models(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(EXTERNAL, 'DRM', Path(directory)), \

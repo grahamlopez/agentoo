@@ -89,8 +89,10 @@ preserves the speaker state, as described below.
 Omit a value to read the setting. Unsupported features fail through ddcutil.
 Monitor modes such as HDR or automatic brightness may restrict manual settings.
 
-The command selects connected DRM connectors with a DDC link and Dell U5226KW
-EDID manufacturer/product `DEL/439e`. Internal eDP/LVDS/DSI panels and other
+The command selects connected DRM connectors with EDID manufacturer `DEL` and
+model name `DELL U5226KW`, then uses `ddcutil detect --terse` to map connectors
+to I2C buses. Product IDs vary by monitor input, and a DRM `ddc` link is not
+required. Internal eDP/LVDS/DSI panels and other
 external models are excluded. Exactly one connector must match, otherwise
 selection fails before a DDC command runs. Each operation except `list` accepts
 `--output card0-DP-4` or `--bus 16`, mutually exclusively; neither bypasses the
