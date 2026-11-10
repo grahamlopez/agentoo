@@ -209,18 +209,41 @@ if sys.argv[1] == 'item':
                 self.assertFalse(work.exists())
                 self.assertEqual(len(writes), 0 if cancelled else 1)
                 if writes:
-                    self.assertEqual(writes[0], (str(self.destination), b'fake secret bytes',
+                    self.assertEqual(writes[0], (str(self.destination), b'fake secret bytes\n',
                                                 pwd.getpwnam(self.user).pw_uid, pwd.getpwnam(self.user).pw_gid))
 
-    def test_field_output_preserves_stored_whitespace(self):
-        values = (b'owner-guid', b'PEM\n', b'PEM\n\n', b'CRLF\r\n',
-                  b' leading and trailing \t ', b'', 'caf\u00e9'.encode())
-        for value in values:
-            with self.subTest(value=value):
-                provider = self.root / 'pass-cli'
-                provider.write_text('#!/usr/bin/env python3\nimport sys\n'
-                                    f'sys.stdout.buffer.write({value!r} + b"\\n")\n')
-                self.assertEqual(MODULE['read_field']('pass://vault/item/field', os.environ.copy()), value)
+    def test_field_and_uuid_file_contents(self):
+        guid = b'12345678-abcd-4321-9876-123456789abc'
+        cases = [('field', value, value) for value in
+                 (b'PEM\n', b'PEM\n\n', b'CRLF\r\n', b'no newline',
+                  b' leading and trailing \t ', 'caf\u00e9'.encode())]
+        cases += [('uuid', value, guid) for value in
+                  (guid, guid + b'\n', b' \t' + guid.upper() + b'\r\n\n')]
+        cases += [('uuid', value, None) for value in
+                  (b'', b'not-a-uuid', guid + b'\nextra', b'\xff')]
+        cases.append(('field', b'', None))
+        for method, value, expected in cases:
+            with self.subTest(method=method, value=value):
+                self.profile.write_text(f'secret user {self.destination} {method} pass://vault/item/field\n')
+                self.destination.write_bytes(b'existing content')
+                def provider(args, env, **kwargs):
+                    return value if args[0] == 'item' else b''
+                work = self.root / 'work'
+                work.mkdir()
+                with patch.dict(MODULE['main'].__globals__, run_proton=provider), \
+                     patch.object(MODULE['os'], 'geteuid', return_value=0), \
+                     patch.object(MODULE['os'], 'fchown'), \
+                     patch.object(MODULE['tempfile'], 'mkdtemp', return_value=str(work)), \
+                     patch.object(MODULE['sys'].stdin, 'isatty', return_value=True):
+                    status, out, err = self.main(['secret', '--yes'])
+                self.assertEqual(status, 1 if expected is None else 0, err)
+                self.assertEqual(out, '')
+                self.assertEqual(self.destination.read_bytes(),
+                                 b'existing content' if expected is None else expected)
+                if method == 'uuid' and expected is None:
+                    self.assertIn('invalid UUID', err)
+                    self.assertNotIn('not-a-uuid', err)
+                self.assertFalse(work.exists())
 
     def test_failed_logout_still_removes_the_local_session(self):
         work = self.root / 'work'

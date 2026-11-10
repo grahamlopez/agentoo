@@ -39,10 +39,15 @@ Existing directories keep their ownership and permissions. Missing parent
 directories are created with the file's owner and group, mode `0700` for user
 destinations and `0755` for root destinations.
 Destination paths cannot contain whitespace; source references may.
-Field retrieval removes the single newline added by Proton Pass CLI's display
-output, preserving the stored field's own line breaks and trailing whitespace.
-Store exact file contents in the vault, including any intended final newline;
-do not add or remove newlines to compensate for CLI output.
+The `field` method writes Proton Pass CLI output unchanged, including final
+newlines. Remove extra newlines previously added to compensate for Agentoo
+stripping a final newline; retain the line breaks required by the file format.
+
+The `uuid` method retrieves an ordinary Proton Pass text field, strips surrounding
+whitespace, validates it as a UUID, and writes its canonical lowercase, hyphenated
+form without a final newline. Use it for sbctl's `/var/lib/sbctl/GUID`. Invalid
+UUIDs fail before replacing that destination file. `uuid` is an Agentoo profile
+method, not a Proton Pass field type.
 
 For example, the SSH row retrieves the `private key` field and writes it to
 `~/.ssh/id_ed25519`. The example `github` category uses the `field` method and writes only a token;
@@ -63,8 +68,8 @@ including `authorized_keys` if you add such a row; there is no append or merge.
 
 Templates contain `{{ pass://vault/item/field }}` expressions. Proton performs
 text substitution, not JSON or shell escaping. Make the template and stored
-values appropriate for the destination format. No format-specific validation
-is performed by this first version.
+values appropriate for the destination format. Template output is installed
+without format-specific validation.
 
 Each invocation uses a private `/run` directory and the CLI filesystem key
 provider, keeping the temporary session and its key together in memory-backed
