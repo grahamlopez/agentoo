@@ -43,8 +43,9 @@ and its Dracut configuration; Agentoo does not duplicate those settings.
 
 Keep broad `linux-firmware` coverage. AMD microcode comes from that package;
 `--microcode auto` detects AMD when installation runs on Bequiet, or select
-`--microcode amd` explicitly. Firmware trimming and custom-kernel onboarding
-are deferred; no Bequiet custom-kernel fragment is supplied.
+`--microcode amd` explicitly. Firmware trimming remains deferred. Custom-kernel onboarding is defined and
+tracked in the [active work card](../../kanban/Open/026-bequiet-custom-kernel.md).
+No Bequiet custom-kernel fragment is supplied yet.
 
 ## Devices and installation acceptance
 
