@@ -20,9 +20,11 @@ Configure on the destination host. The default target comes from the selected
 Agentoo Portage profile and chooses the tracked native Kconfig fragment
 `/etc/agentoo/kernel/hosts/<name>.config`. `--target-host NAME` overrides the
 selection, not the destination hardware or storage. Missing or malformed profiles
-fail before workspace/source changes. Thinktop, flattop and startop profiles are
-supplied; Startop has build/boot and peripheral acceptance. Other hosts
-need reviewed profiles first.
+fail before workspace/source changes. Thinktop, flattop, startop and bequiet
+fragments are supplied; Startop has build/boot and peripheral acceptance.
+Bequiet's module-enabled build/install and signing workflow remains in progress
+in the [active card](../kanban/Open/026-bequiet-custom-kernel.md).
+Other hosts need reviewed fragments first.
 
 The starting config supplies the shared driver/capability union. Host fragments
 set explicit embedded firmware names, their absolute directory, CPU microcode
@@ -32,8 +34,10 @@ snapshots, but their command line and embedded firmware are replaced.
 The shared snapshot was checked against the running minimal-initramfs v0.4
 config and resolved with native Kconfig. Its archive path and firmware list are
 empty; the workspace and selected host fragment provide those inputs.
-Adding a host must not prune the shared driver union. A future bequiet profile
-can enable modules for NVIDIA; external-module building is still separate work.
+Adding a host must not prune the shared driver union. Bequiet's fragment enables
+modules and signature verification for NVIDIA while preserving built-in drivers.
+Persistent signing trust and external-module integration are still pending;
+the fragment alone does not provide a boot-ready signed NVIDIA workflow.
 
 Config inspects the mounted root through findmnt, lsblk and sysfs. The supported
 layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed by a GPT
