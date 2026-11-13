@@ -7,11 +7,12 @@ generator, `/init` source, udev-handoff helper and storage smoke test under
 implementation sources live in the overlay's
 `sys-kernel/agentoo-initramfs/files/` directory.
 
-The package supports built-in kernel drivers, one LUKS2 partition, Btrfs
+The package supports built-in boot drivers, one LUKS2 partition, Btrfs
 subvolume `@` and `/sbin/init` on the real root. Internal and kernel-supported
 USB keyboards/receivers work through a compiled console keymap. Bluetooth,
-initramfs udev/firmware loading, modules, resume, token unlock and boot animations
-are not implemented.
+initramfs udev/firmware loading, early module loading, resume, token unlock and boot animations
+are not implemented. Kernel module support is allowed when the required boot
+drivers remain built in; NVIDIA can load after the real-root handoff.
 
 ## Package and boot-image lifecycle
 

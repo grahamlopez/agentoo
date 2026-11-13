@@ -1,4 +1,5 @@
 # Distribution-module rebuilding is enabled by shared kernel policy.
-x11-drivers/nvidia-drivers modules tools wayland
+# Enable modules-sign after unsigned kernel/hardware acceptance and signer setup.
+x11-drivers/nvidia-drivers modules -modules-sign tools wayland
 # Blackwell requires open modules; >=595 provides only that variant.
 <x11-drivers/nvidia-drivers-595 kernel-open

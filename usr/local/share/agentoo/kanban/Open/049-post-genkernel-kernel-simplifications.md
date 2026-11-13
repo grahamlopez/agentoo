@@ -5,8 +5,9 @@ Status: Open — implementation complete; host acceptance pending
 
 ## Implemented 2026-11-08
 
-- Kernel make receives the recorded upstream EXTRAVERSION as a command-line
-  assignment. Config no longer writes or backs up the source Makefile.
+- Config does not write or back up the source Makefile. Bequiet's native module
+  integration now preserves source EXTRAVERSION without a command-line override;
+  see [card 026](026-bequiet-custom-kernel.md) for its current workflow and checks.
 - Custom command lines default to `ro console=tty0 loglevel=5`; `config --cmdline TEXT` explicitly
   selects other policy, including arguments required by supplied archives.
   Removed crypt_root/root_trim generation and command-line style handling.

@@ -18,8 +18,9 @@ Their shared Intel laptop profile enables the native `savedconfig` USE flag
 through `package.use`; the common profile defaults to `-savedconfig`. Native
 `/etc/portage/package.use` settings override these profile defaults. Apply the
 matching list locally before rebuilding. Other targets retain broad coverage.
-SOF audio firmware, CPU microcode and wireless regulatory data belong to separate
-packages and are not trimmed by this list. Installed files, initramfs copies and
+SOF audio firmware, Intel microcode and wireless regulatory data belong to separate
+packages and are not trimmed by this list. AMD microcode belongs to linux-firmware
+and must be retained in the AMD host savedconfig. Installed files, initramfs copies and
 firmware embedded in a custom kernel are separate maintenance concerns.
 
 ## Apply or revise the selection

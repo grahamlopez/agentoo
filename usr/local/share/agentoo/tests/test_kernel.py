@@ -24,19 +24,23 @@ TEST_LUKS_UUID = '22222222-2222-4222-8222-222222222222'
 TEST_PARTUUID = '33333333-3333-4333-8333-333333333333'
 TEST_CMDLINE = 'ro console=tty0 loglevel=5'
 
-
 class KernelTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+        package = patch.object(kernel.kernel_modules, 'package', return_value=None)
+        self.module_package = package.start()
+        self.addCleanup(package.stop)
         self.sources = self.root / 'sources'
         (self.sources / 'scripts').mkdir(parents=True)
-        (self.sources / 'Makefile').write_text('VERSION = 6\nPATCHLEVEL = 18\nSUBLEVEL = 57\nEXTRAVERSION = -gentoo\nNAME = Test\n')
+        (self.sources / 'Makefile').write_text('VERSION = 6\nPATCHLEVEL = 18\nSUBLEVEL = 57\nEXTRAVERSION = \nNAME = Test\n')
         self.start = self.root / 'starting.config'
         stale_cmdline = 'root=UUID=' + TEST_PARTUUID + ' console=ttyS0'
         self.start.write_text('CONFIG_LOCALVERSION="-old"\nCONFIG_CMDLINE=' + json.dumps(stale_cmdline) +
-                             '\n# CONFIG_MODULES is not set\nCONFIG_INITRAMFS_SOURCE="/missing/old-build.cpio"\n')
+                             '\n# CONFIG_MODULES is not set\nCONFIG_INITRAMFS_SOURCE="/missing/old-build.cpio"\n' +
+                             ''.join(f'CONFIG_{name}=y\n' for name in kernel.kernel_host.MINIMAL_BUILTINS) +
+                             'CONFIG_BLK_DEV_NVME=y\nCONFIG_FB_EFI=y\n')
         self.bin = self.root / 'bin'
         self.bin.mkdir()
         self.log = self.root / 'calls'
@@ -47,7 +51,11 @@ with open(os.environ['KERNEL_TEST_LOG'], 'a') as f: f.write(json.dumps(['make', 
 out = pathlib.Path(next(x[2:] for x in a if x.startswith('O=')))
 config = (out / '.config').read_text()
 label = re.search(r'^CONFIG_LOCALVERSION="(.*)"$', config, re.M)[1]
-release = '6.18.57' + label
+source = pathlib.Path(a[a.index('-C') + 1])
+extra = re.search(r'^EXTRAVERSION = *(.*)$', (source / 'Makefile').read_text(), re.M)[1].strip()
+version = '.'.join(re.search(r'^' + name + r' = *(.*)$', (source / 'Makefile').read_text(), re.M)[1].strip()
+                   for name in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL'))
+release = version + extra + label
 if 'kernelrelease' in a: print(release)
 elif 'modules_install' in a:
     prefix = pathlib.Path(next(x.split('=', 1)[1] for x in a if x.startswith('INSTALL_MOD_PATH=')))
@@ -147,7 +155,12 @@ p.write_text(text)
                               TEST_MODULES_ROOT=str(kernel.MODULES_ROOT))
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.workspaces = patch.object(kernel, 'WORKSPACES', self.root)
+        ram = self.root / 'ram'
+        ram.mkdir()
+        self.workspaces = patch.object(kernel, 'WORKSPACES', ram)
+        retained = patch.object(kernel, 'RETAINED_WORKSPACES', self.root)
+        retained.start()
+        self.addCleanup(retained.stop)
         self.workspaces.start()
         self.addCleanup(self.workspaces.stop)
         self.work = self.root / '6.18.57-test'
@@ -167,7 +180,7 @@ p.write_text(text)
             change.start()
             self.addCleanup(change.stop)
         self.tool('findmnt', f'print({json.dumps({"filesystems": [{"source": "/dev/mapper/cryptroot[/@]", "fstype": "btrfs", "fsroot": "/@"}]})!r})')
-        self.tool('lsblk', f'print({json.dumps({"blockdevices": [{"path": "/dev/mapper/cryptroot", "kname": "/dev/dm-0", "type": "crypt", "fstype": "btrfs", "uuid": TEST_ROOT_UUID, "children": [{"type": "part", "fstype": "crypto_LUKS", "uuid": TEST_LUKS_UUID, "partuuid": TEST_PARTUUID}]}]})!r})')
+        self.tool('lsblk', f'print({json.dumps({"blockdevices": [{"path": "/dev/mapper/cryptroot", "kname": "/dev/dm-0", "type": "crypt", "fstype": "btrfs", "uuid": TEST_ROOT_UUID, "children": [{"type": "part", "fstype": "crypto_LUKS", "uuid": TEST_LUKS_UUID, "partuuid": TEST_PARTUUID, "children": [{"type": "disk", "tran": "nvme"}]}]}]})!r})')
 
     def tool(self, name, text):
         path = self.bin / name
@@ -198,6 +211,15 @@ p.write_text(text)
         archive = self.root / 'custom.cpio'
         archive.write_text('custom input')
         self.invoke('build', '--label', 'test', '--initramfs', str(archive), '--yes')
+
+    def prepare_nvidia(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+        self.module_package.return_value = dict(cpv='x11-drivers/nvidia-drivers-595.104.02', version='595.104.02')
+        for name in ('emerge', 'modinfo'):
+            self.tool(name, 'pass')
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        return kernel.load(self.work, 'test', completed=True)
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
@@ -249,14 +271,27 @@ p.write_text(text)
         self.assertEqual(values['CONFIG_INITRAMFS_SOURCE'], json.dumps(str(self.work / 'empty-initramfs')))
         self.assertEqual(list((self.work / 'empty-initramfs').iterdir()), [])
         self.assertEqual(data['identity']['partuuid'], TEST_PARTUUID)
+        self.assertEqual(data['identity']['transport'], 'nvme')
         self.assertEqual(data['host'], 'testhost')
         self.assertEqual(values['CONFIG_LOCALVERSION'], '"-test"')
         self.assertEqual(values['CONFIG_IKCONFIG_PROC'], 'y')
-        self.assertIn('EXTRAVERSION = -gentoo\n', (self.sources / 'Makefile').read_text())
+        self.assertIn('EXTRAVERSION = \n', (self.sources / 'Makefile').read_text())
         self.assertFalse(list(self.sources.glob('Makefile.agentoo-*.bak')))
-        self.assertTrue(all('EXTRAVERSION=' in call for call in self.calls() if call[0] == 'make'))
+        self.assertFalse(any(any(arg.startswith('EXTRAVERSION=') for arg in call) for call in self.calls() if call[0] == 'make'))
         with self.assertRaisesRegex(RuntimeError, 'empty or absent'):
             kernel.configure(kernel.build_parser().parse_args(['config', '--label', 'test', '--config', str(self.start), '--sources', str(self.sources), '--accept-defaults', '--yes']))
+
+    def test_native_gentoo_source_suffix_is_preserved_without_make_overrides(self):
+        source = self.sources / 'Makefile'
+        source.write_text(source.read_text().replace('EXTRAVERSION = \n', 'EXTRAVERSION = -gentoo\n'))
+        original = source.read_bytes()
+        self.prepare()
+        self.work = self.root / '6.18.57-gentoo-test'
+        self.invoke('build', '--label', 'test', '--yes')
+        data = kernel.load(self.work, 'test', completed=True)
+        self.assertEqual(data['release'], '6.18.57-gentoo-test')
+        self.assertEqual(source.read_bytes(), original)
+        self.assertFalse(any(any(arg.startswith('EXTRAVERSION=') for arg in call) for call in self.calls() if call[0] == 'make'))
 
     def test_diff_long_values_use_separate_lines_and_other_changes_remain_visible(self):
         before = {'CONFIG_CMDLINE': '"root=old ro"', 'CONFIG_EXTRA_FIRMWARE': '"old.bin common.bin"',
@@ -305,7 +340,7 @@ p.write_text(text)
                                                     '--sources', str(self.sources), '--accept-defaults', '--yes', *suffix])
             with self.assertRaises((ValueError, RuntimeError)):
                 kernel.configure(args)
-        self.assertIn('EXTRAVERSION = -gentoo\n', (self.sources / 'Makefile').read_text())
+        self.assertIn('EXTRAVERSION = \n', (self.sources / 'Makefile').read_text())
         self.assertFalse(self.work.exists())
 
     def test_profile_overrides_are_frozen_and_enforced_during_build(self):
@@ -414,6 +449,78 @@ p.write_text(text)
         self.assertEqual(call[call.index('--partuuid') + 1], TEST_PARTUUID)
         self.assertEqual(call[call.index('--mapper') + 1], 'cryptroot')
 
+    def test_ram_build_retains_artifacts_and_stages_persistent_links(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--yes')
+        data = kernel.load(self.work, 'test', completed=True)
+        output, _ = kernel.paths(self.work, data)
+        calls = self.calls()
+        compile = next(call for call in calls if call[0] == 'make' and any(arg.startswith('-j') for arg in call))
+        ram = kernel.WORKSPACES / data['release']
+        self.assertIn(f'O={ram}/kernel/{data["release"]}', compile)
+        self.assertFalse(ram.exists())
+        self.assertTrue(any(call[0] == 'make' and 'prepare' in call and f'O={output}' in call for call in calls))
+        self.assertEqual((kernel.staged_modules(self.work, data) / 'build').resolve(), output)
+        archive = Path(json.loads(kernel.read_config(output / '.config')['CONFIG_INITRAMFS_SOURCE']))
+        self.assertTrue(archive.is_file())
+        self.assertTrue(archive.is_relative_to(self.work))
+
+    def test_explicit_build_directory_compiles_in_place(self):
+        self.prepare()
+        self.invoke('build', '--label', 'test', '--build-dir', str(self.work), '--yes')
+        data = kernel.load(self.work, 'test', completed=True)
+        output, _ = kernel.paths(self.work, data)
+        compile = next(call for call in self.calls() if call[0] == 'make' and any(arg.startswith('-j') for arg in call))
+        self.assertIn(f'O={output}', compile)
+        self.assertEqual(list(kernel.WORKSPACES.iterdir()), [])
+        self.assertFalse(any(call[0] == 'cp' for call in self.calls()))
+
+    def test_failed_ram_compile_leaves_ram_workspace_for_inspection(self):
+        self.prepare()
+        original_make = kernel.make
+        def failing_make(work, data, *arguments, **kwargs):
+            if any(arg.startswith('-j') for arg in arguments):
+                output, _ = kernel.paths(work, data)
+                (output / 'partial.o').write_text('interrupted object')
+                raise RuntimeError('compile interrupted')
+            return original_make(work, data, *arguments, **kwargs)
+        args = kernel.build_parser().parse_args(['build', '--label', 'test', '--yes'])
+        with tempfile.TemporaryFile(mode='w+') as errors, patch.object(kernel, 'make', side_effect=failing_make), redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'compile interrupted'):
+                kernel.build(args)
+        data = kernel.load(self.work, 'test')
+        output, _ = kernel.paths(self.work, data)
+        ram = kernel.WORKSPACES / data['release']
+        self.assertEqual((ram / 'kernel' / data['release'] / 'partial.o').read_text(), 'interrupted object')
+        self.assertFalse((output / 'partial.o').exists())
+        self.assertFalse(data['built'])
+        with self.assertRaisesRegex(RuntimeError, 'build incomplete'):
+            kernel.load(self.work, 'test', completed=True)
+        # An explicitly selected workspace can be built in place for manual retry.
+        self.invoke('build', '--label', 'test', '--build-dir', str(ram), '--yes')
+        kernel.load(ram, 'test', completed=True)
+        self.assertFalse(kernel.load(self.work, 'test')['built'])
+
+    def test_failed_copy_back_preserves_ram_files_and_blocks_implicit_overwrite(self):
+        self.prepare()
+        original_run = kernel.run
+        def failing_copy(command, **kwargs):
+            if command[0] == 'cp' and command[-1] == self.work:
+                raise RuntimeError('retention failed')
+            return original_run(command, **kwargs)
+        args = kernel.build_parser().parse_args(['build', '--label', 'test', '--yes'])
+        with tempfile.TemporaryFile(mode='w+') as errors, patch.object(kernel, 'run', side_effect=failing_copy), redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'retention failed'):
+                kernel.build(args)
+        ram = kernel.WORKSPACES / '6.18.57-test'
+        self.assertTrue((ram / 'kernel/6.18.57-test/arch/x86/boot/bzImage').is_file())
+        self.assertFalse(kernel.load(self.work, 'test')['built'])
+        metadata = (self.work / kernel.METADATA).read_bytes()
+        with self.assertRaisesRegex(RuntimeError, 'RAM workspace already exists'):
+            kernel.build(args)
+        self.assertEqual((self.work / kernel.METADATA).read_bytes(), metadata)
+
     def test_missing_initramfs_inputs_fail_before_compilation_or_workspace_changes(self):
         self.prepare()
         metadata = (self.work / kernel.METADATA).read_bytes()
@@ -432,13 +539,39 @@ sys.exit(2)
         calls = self.calls()[start:]
         self.assertFalse(any('modules_install' in call or any(arg.startswith('-j') for arg in call) for call in calls))
 
-    def test_minimal_builder_rejects_module_kernel_before_compilation(self):
-        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
+    def test_minimal_builder_rejects_modular_boot_driver_before_compilation(self):
+        self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y').replace('CONFIG_DM_CRYPT=y', 'CONFIG_DM_CRYPT=m'))
         self.prepare()
         args = kernel.build_parser().parse_args(['build', '--label', 'test', '--yes'])
-        with self.assertRaisesRegex(RuntimeError, 'built-in drivers'):
+        with self.assertRaisesRegex(RuntimeError, 'CONFIG_DM_CRYPT=y'):
             kernel.build(args)
         self.assertFalse(any('modules_install' in call for call in self.calls()))
+
+    def test_minimal_config_checks_recorded_storage_and_framebuffer(self):
+        values = kernel.read_config(self.start)
+        with self.assertRaisesRegex(RuntimeError, 'CONFIG_SATA_AHCI=y'):
+            kernel.kernel_host.check_minimal_config(values, {'transport': 'sata'})
+        with self.assertRaisesRegex(RuntimeError, 'root transport'):
+            kernel.kernel_host.check_minimal_config(values, {'transport': None})
+        values['CONFIG_FB_EFI'] = 'm'
+        with self.assertRaisesRegex(RuntimeError, 'framebuffer'):
+            kernel.kernel_host.check_minimal_config(values, {'transport': 'nvme'})
+
+    def test_minimal_requirements_are_rechecked_after_kconfig_resolution(self):
+        self.prepare()
+        original_make = kernel.make
+        def resolving_make(work, data, *arguments, **kwargs):
+            result = original_make(work, data, *arguments, **kwargs)
+            if 'olddefconfig' in arguments:
+                output, _ = kernel.paths(work, data)
+                config = output / '.config'
+                config.write_text(config.read_text().replace('CONFIG_BLK_DEV_NVME=y', 'CONFIG_BLK_DEV_NVME=m'))
+            return result
+        args = kernel.build_parser().parse_args(['build', '--label', 'test', '--yes'])
+        with tempfile.TemporaryFile(mode='w+') as errors, patch.object(kernel, 'make', side_effect=resolving_make), redirect_stderr(errors):
+            with self.assertRaisesRegex(RuntimeError, 'CONFIG_BLK_DEV_NVME=y'):
+                kernel.build(args)
+        self.assertFalse(any(any(arg.startswith('-j') for arg in call) for call in self.calls()))
 
     def test_custom_archive_replaces_minimal_builder_and_module_config_is_retained(self):
         self.start.write_text(self.start.read_text().replace('# CONFIG_MODULES is not set', 'CONFIG_MODULES=y'))
@@ -515,6 +648,53 @@ sys.exit(2)
         (modules / 'modules.builtin').unlink()
         with self.assertRaisesRegex(RuntimeError, 'missing modules.builtin'):
             kernel.load(self.work, 'test', completed=True)
+
+    def test_unsigned_nvidia_bringup_needs_no_signing_inputs(self):
+        import shutil
+        shutil.rmtree(self.root / 'signing')
+        self.prepare_nvidia()
+        destination = self.fake_esp()
+        with patch.object(kernel.kernel_modules, 'rebuild') as rebuild:
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--unsigned', '--yes')
+        rebuild.assert_called_once()
+        self.assertFalse(any(call[0] in ('sbsign', 'sbverify', 'openssl') for call in self.calls()))
+
+    def test_nvidia_rebuild_finishes_before_image_activation(self):
+        data = self.prepare_nvidia()
+        destination = self.fake_esp()
+        destination.mkdir(parents=True)
+        image = destination / ('kernel-' + data['release'] + '.efi')
+        image.write_text('previous image')
+        def rebuilding(package, sources, output, release, modules_root, run):
+            self.assertEqual(release, data['release'])
+            self.assertEqual(sources, self.sources)
+            self.assertEqual(image.read_text(), 'previous image')
+            self.assertEqual((modules_root / release / 'build').resolve(), output)
+            (modules_root / release / 'nvidia.ko').write_text('verified external module')
+        with patch.object(kernel.kernel_modules, 'rebuild', side_effect=rebuilding) as rebuild:
+            self.invoke('install', '--label', 'test', '--dest', str(destination), '--yes')
+        rebuild.assert_called_once()
+        self.assertEqual((kernel.MODULES_ROOT / data['release'] / 'nvidia.ko').read_text(), 'verified external module')
+        self.assertNotEqual(image.read_text(), 'previous image')
+
+    def test_nvidia_failure_restores_previous_modules_and_preserves_image(self):
+        data = self.prepare_nvidia()
+        destination = self.fake_esp()
+        destination.mkdir(parents=True)
+        image = destination / ('kernel-' + data['release'] + '.efi')
+        image.write_text('previous image')
+        installed = kernel.MODULES_ROOT / data['release']
+        installed.mkdir(parents=True)
+        (installed / 'nvidia.ko').write_text('previous NVIDIA modules')
+        args = kernel.build_parser().parse_args(['install', '--label', 'test', '--dest', str(destination), '--yes'])
+        with patch.object(kernel.kernel_modules, 'rebuild', side_effect=RuntimeError('NVIDIA failed')):
+            with tempfile.TemporaryFile(mode='w+') as errors, redirect_stderr(errors):
+                with self.assertRaisesRegex(RuntimeError, 'NVIDIA failed'):
+                    kernel.install(args)
+        self.assertEqual(image.read_text(), 'previous image')
+        self.assertEqual((installed / 'nvidia.ko').read_text(), 'previous NVIDIA modules')
+        self.assertTrue(list(kernel.MODULES_ROOT.glob('.agentoo-*/failed-modules')))
+        self.assertFalse(any(call[0] == 'efibootmgr' for call in self.calls()))
 
     def test_install_signs_by_default_without_changing_workspace(self):
         args, image, installed = self.prepare_install(existing=True)
@@ -644,8 +824,6 @@ sys.exit(2)
                 if version == '6.18.58':
                     makefile = self.sources / 'Makefile'
                     makefile.write_text(makefile.read_text().replace('SUBLEVEL = 57', 'SUBLEVEL = 58'))
-                    make_tool = self.bin / 'make'
-                    make_tool.write_text(make_tool.read_text().replace("'6.18.57' + label", "'6.18.58' + label"))
                 for name, text in host_tools.items():
                     (self.bin / name).write_text(text)
                 work = self.root / f'{version}-{label}'
@@ -956,7 +1134,6 @@ sys.exit(2)
                         self.assertIn('--full-dev-path', creates[0])
                     self.assertIn(['efibootmgr', '--bootorder', '0004,0003,0001'], commands)
                     self.assertFalse(any('--bootnext' in c for c in commands))
-
 
 if __name__ == '__main__':
     unittest.main()

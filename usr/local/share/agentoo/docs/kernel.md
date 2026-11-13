@@ -22,8 +22,8 @@ Agentoo Portage profile and chooses the tracked native Kconfig fragment
 selection, not the destination hardware or storage. Missing or malformed profiles
 fail before workspace/source changes. Thinktop, flattop, startop and bequiet
 fragments are supplied; Startop has build/boot and peripheral acceptance.
-Bequiet's module-enabled build/install and signing workflow remains in progress
-in the [active card](../kanban/Open/026-bequiet-custom-kernel.md).
+Bequiet's unsigned module-enabled build/install implementation awaits host
+acceptance in the [active card](../kanban/Open/026-bequiet-custom-kernel.md).
 Other hosts need reviewed fragments first.
 
 The starting config supplies the shared driver/capability union. Host fragments
@@ -36,8 +36,8 @@ config and resolved with native Kconfig. Its archive path and firmware list are
 empty; the workspace and selected host fragment provide those inputs.
 Adding a host must not prune the shared driver union. Bequiet's fragment enables
 modules and signature verification for NVIDIA while preserving built-in drivers.
-Persistent signing trust and external-module integration are still pending;
-the fragment alone does not provide a boot-ready signed NVIDIA workflow.
+NVIDIA bring-up is unsigned. Module signing and subsequent driver-update
+maintenance are deferred until after the first boot/hardware acceptance.
 
 Config inspects the mounted root through findmnt, lsblk and sysfs. The supported
 layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed by a GPT
@@ -92,18 +92,28 @@ plain or gzipped config. Sources default to `/usr/src/linux`; `--sources DIR`
 selects another tree. The command resolves the source symlink once and records
 its concrete path for subsequent steps.
 
-The default workspace is `/dev/shm/<version>-<label>`. It must be absent or
-empty. `--build-dir DIR` chooses another location. Build storage must permit
-execution and writes; a read-only or `noexec` `/dev/shm` requires another location.
-Kernel outputs and initramfs working directories live beneath that workspace.
-The workspace normally disappears at reboot; no persistent build archive or
-last-workspace pointer is created.
+Default workspaces live under
+`${XDG_STATE_HOME:-$HOME/.local/state}/agentoo/kernel/<version>-<label>` and survive
+reboot. Config requires an absent or empty workspace. Default builds copy the
+workspace to `/dev/shm/<release>`, compile there, retain the results on disk and
+remove the RAM copy. Native `make prepare` repairs the retained output Makefile;
+module staging then records the persistent build link and final manifest. The
+installed source tree must also remain available for NVIDIA rebuilds.
+
+`--build-dir DIR` selects a workspace explicitly and builds directly there. Pass
+it to each operation for a workspace outside the default root. This also provides
+a direct build path when `/dev/shm` is read-only, `noexec` or too small. Both
+workspace and compilation storage must permit execution and writes. A pre-existing
+RAM work directory stops a default build before changes; inspect leftovers from
+copy failures before retrying. There is no last-workspace pointer or archive service.
 
 After showing the plan and confirming, config:
 
 1. Saves the starting config inside the workspace.
-2. Records the upstream EXTRAVERSION without Gentoo's suffix and passes it to
-   every kernel make invocation. The source Makefile remains untouched.
+2. Preserves the source's native version, including Gentoo's suffix. The source
+   Makefile remains untouched; no EXTRAVERSION override is passed to make.
+   Gentoo sources therefore produce releases such as `6.18.62-gentoo-<label>`,
+   which native Portage module-version detection also recognizes.
 3. Sets `CONFIG_LOCALVERSION="-<label>"`, disables automatic SCM release suffixes,
    and enables EFI-stub, initramfs and `/proc/config.gz` support. It replaces
    embedded firmware and command-line settings with the selected host inputs,
@@ -166,13 +176,13 @@ if the candidate fails.
 
 ## Build
 
-Build and install require `--label`. By default they search `/dev/shm` for a
-workspace ending in that exact label, validate its metadata and show the selected
-directory for confirmation. Missing or ambiguous viable matches fail with an
-explanation. `--build-dir DIR` selects a specific workspace and still requires a
-matching label. Build requires the source Makefile to match the one recorded by config; this
-check does not fingerprint every source file or patch. Install validates the
-completed artifacts and does not require the source tree.
+Build, install and modules require `--label`. By default they search the persistent
+workspace root for a directory ending in that exact label, validate its metadata
+and show the selected directory for confirmation. Missing or ambiguous viable
+matches fail. `--build-dir DIR` selects a specific workspace and still requires a
+matching label. Build checks the recorded source Makefile; it does not fingerprint
+every source file or patch. Install validates completed artifacts and needs the
+retained source tree when NVIDIA rebuilding is selected.
 
 ```sh
 agentoo kernel build --label agentoo-v0.4 --build-dir /path/to/workspace
@@ -211,8 +221,11 @@ is no need to rerun config or discard existing kernel objects.
 
 The generator receives explicit `--partuuid`, `--mapper` and `--keymap` arguments
 from the identity recorded by config. It does not query the current Portage
-profile or rediscover storage. The default requires `CONFIG_MODULES=n` and
-built-in boot drivers. See the [initramfs guide](initramfs.md) for the package
+profile or rediscover storage. The default requires built-in boot capabilities; `CONFIG_MODULES=y` is allowed.
+The recorded root transport must be NVMe or AHCI SATA, with its driver built in.
+The command also checks built-in device-mapper/AES-XTS/Btrfs, API filesystems,
+ELF execution, GPT support, USB/xHCI/HID input and a framebuffer console.
+These checks run before generation and again after Kconfig resolution. See the [initramfs guide](initramfs.md) for the package
 boundary, standalone development and smoke testing.
 
 Initramfs-only changes still require kernel build/install because the archive is
@@ -220,8 +233,8 @@ embedded. Reuse the configured workspace for incremental make; unchanged kernel
 objects can be reused, while the archive and affected kernel image are rebuilt.
 Emerging the package alone does not update an existing boot image.
 
-Module-enabled configs require an explicitly supplied archive. External NVIDIA
-module rebuilding is not implemented.
+Other early-boot driver/unlock requirements need an explicitly supplied archive.
+NVIDIA loads after real-root handoff; it does not require initramfs module loading.
 
 ```sh
 agentoo kernel build --label agentoo-v0.4 --initramfs /path/to/custom.cpio
@@ -235,7 +248,10 @@ After compilation and module staging, build checks release consistency and
 records the completed config/image hashes and a manifest of staged module files and symlinks in the workspace. Before recording
 the manifest, staged directories are normalized to `0755` and files to `0644`;
 symlinks are preserved. It prints the final `bzImage` path on stdout. Interrupted builds retain
-their workspace for inspection/retry; install rejects incomplete or changed
+the RAM directory for inspection; partial compile results are not copied back.
+Remove or relocate that directory before retrying a default build. Completed
+builds are copied back before RAM cleanup; a failed copy leaves the RAM directory
+available and the persistent workspace incomplete; install rejects incomplete or changed
 config/image pairs or changed staged modules. Workspaces built before module
 manifests were introduced must be rebuilt before installation. The final config remains available for manual copying; there
 is no second export prompt.
@@ -272,8 +288,9 @@ backups use the same timestamp beside their respective live paths.
 Install copies the validated staged module tree into a temporary root under
 `/lib/modules`, then runs native `depmod --basedir <temporary-root> -a <release>`
 with umask `022`. This produces readable indexes before changing the installed
-tree, including built-in metadata with `CONFIG_MODULES=n`. It does not rerun make
-or require the original sources. The image is also copied to a temporary name
+tree, including built-in metadata with `CONFIG_MODULES=n`. In-tree module
+activation does not rerun make; NVIDIA rebuilding requires the recorded sources
+and output. The image is also copied to a temporary name
 on the ESP before activation. Unless `--unsigned` was supplied, that copy is
 signed, verified against the expected certificate using `sbverify --cert`, and
 set to mode `0644`. The workspace image and recorded build hashes stay unchanged.
@@ -281,8 +298,14 @@ Signing or verification failure leaves the live image and module tree untouched
 and performs no firmware registration; remaining staging files are retained.
 
 The complete module tree replaces `/lib/modules/<release>`; files absent from
-the build, including separately installed external modules, are removed from
-the live tree. Rebuild required external modules manually for the new build.
+the staged build are removed from the live tree. For a module-enabled kernel with
+the packaged NVIDIA driver selected, installation then rebuilds that exact installed
+package from source against the recorded kernel source/output tree. Native Portage
+policy supplies module processing and depmod. The command checks module versions,
+release compatibility and installed paths before activating the image. If NVIDIA
+rebuilding or these checks fail, the previous module
+tree is restored, failed files are retained for inspection and the image/boot
+entries remain unchanged. Other external-module packages remain operator work.
 Replacing the running release is allowed, including a module-enabled build.
 Until reboot, later module loads use the replacement tree with the old running
 kernel; changed modules may be incompatible. The operator chooses when to replace
@@ -425,3 +448,34 @@ go to stderr. Exit status is 0 for success, 1 for operational failure or
 cancellation, and 2 for invalid CLI arguments. A successful build/install does not
 establish successful boot or hardware acceptance. Retain a working recovery
 kernel while testing the candidate.
+
+## Bequiet boot bring-up before signing
+
+Apply the repository changes on the host and keep Secure Boot disabled. Bequiet's
+profile selects `-modules-sign` for this first milestone. Config/build do not need
+signing keys or a certificate, and installation still builds NVIDIA against the
+final kernel and verifies its package version, release and installed paths.
+
+```sh
+agentoo kernel config --label bequiet-bringup \
+  --config /usr/local/share/agentoo/docs/kernel-shared-v04-config \
+  --sources /usr/src/linux-6.18.62-gentoo
+agentoo kernel build --label bequiet-bringup
+agentoo kernel install --label bequiet-bringup --unsigned
+```
+
+Use the installed source version when it changes. `--unsigned` explicitly skips
+EFI image signing; module signing follows native `modules-sign` independently.
+The shared lockdown LSM selects module verification. The fragment leaves signature
+enforcement and automatic signing disabled and generates no signing key. No
+module signing keys or certificates are used for this milestone.
+Retain the distribution fallback. Register a separate firmware entry and test USB
+unlock, normal startup, both GPUs, displays/Hyprland and used peripherals before
+starting signing/enrollment or firmware trimming.
+
+Keep the normal `/usr/src/linux` selector on the prepared distribution kernel
+for ordinary Portage updates, and select Gentoo sources explicitly with
+`config --sources /usr/src/linux-<version>-gentoo`. This first-boot implementation
+rebuilds NVIDIA only for the candidate being installed; driver-update maintenance
+across installed kernels and module signing remain in the
+[work card](../kanban/Open/026-bequiet-custom-kernel.md).

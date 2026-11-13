@@ -77,8 +77,8 @@ firmware lists through the same profile. `agentoo kernel config --target-host NA
 is an explicit configuration-operation override; it does not change the selected
 Portage profile or turn the build into a cross-build. Generic and QEMU have
 Portage profiles but no reviewed custom-kernel fragments. Bequiet has a reviewed
-fragment; its module-enabled build/install and signing workflow is still being
-completed in the [active card](../../usr/local/share/agentoo/kanban/Open/026-bequiet-custom-kernel.md).
+fragment and unsigned NVIDIA build/install implementation; host acceptance
+is tracked in the [active card](../../usr/local/share/agentoo/kanban/Open/026-bequiet-custom-kernel.md).
 
 Local `/etc/kernel/cmdline` and discovered storage identity supply boot
 identifiers; UUIDs are not tracked host policy. See the

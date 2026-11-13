@@ -12,7 +12,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 
 sys.dont_write_bytecode = True
@@ -20,8 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/l
 from cli import ArgumentParser
 import kernel_host
 import kernel_firmware
+import kernel_modules
 
 WORKSPACES = Path('/dev/shm')
+RETAINED_WORKSPACES = Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local/state') / 'agentoo/kernel'
 MODULES_ROOT = Path('/lib/modules')
 DIST_CMDLINE = Path('/etc/kernel/cmdline')
 METADATA = 'agentoo-kernel.json'
@@ -34,8 +35,10 @@ SIGNING_HELP = ('See /usr/local/share/agentoo/docs/secure-boot.md for signing se
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo kernel', description=__doc__, epilog=
-        'Build locally for this machine. Workspaces normally live in /dev/shm and '
-        'disappear at reboot. Run without sudo; individual system operations use sudo. '
+        'Build locally for this machine. Default workspaces persist under '
+        '$XDG_STATE_HOME/agentoo/kernel (normally ~/.local/state/agentoo/kernel); '
+        'compilation uses /dev/shm and retains results before installation. '
+        'Run without sudo; individual system operations use sudo. '
         'Exit 0: success; 1: operation failed/cancelled; 2: invalid arguments.')
     sub = parser.add_subparsers(dest='operation')
     descriptions = {
@@ -47,8 +50,8 @@ def build_parser():
         child = sub.add_parser(name, help=description, description=description)
         child.add_argument('--label', required=True, metavar='LABEL', help='build label, e.g. agentoo-v0.4')
         child.add_argument('--build-dir', metavar='DIR', help=
-            'workspace (default: /dev/shm/<release>)' if name == 'config' else
-            'workspace (default: find this label under /dev/shm)').completion = 'directories'
+            'workspace (default: user state directory/<release>); explicit paths build in place' if name == 'config' else
+            'workspace (default: find this label in user state); explicit paths build in place').completion = 'directories'
         child.add_argument('--yes', action='store_true', help='accept displayed plans; does not answer Kconfig or sudo prompts')
         if name == 'config':
             child.add_argument('--cmdline', default='ro console=tty0 loglevel=5', metavar='TEXT', help='embedded kernel command line (default: %(default)s); supply storage arguments for custom archives')
@@ -201,7 +204,7 @@ def make(work, data, *arguments, capture=False, root=False, umask=-1):
     for key in ('KCONFIG_CONFIG', 'KBUILD_OUTPUT', 'KBUILD_EXTMOD', 'CROSS_COMPILE', 'ARCH', 'MAKEFLAGS', 'MFLAGS', 'LOCALVERSION'):
         env.pop(key, None)
     env['KCFLAGS'] = data['kcflags']
-    command = ['make', '--no-print-directory', '-C', data['sources'], f'O={output}', 'LOCALVERSION=', f'EXTRAVERSION={data["extraversion"]}']
+    command = ['make', '--no-print-directory', '-C', data['sources'], f'O={output}', 'LOCALVERSION=']
     if root:
         command += [f'KCFLAGS={data["kcflags"]}']
     return run([*command, *arguments], capture=capture, root=root, env=env, umask=umask)
@@ -243,11 +246,12 @@ def validate_inputs(work, data):
 def load(work, label, completed=False):
     data = json.loads((work / METADATA).read_text())
     if not isinstance(data, dict) or any(not isinstance(data.get(key), str) for key in
-                                        ('label', 'release', 'sources', 'kcflags', 'extraversion', 'source_makefile_sha256')):
+                                        ('label', 'release', 'sources', 'kcflags', 'source_makefile_sha256')):
         raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
     if data.get('label') != label or not data.get('configured'):
         raise RuntimeError(f'{work}: not a configured workspace for label {label}')
-    if not isinstance(data.get('host_settings'), dict) or not isinstance(data.get('identity'), dict):
+    if (not isinstance(data.get('host_settings'), dict) or not isinstance(data.get('identity'), dict)
+            or 'transport' not in data['identity']):
         raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', data.get('release', '')):
         raise RuntimeError(f'{work}: invalid recorded kernel release')
@@ -271,7 +275,7 @@ def select_workspace(args):
         work = Path(args.build_dir).expanduser().resolve()
         return work, load(work, args.label, args.operation == 'install')
     matches, failures = [], []
-    for work in sorted(WORKSPACES.iterdir()):
+    for work in sorted(RETAINED_WORKSPACES.iterdir()) if RETAINED_WORKSPACES.exists() else []:
         if not work.is_dir() or not work.name.endswith('-' + args.label):
             continue
         try:
@@ -280,11 +284,20 @@ def select_workspace(args):
             failures.append(f'{work}: {error}')
     if len(matches) != 1:
         detail = '\n'.join([str(work) for work, _ in matches] + failures)
-        raise RuntimeError(f'expected one viable workspace for {args.label} under {WORKSPACES}; found {len(matches)}. '
+        raise RuntimeError(f'expected one viable workspace for {args.label} under {RETAINED_WORKSPACES}; found {len(matches)}. '
                            'Use --build-dir to select explicitly.' + ('\n' + detail if detail else ''))
     for failure in failures:
         notice('Ignoring invalid workspace: ' + failure)
     return matches[0]
+
+
+def check_build_storage(work):
+    ancestor = work
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+    flags = os.statvfs(ancestor).f_flag
+    if flags & (os.ST_NOEXEC | os.ST_RDONLY):
+        raise RuntimeError(f'{ancestor}: build storage must be writable and executable; choose another --build-dir')
 
 
 def configure(args):
@@ -298,20 +311,14 @@ def configure(args):
         raise RuntimeError(f'cannot read kernel version from {sources}/Makefile')
     extra = fields.get('EXTRAVERSION', '').strip()
     base = '.'.join(fields[key] for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL'))
-    # The release keeps upstream EXTRAVERSION but replaces Gentoo's suffix with the label.
-    upstream_extra = re.sub(r'-gentoo.*$', '', extra)
-    release = base + upstream_extra + '-' + args.label
+    # Preserve the native source version so Portage's linux-info derives the same release.
+    release = base + extra + '-' + args.label
     if len(release) > 64:
         raise ValueError('kernel release must be at most 64 characters; use a shorter label')
-    work = Path(args.build_dir).expanduser().resolve() if args.build_dir else WORKSPACES / release
+    work = Path(args.build_dir).expanduser().resolve() if args.build_dir else RETAINED_WORKSPACES / release
     if work.exists() and (not work.is_dir() or any(work.iterdir())):
         raise RuntimeError(f'{work}: config requires an empty or absent build directory')
-    ancestor = work
-    while not ancestor.exists():
-        ancestor = ancestor.parent
-    flags = os.statvfs(ancestor).f_flag
-    if flags & (os.ST_NOEXEC | os.ST_RDONLY):
-        raise RuntimeError(f'{ancestor}: build storage must be writable and executable; choose another --build-dir')
+    check_build_storage(work)
     origin = Path(args.config).expanduser().resolve() if args.config else Path('/proc/config.gz')
     raw = origin.read_bytes()
     text = (gzip.decompress(raw) if raw.startswith(b'\x1f\x8b') else raw).decode()
@@ -327,10 +334,9 @@ def configure(args):
            f'Encrypted root:   PARTUUID={identity["partuuid"]} -> {identity["mapper"]}\n'
            f'Initramfs policy: LUKS2 / Btrfs @; keymap={identity["keymap"]}; allow discards')
     notice(f'Old config:       {origin}\nKernel sources:   {sources}\nBuild directory:  {work}\nKernel version:   {release}')
-    notice(f'EXTRAVERSION:     {extra!r} -> {upstream_extra!r}' if extra != upstream_extra else f'EXTRAVERSION:     {extra!r}')
     confirm('Proceed', args.yes)
     work.mkdir(parents=True, exist_ok=True)
-    data = dict(label=args.label, release=release, extraversion=upstream_extra, sources=str(sources), kcflags=os.environ.get('KCFLAGS', DEFAULT_FLAGS))
+    data = dict(label=args.label, release=release, sources=str(sources), kcflags=os.environ.get('KCFLAGS', DEFAULT_FLAGS))
     data.update(host=host, identity=identity, host_settings=expected,
                 config_origin=str(origin), config_input_sha256=hashlib.sha256(raw).hexdigest(),
                 profile_origin=str(profile), profile_sha256=hashlib.sha256(profile_text.encode()).hexdigest())
@@ -385,7 +391,7 @@ def configure(args):
 
 
 def build(args):
-    require_tools('make')
+    require_tools('make', 'cp')
     work, data = select_workspace(args)
     data['kcflags'] = os.environ.get('KCFLAGS', data['kcflags'])
     output, staging = paths(work, data)
@@ -397,20 +403,27 @@ def build(args):
     if custom and custom.is_relative_to(initramfs_work):
         raise RuntimeError('custom initramfs must be outside the generated output path')
     values = check_config(work, data)
-    if not custom and values.get('CONFIG_MODULES') == 'y':
-        raise RuntimeError('minimal initramfs requires built-in drivers (CONFIG_MODULES=n); use --initramfs')
+    if not custom:
+        kernel_host.check_minimal_config(values, data['identity'])
     validate_inputs(work, data)
     minimal_command = [INITRAMFS_BUILDER, '--work', initramfs_work, '--partuuid', data['identity']['partuuid'],
                        '--mapper', data['identity']['mapper'], '--keymap', data['identity']['keymap']]
     if not custom:
         run([*minimal_command, '--check'])
+    check_build_storage(work)
+    if not args.build_dir:
+        check_build_storage(WORKSPACES)
+        if os.path.lexists(WORKSPACES / data['release']):
+            raise RuntimeError(f'RAM workspace already exists: {WORKSPACES / data["release"]}; '
+                               'inspect it before retrying, or use --build-dir to build in place')
     notice(f'KCFLAGS:          {data["kcflags"]}\nKernel config:    {output}/.config\nKernel sources:   {data["sources"]}\nBuild directory:  {work}\nKernel version:   {data["release"]}')
     notice(f'Host:             {data["host"]}\nKernel command line: {data["identity"]["cmdline"]}')
-    notice(f'Available space:  {shutil.disk_usage(work).free // (1024 * 1024)} MiB\nInitramfs:        {custom or "fresh minimal image (recorded host LUKS2/Btrfs inputs)"}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
+    build_storage = work if args.build_dir else WORKSPACES
+    notice(f'Compile storage: {build_storage}\nAvailable space:  {shutil.disk_usage(build_storage).free // (1024 * 1024)} MiB\nInitramfs:        {custom or "fresh minimal image (recorded host LUKS2/Btrfs inputs)"}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
     confirm('Proceed', args.yes)
     data['built'] = False
     save(work, data)
-    # Regenerate this disposable subtree on every build/retry.
+    # Keep this small input at its authoritative path, including during RAM builds.
     if initramfs_work.exists():
         shutil.rmtree(initramfs_work)
     if custom:
@@ -420,12 +433,26 @@ def build(args):
         run(minimal_command)
     if not archive.is_file() or not archive.stat().st_size:
         raise RuntimeError(f'initramfs was not produced: {archive}')
-    edit_config(work, data, '--set-str', 'INITRAMFS_SOURCE', str(archive))
-    make(work, data, 'olddefconfig')
+    if args.build_dir:
+        compile_kernel(work, data, archive, args.jobs, minimal=not custom)
+    else:
+        # A stable path lets Kbuild reuse commands and objects on later RAM builds.
+        temporary = WORKSPACES / data['release']
+        temporary.mkdir()
+        notice(f'RAM workspace:   {temporary}')
+        try:
+            run(['cp', '-a', '--no-preserve=ownership', '--', str(work) + '/.', temporary])
+            compile_kernel(temporary, data, archive, args.jobs, minimal=not custom)
+            run(['cp', '-a', '--no-preserve=ownership', '--', str(temporary) + '/.', work])
+        except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
+            notice(f'RAM workspace retained for inspection: {temporary}')
+            raise
+        shutil.rmtree(temporary)
+        hashes = digest(output / '.config'), digest(output / 'arch/x86/boot/bzImage')
+        make(work, data, 'prepare')
+        if hashes != (digest(output / '.config'), digest(output / 'arch/x86/boot/bzImage')):
+            raise RuntimeError('retained preparation changed the completed config/image; run build again')
     final = check_config(work, data)
-    if final.get('CONFIG_INITRAMFS_SOURCE') != json.dumps(str(archive)):
-        raise RuntimeError('resolved config does not embed the selected initramfs')
-    make(work, data, f'-j{args.jobs}')
     # Remove stale modules when rebuilding with a different driver selection.
     if staging.exists():
         shutil.rmtree(staging)
@@ -449,6 +476,18 @@ def build(args):
     save(work, data)
     notice('Build complete. Boot and functional validation remain operator steps.')
     print(image)
+
+
+def compile_kernel(work, data, archive, jobs, *, minimal):
+    output, _ = paths(work, data)
+    edit_config(work, data, '--set-str', 'INITRAMFS_SOURCE', str(archive))
+    make(work, data, 'olddefconfig')
+    final = check_config(work, data)
+    if minimal:
+        kernel_host.check_minimal_config(final, data['identity'])
+    if final.get('CONFIG_INITRAMFS_SOURCE') != json.dumps(str(archive)):
+        raise RuntimeError('resolved config does not embed the selected initramfs')
+    make(work, data, f'-j{jobs}')
 
 
 def efi_entries(report):
@@ -520,6 +559,14 @@ def install(args):
             raise RuntimeError(f'{error}. {SIGNING_HELP}') from error
     work, data = select_workspace(args)
     output, _ = paths(work, data)
+    package = kernel_modules.package() if read_config(output / '.config').get('CONFIG_MODULES') == 'y' else None
+    if package:
+        require_tools('make', 'emerge', 'modinfo')
+        if digest(Path(data['sources']) / 'Makefile') != data['source_makefile_sha256']:
+            raise RuntimeError('NVIDIA module sources changed; configure a fresh workspace')
+        check_config(work, data)
+        if digest(output / '.config') != data['config_sha256']:
+            raise RuntimeError('NVIDIA kernel configuration changed; run build again')
     image = output / 'arch/x86/boot/bzImage'
     modules = staged_modules(work, data)
     modules_destination = MODULES_ROOT / data['release']
@@ -528,6 +575,8 @@ def install(args):
     key, certificate = SIGNING_DIRECTORY / 'db.key', SIGNING_DIRECTORY / 'db.pem'
     notice('Image signing:   unsigned (explicit --unsigned)' if args.unsigned else
            f'Image signing:   required\nCertificate:     {certificate}')
+    if package:
+        notice(f'NVIDIA modules:  rebuild {package["cpv"]} for {data["release"]} before image activation')
     mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
     if mount_boot:
         notice('Mount /boot using its existing mount configuration.')
@@ -576,6 +625,14 @@ def install(args):
         if modules_backup:
             run(['mv', '-T', '--', modules_destination, modules_backup], root=True)
         run(['mv', '-T', '--', staged_tree, modules_destination], root=True)
+        if package:
+            try:
+                kernel_modules.rebuild(package, Path(data['sources']), output, data['release'], MODULES_ROOT, run)
+            except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
+                run(['mv', '-T', '--', modules_destination, staging_root / 'failed-modules'], root=True)
+                if modules_backup:
+                    run(['mv', '-T', '--', modules_backup, modules_destination], root=True)
+                raise
         run(['mv', '-T', '--', staging, destination], root=True)
     except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
         notice('Installation stopped; backups and any remaining staging files are retained. '
@@ -638,7 +695,8 @@ def main():
             return 0
         if platform.machine() not in ('x86_64', 'amd64'):
             raise RuntimeError('this workflow currently supports local x86_64 EFI kernels')
-        {'config': configure, 'build': build, 'install': install, 'gen-efi-cmd': gen_efi_cmd}[args.operation](args)
+        {'config': configure, 'build': build, 'install': install,
+         'gen-efi-cmd': gen_efi_cmd}[args.operation](args)
         return 0
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         notice(f'agentoo kernel: {error}')

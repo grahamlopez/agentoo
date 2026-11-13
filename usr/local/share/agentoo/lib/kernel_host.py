@@ -12,6 +12,12 @@ from host_selection import HOST_NAME, read_host
 HOSTS = Path('/etc/agentoo/kernel/hosts')
 KEYMAP = '/usr/share/keymaps/i386/qwerty/us-caps.map.gz'
 SYS_BLOCK = Path('/sys/class/block')
+MINIMAL_BUILTINS = (
+    'BINFMT_ELF', 'DEVTMPFS', 'PROC_FS', 'SYSFS', 'TMPFS', 'EFI_PARTITION',
+    'BLK_DEV_DM', 'DM_CRYPT', 'CRYPTO_AES', 'CRYPTO_XTS', 'BTRFS_FS',
+    'INPUT', 'VT', 'VT_CONSOLE', 'HID', 'HID_GENERIC', 'USB', 'USB_HID',
+    'USB_XHCI_HCD', 'USB_XHCI_PCI', 'FRAMEBUFFER_CONSOLE',
+)
 
 
 def selected_host(host=None):
@@ -69,7 +75,7 @@ def resolve_identity(run):
         raise RuntimeError('host specialization requires the installed Btrfs @ root on one LUKS2 partition')
     source = mounts[0]['source'].split('[', 1)[0]
     devices = json.loads(run(['lsblk', '--json', '--tree', '--inverse', '--paths', '--output',
-                             'PATH,KNAME,TYPE,FSTYPE,UUID,PARTUUID', source], capture=True))['blockdevices']
+                             'PATH,KNAME,TYPE,FSTYPE,UUID,PARTUUID,TRAN', source], capture=True))['blockdevices']
     if len(devices) != 1:
         raise RuntimeError('cannot inspect the mounted root device; run on the destination host with block-device access')
     root = devices[0]
@@ -79,6 +85,8 @@ def resolve_identity(run):
     partition = parents[0]
     if partition['type'] != 'part' or partition['fstype'] != 'crypto_LUKS':
         raise RuntimeError('expected the encrypted root backing device to be a LUKS partition')
+    disks = partition.get('children', [])
+    transport = disks[0].get('tran') if len(disks) == 1 and disks[0]['type'] == 'disk' else None
     sysfs = SYS_BLOCK / Path(root['kname']).name / 'dm'
     if not (sysfs / 'uuid').read_text().startswith('CRYPT-LUKS2-'):
         raise RuntimeError('the minimal initramfs requires LUKS2')
@@ -86,8 +94,23 @@ def resolve_identity(run):
     if not re.fullmatch(r'[a-zA-Z0-9_+-]+', mapper):
         raise RuntimeError('unsupported root mapping name')
     identity = dict(root_uuid=identifier(root['uuid']), luks_uuid=identifier(partition['uuid']),
-                    partuuid=identifier(partition['partuuid']), mapper=mapper, subvolume='@', keymap=KEYMAP)
+                    partuuid=identifier(partition['partuuid']), mapper=mapper, subvolume='@', keymap=KEYMAP,
+                    transport=transport)
     return identity
+
+
+def check_minimal_config(values, identity):
+    storage = {'nvme': ('BLK_DEV_NVME',), 'sata': ('SCSI', 'BLK_DEV_SD', 'ATA', 'SATA_AHCI')}
+    transport = identity.get('transport')
+    if transport not in storage:
+        raise RuntimeError(f'minimal initramfs does not support root transport {transport!r}; use --initramfs')
+    missing = [f'CONFIG_{name}=y' for name in (*MINIMAL_BUILTINS, *storage[transport])
+               if values.get('CONFIG_' + name) != 'y']
+    if not any(values.get('CONFIG_' + name) == 'y' for name in ('FB_EFI', 'FB_VESA', 'DRM_SIMPLEDRM')):
+        missing.append('one built-in EFI/VESA/simpledrm framebuffer')
+    if missing:
+        raise RuntimeError('minimal initramfs requires built-in boot support:\n  ' + '\n  '.join(missing) +
+                           '\nEnable these capabilities or use --initramfs; early module loading is not supported.')
 
 
 def expectations(values, identity):
