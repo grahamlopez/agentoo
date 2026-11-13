@@ -473,9 +473,12 @@ Retain the distribution fallback. Register a separate firmware entry and test US
 unlock, normal startup, both GPUs, displays/Hyprland and used peripherals before
 starting signing/enrollment or firmware trimming.
 
-Keep the normal `/usr/src/linux` selector on the prepared distribution kernel
-for ordinary Portage updates, and select Gentoo sources explicitly with
-`config --sources /usr/src/linux-<version>-gentoo`. This first-boot implementation
-rebuilds NVIDIA only for the candidate being installed; driver-update maintenance
-across installed kernels and module signing remain in the
-[work card](../kanban/Open/026-bequiet-custom-kernel.md).
+Use `eselect kernel` to select the Gentoo source tree; `config` defaults to that
+selection and records its concrete path for later builds. `--sources` is an
+optional per-workspace override. Normal Portage integration with retained output
+trees remains under review: the native module helpers require the matching output
+context, and linux-firmware's regeneration hook assumes an image in its source
+directory. Repeatedly changing the source selector is not the intended workflow.
+This implementation rebuilds NVIDIA only for the candidate being installed;
+ordinary driver updates, firmware-hook integration and module signing remain in
+the [work card](../kanban/Open/026-bequiet-custom-kernel.md).

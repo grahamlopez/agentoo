@@ -11,12 +11,14 @@ Host firmware has three owners, each selected by the native Agentoo Portage prof
 CPU microcode follows the installer's `--microcode` choice. The rest of this guide
 covers installed linux-firmware trimming.
 
-Thinktop, Flattop and Startop have reviewed native savedconfig lists under
-`/etc/agentoo/firmware/`. Startop has operator acceptance on both 6.18.60
+Thinktop, Flattop, Startop and Bequiet have reviewed native savedconfig lists under
+`/etc/agentoo/firmware/`. Bequiet's trimmed selection awaits application and
+acceptance on both boot paths. Startop has operator acceptance on both 6.18.60
 boot paths after trimming; see its [acceptance record](hosts/startop.md#installed-firmware-acceptance).
-Their shared Intel laptop profile enables the native `savedconfig` USE flag
-through `package.use`; the common profile defaults to `-savedconfig`. Native
-`/etc/portage/package.use` settings override these profile defaults. Apply the
+The Intel laptop profile enables the native `savedconfig` USE flag through
+`package.use`; Bequiet enables it in its host profile. The common profile defaults
+to `-savedconfig`. Native `/etc/portage/package.use` settings override these
+profile defaults. Apply the
 matching list locally before rebuilding. Other targets retain broad coverage.
 SOF audio firmware, Intel microcode and wireless regulatory data belong to separate
 packages and are not trimmed by this list. AMD microcode belongs to linux-firmware
@@ -159,6 +161,47 @@ acceptance predates this correction: reapply the updated list and rebuild on
 Thinktop. Check wired link speed, traffic, reconnect and resume. If a built-in
 driver requests it before root becomes available, separately review early or
 built-in firmware availability; changing savedconfig alone does not embed it.
+
+## Bequiet selection
+
+The [Bequiet list](../../../../../etc/agentoo/firmware/bequiet.list) retains AMD
+family-17h microcode, AX200 Wi-Fi API 77 and its root alias, Intel 8087:0029
+Bluetooth SFI/DDC, onboard RTL8125A and monitor/KVM RTL8156B Ethernet firmware.
+Both 6.18.62 kernels load those network firmware names; the custom kernel's AX200
+driver supports only API 77. Older packaged AX200 APIs are not selected.
+The optional `iwl-debug-yoyo.bin` is absent from the broad installed package too.
+NVIDIA's versioned GSP firmware and regulatory data remain separately package-owned.
+The inventoried camera, microphone, keyboards, YubiKey and hubs establish no
+additional linux-firmware requirement.
+
+The seven selected paths contain six regular payloads totaling 2,200,953 bytes,
+compared with 2,087,238,841 bytes in the broad linux-firmware-20261019 installation:
+a projected 99.9% reduction. Selected checksums and the Wi-Fi alias are validated
+against the installed package. Application and cold-boot/peripheral acceptance on
+both kernels remain pending.
+
+For the existing workflow, give this firmware transaction an explicit native
+kernel context. Gentoo's hook expects an image in its source directory; the
+prepared distribution tree has that image. Run the firmware operation under sudo
+so its emerge subprocesses inherit these variables without another sudo environment
+reset. Empty `KBUILD_OUTPUT` prevents an inherited custom output from taking
+precedence. After applying the repository policy to the live host, run:
+
+```sh
+sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin KBUILD_OUTPUT= \
+  agentoo kernel firmware apply --dry-run
+sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin KBUILD_OUTPUT= \
+  agentoo kernel firmware apply
+```
+
+Use the installed distribution version when it changes. This leaves the normal
+`eselect kernel` selection unchanged. The proposed
+[package-based replacement](../kanban/Backlog/051-gentoo-kernel-native-workflow.md)
+is deferred until Bequiet onboarding is complete; it does not gate trimming.
+
+This selection retains every linux-firmware-owned payload embedded in the working
+custom kernel; that kernel does not need rebuilding. Verify fallback initramfs
+regeneration and test cold starts, Wi-Fi/Bluetooth, Ethernet and resume afterwards.
 
 ## Startop application follow-up
 

@@ -66,7 +66,7 @@ class ProfileTests(unittest.TestCase):
                 else:
                     self.assertEqual(settings['CFLAGS'], '-O2 -pipe')
                 settings.setcpv('sys-kernel/linux-firmware-20260622')
-                self.assertEqual('savedconfig' in settings['USE'].split(), host in ('flattop', 'startop', 'thinktop'))
+                self.assertEqual('savedconfig' in settings['USE'].split(), host in ('bequiet', 'flattop', 'startop', 'thinktop'))
                 self.assertFalse({'compress-xz', 'compress-zstd', 'deduplicate'} & set(settings['USE'].split()))
 
     def test_bequiet_nvidia_uses_open_modules_and_wayland(self):

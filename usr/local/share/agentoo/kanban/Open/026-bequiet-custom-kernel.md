@@ -1,18 +1,25 @@
 # Onboard Bequiet custom kernels
 
-Status: Open — unsigned first-boot implementation; host acceptance pending
+Status: Open — unsigned boot accepted; finish onboarding with the existing implementation
 
 ## Goal and scope
 
 This card defines and tracks Bequiet custom-kernel onboarding. First get a
 booting kernel with NVIDIA graphics/compute and required hardware working while
-Secure Boot is disabled. Signing/enrollment, firmware trimming and driver-update
-maintenance across installed kernels follow that acceptance; do not implement
-those mechanisms in the first-boot patch.
+Secure Boot is disabled. The unsigned candidate now boots; apply reviewed firmware
+trimming next. Signing/enrollment and driver-update maintenance across installed
+kernels remain separate work.
+
+Complete this card using the existing implementation. The proposed thin wrapper
+around Gentoo's source-built kernel package is deferred to
+[card 051](../Backlog/051-gentoo-kernel-native-workflow.md); it is not a requirement
+for closing Bequiet onboarding.
 
 Use the selected native Portage profile, shared kernel capability union and
 existing config/build/install commands. Keep software/module processing under
 Portage ownership, storage identity local and one authoritative workspace.
+Use bounded native kernel-context settings for remaining maintenance operations;
+document current limitations rather than redesigning the kernel backend here.
 General command usage lives in [kernel.md](../../docs/kernel.md).
 
 ## Host inputs
@@ -28,7 +35,8 @@ General command usage lives in [kernel.md](../../docs/kernel.md).
 - `@kernel-dev` is installed. Pin the concrete Gentoo source path per workspace.
 - Firmware and module choices live in the
   [Bequiet fragment](../../../../../../etc/agentoo/kernel/hosts/bequiet.config).
-  Installed firmware stays broad until boot acceptance.
+  Installed linux-firmware selection lives in the
+  [Bequiet list](../../../../../../etc/agentoo/firmware/bequiet.list).
 
 ## First-boot implementation
 
@@ -72,30 +80,89 @@ General command usage lives in [kernel.md](../../docs/kernel.md).
   without udev, creates its mapping with discards and BusyBox mounts Btrfs `@`
   read-only. The handoff rule restores UUID-link/systemd readiness after the
   missing-rule failure is reproduced. This does not establish physical boot.
-- [ ] Apply changes to the live host and configure/build a fresh bring-up label
+- [x] Apply changes to the live host and configure/build `bequiet-bringup`
   from the shared baseline with explicit Gentoo sources and actual root identity.
-- [ ] Install unsigned with the real native NVIDIA package transaction; inspect
-  image/modules and register a separate firmware entry. Keep the fallback usable.
-- [ ] Cold boot: visible console, USB Lily58 input, incorrect/correct passphrase,
-  encrypted Btrfs root, systemd startup, expected release and early microcode.
-- [ ] Check both GPUs with `nvidia-smi`, displays/Hyprland and required compute.
+  Completed image/config and staged module manifest checks pass. Built-in boot
+  requirements pass; the retained module build link resolves after RAM cleanup.
+- [x] Install unsigned with the real native NVIDIA package transaction. Installed
+  image matches the completed build; all four required NVIDIA modules have the
+  expected version/release and paths, with a valid retained build link. The
+  distribution fallback image, initramfs and matching NVIDIA modules remain.
+- [x] Register and boot the separate candidate entry. Firmware reports
+  BootCurrent=0007, candidate first in BootOrder; distribution fallback 000A
+  remains available. No BootNext is currently set.
+- [ ] Diagnose and resolve SIGQUIT during fresh sudo authentication.
+  Password entry terminated the installer with SIGQUIT; standalone `sudo -v`
+  bypassed it. The helper predates the Bequiet changes. Isolate the regression
+  before changing the workflow. Authentication-only trials of the unchanged
+  helper both alone and after native NVIDIA lookup pass; the lookup leaves
+  terminal settings unchanged. Full preflight reproduces a kernel-generated
+  SIGQUIT before any privileged installation operation, but also passes unchanged.
+  Confirmation-only authentication passes. Preflight leaves the quit character
+  (`0x1c`), canonical/signal settings and foreground group unchanged. Investigate
+  intermittent terminal input/authentication interaction: failures occur during
+  manual typing on a Bluetooth Lily58; compare another keyboard in the same
+  terminal. Do not record passwords. Require fresh-authentication acceptance for
+  the fix.
+- [x] Boot `6.18.62-gentoo-bequiet-bringup`: operator confirms visible console
+  and working USB Lily58 unlock. Encrypted Btrfs `@` is mounted read/write;
+  systemd reports no failed units. Microcode revision is `0x08701035`.
+- [ ] Check incorrect-passphrase retry and cold power-on if this was a warm reboot.
+- [x] Both GPUs appear in `nvidia-smi` with driver `595.104.02`; Hyprland is
+  running on the RTX PRO 2000. Retained module build links resolve after reboot.
+- [ ] Check intended display arrangements and required GPU compute workloads.
 - [ ] Check used NVMe/SATA data access, Ethernet/Wi-Fi/Bluetooth, USB/dock/input,
   audio, camera/microphone and sensors. Test intended suspend/resume and keyboard
-  transition. Confirm retained module build links still resolve after reboot.
-- [ ] Verify AMD KVM/IOMMU initialization; broader passthrough/workload testing
-  stays in the [shared card](../Backlog/027-shared-kernel-v0.3-followups.md).
+  transition.
+- [x] AMD KVM and IOMMU initialize; `/dev/kvm` exists. Broader passthrough/workload
+  testing stays in the [shared card](../Backlog/027-shared-kernel-v0.3-followups.md).
 
-## After first-boot acceptance
+## Existing workflow maintenance
+
+The native-consumer audit and proposed package-based replacement are recorded in
+[card 051](../Backlog/051-gentoo-kernel-native-workflow.md). Finish this onboarding
+with the current commands and explicit native targeting where needed.
+
+- [ ] Document and verify the existing NVIDIA maintenance procedure for the
+  custom and fallback kernels using native source/output settings. Keep driver
+  and userspace versions aligned; no new cross-kernel updater is required.
+- [x] Confirm the explicit context for this firmware application: run firmware
+  apply as root with native `KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin`
+  and empty `KBUILD_OUTPUT`. Native Portage preserves these settings and the
+  firmware hook finds the prepared image/map and reaches its `--all` installation
+  call in a non-mutating check. The global eselect target stays on Gentoo sources;
+  actual fallback regeneration remains part of application acceptance below.
+
+## Firmware trimming
+
+- [x] Review the normal-use inventory with the operator. Select seven explicit
+  paths for AMD family-17h microcode, AX200 API 77 (payload/root alias), Intel
+  Bluetooth SFI/DDC and RTL8125A/RTL8156B Ethernet. Both kernels load these network
+  names. NVIDIA GSP and regulatory data stay separately package-owned.
+- [x] Add the host list and native `savedconfig -deduplicate -compress-xz
+  -compress-zstd` policy. Projected regular payload: 2,200,953 bytes instead of
+  2,087,238,841 bytes (99.9% reduction); application measurements remain pending.
+  Selected installed-package checksums and the Wi-Fi alias match. Four native
+  profile tests and sixteen firmware workflow tests pass; checkout-policy dry-run
+  identifies the versioned snapshot to retire. No workflow code was added.
+- [ ] Apply repository policy live using the maintenance context above,
+  regenerating the fallback initramfs through Gentoo's existing mechanisms.
+- [ ] Run existing firmware dry-run/apply for installed
+  `sys-kernel/linux-firmware-20261019`, retiring its overriding versioned snapshot
+  through the existing backup workflow. Verify installed files and savedconfig
+  parity, and inspect successful fallback initramfs regeneration.
+- [ ] Cold-test both kernels after trimming: microcode, both GPUs, Wi-Fi,
+  Bluetooth keyboard, onboard/USB Ethernet, peripherals and intended resume.
+  The working custom image already embeds its required inputs; no rebuild is
+  needed for this installed-file selection.
+
+## Deferred signing and driver maintenance
 
 - [ ] Design and implement native NVIDIA module signing and kernel trust, then
   provision/back up keys and accept both Linux boot paths and Windows with
   Secure Boot enabled. Reuse native mechanisms before adding workspace state.
 - [ ] Establish subsequent driver-update maintenance for the custom and fallback
   kernels. Do not add a cross-kernel update command before settling this scope.
-- [ ] Review/add the Bequiet linux-firmware savedconfig and native USE policy;
-  apply through existing firmware commands and revalidate both boot paths. Cover
-  peripherals/cold initialization/resume. Retain linux-firmware-owned AMD microcode;
-  regulatory data and NVIDIA GSP firmware have separate package ownership.
 
 Close after the agreed host checks and later phases are complete or explicitly
 split into separate cards. Record completion in the finishing commit and board

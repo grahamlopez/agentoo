@@ -1,0 +1,19 @@
+# Bequiet linux-firmware savedconfig: explicit paths relative to /lib/firmware.
+# Reviewed against linux-firmware-20261019 and both Gentoo 6.18.62 boot paths.
+# NVIDIA GSP and wireless regulatory data have separate package ownership.
+# Apply with agentoo kernel firmware apply; cold-test both kernels afterwards.
+
+# Ryzen 9 3950X (family 17h): keep AMD microcode for both boot paths.
+amd-ucode/microcode_amd_fam17h.bin
+
+# AX200: both kernels use API 77; retain its payload and requested root alias.
+intel/iwlwifi/iwlwifi-cc-a0-77.ucode
+iwlwifi-cc-a0-77.ucode
+
+# Intel AX200 USB Bluetooth 8087:0029: executable and cold-start configuration.
+intel/ibt-20-1-3.sfi
+intel/ibt-20-1-3.ddc
+
+# Onboard RTL8125A and monitor/KVM RTL8156B Ethernet.
+rtl_nic/rtl8125a-3.fw
+rtl_nic/rtl8156b-2.fw
