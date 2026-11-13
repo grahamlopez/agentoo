@@ -1,14 +1,14 @@
 # Onboard Bequiet custom kernels
 
-Status: Open — unsigned boot accepted; finish onboarding with the existing implementation
+Status: Open — unsigned boot and trimmed firmware accepted; Secure Boot module setup outstanding
 
 ## Goal and scope
 
 This card defines and tracks Bequiet custom-kernel onboarding. First get a
 booting kernel with NVIDIA graphics/compute and required hardware working while
-Secure Boot is disabled. The unsigned candidate now boots; apply reviewed firmware
-trimming next. Signing/enrollment and driver-update maintenance across installed
-kernels remain separate work.
+Secure Boot is disabled. The unsigned candidate and trimmed firmware are accepted
+on both boot paths. Finish native module signing/trust and Secure Boot enrollment
+with the existing implementation; driver-update maintenance remains explicit.
 
 Complete this card using the existing implementation. The proposed thin wrapper
 around Gentoo's source-built kernel package is deferred to
@@ -107,11 +107,11 @@ General command usage lives in [kernel.md](../../docs/kernel.md).
 - [x] Boot `6.18.62-gentoo-bequiet-bringup`: operator confirms visible console
   and working USB Lily58 unlock. Encrypted Btrfs `@` is mounted read/write;
   systemd reports no failed units. Microcode revision is `0x08701035`.
-- [ ] Check incorrect-passphrase retry and cold power-on if this was a warm reboot.
+- [x] Operator confirms the remaining boot and hardware acceptance checks.
 - [x] Both GPUs appear in `nvidia-smi` with driver `595.104.02`; Hyprland is
   running on the RTX PRO 2000. Retained module build links resolve after reboot.
-- [ ] Check intended display arrangements and required GPU compute workloads.
-- [ ] Check used NVMe/SATA data access, Ethernet/Wi-Fi/Bluetooth, USB/dock/input,
+- [x] Operator confirms intended display arrangements and required workloads.
+- [x] Operator confirms used NVMe/SATA data access, Ethernet/Wi-Fi/Bluetooth, USB/dock/input,
   audio, camera/microphone and sensors. Test intended suspend/resume and keyboard
   transition.
 - [x] AMD KVM and IOMMU initialize; `/dev/kvm` exists. Broader passthrough/workload
@@ -168,12 +168,17 @@ with the current commands and explicit native targeting where needed.
   extra firmware, providing evidence for the trimmed installed selection.
   The native selector still points to Gentoo sources; the custom entry remains
   first in BootOrder and BootNext is clear.
-- [ ] Confirm a full power-off/start of the custom kernel if its post-trim boot
-  was only a restart. Exercise Wi-Fi connectivity, Bluetooth keyboard, USB
-  Ethernet, audio/camera/microphone and intended suspend/resume on both kernels.
+- [x] Operator confirms all remaining post-trim cold-start, Wi-Fi connectivity,
+  Bluetooth keyboard, USB Ethernet, audio/camera/microphone and intended
+  suspend/resume acceptance on both kernels.
 
 ## Deferred signing and driver maintenance
 
+- Secure Boot prerequisite: both configs enable `IMA_ARCH_POLICY` and
+  `MODULE_SIG`. Native `security/integrity/ima/ima_efi.c:arch_get_ima_policy`
+  enables module-signature enforcement when EFI Secure Boot is active, even
+  without `MODULE_SIG_FORCE`. Both installed NVIDIA module sets are unsigned.
+  EFI image signing/enrollment alone is insufficient for this host.
 - [ ] Design and implement native NVIDIA module signing and kernel trust, then
   provision/back up keys and accept both Linux boot paths and Windows with
   Secure Boot enabled. Reuse native mechanisms before adding workspace state.

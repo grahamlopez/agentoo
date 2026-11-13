@@ -12,8 +12,8 @@ CPU microcode follows the installer's `--microcode` choice. The rest of this gui
 covers installed linux-firmware trimming.
 
 Thinktop, Flattop, Startop and Bequiet have reviewed native savedconfig lists under
-`/etc/agentoo/firmware/`. Bequiet's trimmed selection is installed and both kernels
-boot; functional peripheral and suspend/resume acceptance remains pending.
+`/etc/agentoo/firmware/`. Bequiet's trimmed selection is installed and accepted on
+both boot paths, including operator peripheral and suspend/resume confirmation.
 Startop has operator acceptance on both 6.18.60
 boot paths after trimming; see its [acceptance record](hosts/startop.md#installed-firmware-acceptance).
 The Intel laptop profile enables the native `savedconfig` USE flag through
@@ -182,8 +182,8 @@ paths, durable input and active versioned snapshot all match the host list. The
 Portage-protected snapshot was reviewed and accepted at its native versioned path.
 Both custom and distribution kernels boot after trimming, with both GPUs,
 Wi-Fi/Bluetooth firmware initialization and onboard 2.5 Gb/s Ethernet confirmed.
-The fallback embeds no extra firmware. Functional peripheral/resume checks and
-confirmation of custom-kernel cold power-on remain pending.
+The fallback embeds no extra firmware. The operator confirms cold-start,
+functional peripheral and suspend/resume acceptance on both kernels.
 
 For the existing workflow, give this firmware transaction an explicit native
 kernel context. Gentoo's hook expects an image in its source directory; the

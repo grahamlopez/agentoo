@@ -42,8 +42,8 @@ Gentoo's NVIDIA package owns the Nouveau blacklist, DRM modesetting defaults,
 and its Dracut configuration; Agentoo does not duplicate those settings.
 
 Use the reviewed [linux-firmware savedconfig](../firmware.md#bequiet-selection)
-through the existing firmware apply workflow. Both kernels boot after trimming;
-functional peripheral/resume checks remain pending. AMD microcode comes from that package;
+through the existing firmware apply workflow. Both kernels and normal peripherals,
+including suspend/resume, are accepted after trimming. AMD microcode comes from that package;
 `--microcode auto` detects AMD when installation runs on Bequiet, or select
 `--microcode amd` explicitly. A reviewed custom-kernel fragment is supplied;
 module workflow, signing and firmware acceptance are defined and tracked in the

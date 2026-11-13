@@ -9,6 +9,20 @@ Run Linux commands on the destination host as your normal user. Follow blocks
 in order in the same shell; stop on any failed command. Firmware menu names
 vary. Start with both Linux boot paths working and Secure Boot disabled.
 
+## Module-enabled hosts
+
+Prepare signed external modules and establish their kernel trust before enabling
+Secure Boot when the kernel requires them. Bequiet's current custom and fallback
+configs enable `CONFIG_IMA_ARCH_POLICY=y` and `CONFIG_MODULE_SIG=y`; the native
+IMA EFI policy enables module-signature enforcement under Secure Boot even with
+`CONFIG_MODULE_SIG_FORCE` disabled. Its bring-up NVIDIA modules are unsigned.
+
+Use Gentoo's native `modules-sign` policy and signing inputs for NVIDIA, and
+verify trust separately in both kernels. Firmware enrollment of an EFI signing
+certificate does not by itself establish module-signing trust. Bequiet's module
+setup remains in [card 026](../kanban/Open/026-bequiet-custom-kernel.md); this guide's
+image signing/enrollment steps alone do not complete that setup.
+
 ## 1. Prepare Windows if present
 
 Apply current Windows and applicable firmware updates first. Save the BitLocker
