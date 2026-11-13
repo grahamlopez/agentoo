@@ -141,20 +141,36 @@ with the current commands and explicit native targeting where needed.
   names. NVIDIA GSP and regulatory data stay separately package-owned.
 - [x] Add the host list and native `savedconfig -deduplicate -compress-xz
   -compress-zstd` policy. Projected regular payload: 2,200,953 bytes instead of
-  2,087,238,841 bytes (99.9% reduction); application measurements remain pending.
+  2,087,238,841 bytes (99.9% reduction); applied measurements match this selection.
   Selected installed-package checksums and the Wi-Fi alias match. Four native
   profile tests and sixteen firmware workflow tests pass; checkout-policy dry-run
   identifies the versioned snapshot to retire. No workflow code was added.
-- [ ] Apply repository policy live using the maintenance context above,
-  regenerating the fallback initramfs through Gentoo's existing mechanisms.
-- [ ] Run existing firmware dry-run/apply for installed
-  `sys-kernel/linux-firmware-20261019`, retiring its overriding versioned snapshot
-  through the existing backup workflow. Verify installed files and savedconfig
-  parity, and inspect successful fallback initramfs regeneration.
-- [ ] Cold-test both kernels after trimming: microcode, both GPUs, Wi-Fi,
-  Bluetooth keyboard, onboard/USB Ethernet, peripherals and intended resume.
-  The working custom image already embeds its required inputs; no rebuild is
-  needed for this installed-file selection.
+- [x] Apply repository policy and rebuild `sys-kernel/linux-firmware-20261019`
+  using the explicit native context. Installed payload is six regular files and
+  one symlink, exactly 2,200,953 bytes; installed paths and durable input match
+  the host list. The old versioned snapshot is backed up by the existing workflow.
+- [x] Verify fallback image/initramfs regeneration. The new initramfs contains
+  AMD microcode; the custom image still matches its recorded completed-build hash.
+- [x] Accept the protected versioned snapshot at
+  `/etc/portage/savedconfig/sys-kernel/linux-firmware-20261019`. Firmware status
+  confirms that the active versioned snapshot, durable input and installed paths
+  all match the seven-entry host list. Installed payload is 2,200,953 bytes.
+- [x] Reboot the custom kernel after trimming. Expected release, read/write
+  encrypted root, both NVIDIA GPUs and no failed systemd units are confirmed.
+  AX200 API 77 and Bluetooth firmware initialize; the Lily58 appears over USB
+  and Bluetooth. Onboard RTL8125A links at 2.5 Gb/s. No missing-firmware errors
+  are observed; embedded firmware still limits what this proves about disk inputs.
+- [x] Boot the distribution fallback after trimming (BootCurrent=000A).
+  Expected release, read/write encrypted root, both GPUs and no failed units
+  are confirmed. AX200 API 77 and Intel Bluetooth firmware load, both USB and
+  Bluetooth Lily58 devices appear, and RTL8125A links at 2.5 Gb/s. Microcode is
+  `0x08701035`; no missing-firmware errors are observed. This kernel embeds no
+  extra firmware, providing evidence for the trimmed installed selection.
+  The native selector still points to Gentoo sources; the custom entry remains
+  first in BootOrder and BootNext is clear.
+- [ ] Confirm a full power-off/start of the custom kernel if its post-trim boot
+  was only a restart. Exercise Wi-Fi connectivity, Bluetooth keyboard, USB
+  Ethernet, audio/camera/microphone and intended suspend/resume on both kernels.
 
 ## Deferred signing and driver maintenance
 

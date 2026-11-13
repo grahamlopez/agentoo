@@ -119,7 +119,7 @@ from another host into Git.
 | Thinktop | Present | Present | Present | Hyprland and Kitty |
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
 | Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Hyprland; Kitty defaults |
-| Bequiet | Present; Zen 2 CPU and NVIDIA graphics | Unsigned boot/USB unlock and both GPUs accepted | Reviewed list; application pending | Shared defaults |
+| Bequiet | Present; Zen 2 CPU and NVIDIA graphics | Unsigned boot/USB unlock and both GPUs accepted | Applied; both kernels boot; peripheral/resume checks pending | Shared defaults |
 
 Startop selects Arrow Lake compiler targets and Intel graphics, with a
 shared-memory build directory and twelve-job build limit. See its
