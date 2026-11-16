@@ -72,3 +72,34 @@ the profile does not install a CUDA toolkit or application stack. Validate used
 Ethernet ports, Wi-Fi/Bluetooth, NVMe/SATA data access, audio, USB/input devices,
 and intended suspend/resume behavior. Display layout retains shared defaults.
 Hardware acceptance on the new installation remains pending.
+
+## Kernel secure boot and module signing
+
+The signing-specific kernel change is in Bequiet’s host fragment
+(etc/agentoo/kernel/hosts/bequiet.config:14), deployed as
+/etc/agentoo/kernel/hosts/ bequiet.config:
+
+CONFIG_SYSTEM_TRUSTED_KEYS="/etc/kernel/certs/db.pem"
+
+This embeds your public certificate so the kernel trusts NVIDIA modules
+signed with the corresponding private key.
+
+These existing settings remain:
+
+- CONFIG_MODULE_SIG_KEY="": kernel compilation uses no private signing key. •
+- CONFIG_MODULE_SIG_ALL=n: kernel build does not automatically sign in-tree modules.
+- CONFIG_MODULE_SIG_FORCE=n: enforcement is not unconditional. Our test enables
+  it through module.sig_enforce=1; Secure Boot activates enforcement through
+  the existing IMA policy.
+
+The resolved build configuration is the candidate’s .config
+(/home/graham/.local/state/agentoo/kernel/6.18.62-gentoo-bequiet-secure/kernel/6.18.62-gentoo-
+bequiet-secure/.config).
+
+NVIDIA signing itself is configured separately through native Portage
+settings in Bequiet’s make.defaults
+(usr/local/share/agentoo/portage/profiles/hosts/ bequiet/make.defaults) and
+package.use (usr/local/share/agentoo/portage/profiles/hosts/bequiet/package.use). The
+shared kernel baseline was unchanged.
+
+

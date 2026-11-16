@@ -22,8 +22,9 @@ Agentoo Portage profile and chooses the tracked native Kconfig fragment
 selection, not the destination hardware or storage. Missing or malformed profiles
 fail before workspace/source changes. Thinktop, flattop, startop and bequiet
 fragments are supplied; Startop has build/boot and peripheral acceptance.
-Bequiet's unsigned module-enabled build/install implementation awaits host
-acceptance in the [active card](../kanban/Open/026-bequiet-custom-kernel.md).
+Bequiet's custom kernel boots with Secure Boot and signed NVIDIA modules;
+remaining onboarding work is tracked in the
+[active card](../kanban/Open/026-bequiet-custom-kernel.md).
 Other hosts need reviewed fragments first.
 
 The starting config supplies the shared driver/capability union. Host fragments
@@ -36,8 +37,8 @@ config and resolved with native Kconfig. Its archive path and firmware list are
 empty; the workspace and selected host fragment provide those inputs.
 Adding a host must not prune the shared driver union. Bequiet's fragment enables
 modules and signature verification for NVIDIA while preserving built-in drivers.
-NVIDIA bring-up is unsigned. Module signing and subsequent driver-update
-maintenance are deferred until after the first boot/hardware acceptance.
+NVIDIA module signing uses native Portage policy; subsequent driver-update
+maintenance remains tracked in the active card.
 
 Config inspects the mounted root through findmnt, lsblk and sysfs. The supported
 layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed by a GPT
@@ -424,6 +425,21 @@ does not establish that the firmware trusts that certificate or will accept the
 image. Boot-test each required entry with Secure Boot enabled. The packaged
 Gentoo fallback remains managed independently by Portage/installkernel/dracut.
 
+Bequiet's packaged fallback is console recovery with networking; its desktop and
+NVIDIA compute stack are not required. Preserve the normal root/initramfs inputs
+and add these per-entry arguments when registering a fallback:
+
+```text
+systemd.unit=multi-user.target systemd.mask=getty@tty1.service
+```
+
+Pass them through `gen-efi-cmd --args` when generating a registration command.
+The existing password login on tty2 remains available (Ctrl+Alt+F2); masking tty1
+avoids its shell-driven desktop autostart. Normal multi-user services include
+dhcpcd. This leaves packaged kernel/initramfs maintenance unchanged and requires
+no fallback NVIDIA signing, Nouveau setup or extra firmware. Physical Secure Boot,
+console and network acceptance is recorded in the active card.
+
 [Historical baseline and Secure Boot experiments](history/kernel-baseline-build.md#signing-images-for-secure-boot)
 preserve earlier notes on separate signed custom images, a distribution-kernel
 UKI, key backups/enrollment, and testing both boot paths. Those machine-specific
@@ -481,9 +497,10 @@ policy. Kernel compilation needs only the public certificate; automatic in-tree
 module signing remains disabled and no kernel signing key is generated. Retain
 the working bring-up entry and distribution fallback. Test the new candidate with
 `module.sig_enforce=1` in its separate EFI entry while Secure Boot is disabled.
-Both GPUs must work with signature enforcement active. Firmware enrollment and
-the distribution fallback's separate module trust requirement remain tracked in
-the [work card](../kanban/Open/026-bequiet-custom-kernel.md).
+Both GPUs must work with signature enforcement active. Bequiet's custom kernel,
+Windows and packaged console/network fallback are accepted with Secure Boot
+enabled; remaining work is tracked in the
+[work card](../kanban/Open/026-bequiet-custom-kernel.md).
 
 Use `eselect kernel` to select the Gentoo source tree; `config` defaults to that
 selection and records its concrete path for later builds. `--sources` is an

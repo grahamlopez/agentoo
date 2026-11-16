@@ -1,14 +1,16 @@
 # Onboard Bequiet custom kernels
 
-Status: Open — unsigned boot and trimmed firmware accepted; Secure Boot module setup outstanding
+Status: Open — custom kernel, Windows, console recovery and trimmed firmware accepted; maintenance outstanding
 
 ## Goal and scope
 
 This card defines and tracks Bequiet custom-kernel onboarding. First get a
 booting kernel with NVIDIA graphics/compute and required hardware working while
 Secure Boot is disabled. The unsigned candidate and trimmed firmware are accepted
-on both boot paths. Finish native module signing/trust and Secure Boot enrollment
-with the existing implementation; driver-update maintenance remains explicit.
+on both boot paths; the signed custom candidate boots with Secure Boot and
+module enforcement active. Windows and console/network fallback acceptance under
+Secure Boot are confirmed. Finish driver-update maintenance and the remaining
+authentication/backup items with the existing implementation.
 
 Complete this card using the existing implementation. The proposed thin wrapper
 around Gentoo's source-built kernel package is deferred to
@@ -123,9 +125,10 @@ The native-consumer audit and proposed package-based replacement are recorded in
 [card 051](../Backlog/051-gentoo-kernel-native-workflow.md). Finish this onboarding
 with the current commands and explicit native targeting where needed.
 
-- [ ] Document and verify the existing NVIDIA maintenance procedure for the
-  custom and fallback kernels using native source/output settings. Keep driver
-  and userspace versions aligned; no new cross-kernel updater is required.
+- [ ] Document and verify NVIDIA maintenance for the custom kernel using native
+  source/output settings. Keep driver and userspace versions aligned. The packaged
+  fallback is console/network recovery and does not require NVIDIA; no cross-kernel
+  updater is required.
 - [x] Confirm the explicit context for this firmware application: run firmware
   apply as root with native `KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin`
   and empty `KBUILD_OUTPUT`. Native Portage preserves these settings and the
@@ -177,10 +180,12 @@ with the current commands and explicit native targeting where needed.
 - Secure Boot prerequisite: both configs enable `IMA_ARCH_POLICY` and
   `MODULE_SIG`. Native `security/integrity/ima/ima_efi.c:arch_get_ima_policy`
   enables module-signature enforcement when EFI Secure Boot is active, even
-  without `MODULE_SIG_FORCE`. Both installed NVIDIA module sets are unsigned.
-  EFI image signing/enrollment alone is insufficient for this host.
-- Host state: Setup Mode enabled, Secure Boot disabled; firmware default trust
-  databases remain available. Local sbctl keys are created but not enrolled.
+  without `MODULE_SIG_FORCE`. The custom candidate's module trust is accepted
+  below; the fallback NVIDIA modules remain unsigned. EFI image signing/enrollment
+  alone is insufficient for that fallback's NVIDIA support.
+- Host state: sbctl's PK/KEK/db are enrolled, Setup Mode is disabled and Secure
+  Boot is enabled. Boot0008 is current and first in BootOrder; the bring-up and
+  packaged fallback entries remain available.
 - [x] Create Bequiet's sbctl identity, Owner GUID
   `b4bd2c67-353c-47a8-abbc-349782544a03`. Public db certificate SHA256:
   `77:C1:03:91:89:72:F0:14:16:FA:DF:C3:47:88:B6:70:5D:D1:72:72:68:5E:09:E0:5C:21:30:29:5C:FA:90:3B`.
@@ -192,20 +197,60 @@ with the current commands and explicit native targeting where needed.
 - [x] Publish `/etc/kernel/certs/db.pem` with mode `0644`; its SHA256 fingerprint
   matches the backed-up sbctl identity above. The selected source remains
   `/usr/src/linux-6.18.62-gentoo`.
-- [ ] Apply repository policy live and build/install a separate `bequiet-secure`
-  candidate. Verify its signed NVIDIA modules under enforced module checking
-  before enabling firmware Secure Boot; retain the unsigned bring-up entry.
-- Establish fallback module trust before enrollment. Native module verification
-  uses the builtin/secondary keyrings; UEFI db certificates are imported into the
-  separate platform keyring. The stock fallback has no reserved extra-certificate
-  slot, and its Gentoo signing private key is unavailable. A db-enrollment-only
-  module-signing recipe is insufficient; settle the native trust path explicitly
-  without assuming the custom kernel's embedded certificate also fixes fallback.
-- [ ] Design and implement native NVIDIA module signing and kernel trust, then
-  enroll prepared trust and accept both Linux boot paths and Windows with
-  Secure Boot enabled. Reuse native mechanisms before adding workspace state.
-- [ ] Establish subsequent driver-update maintenance for the custom and fallback
-  kernels. Do not add a cross-kernel update command before settling this scope.
+- [x] Apply repository policy live and configure `bequiet-secure`. Its recorded
+  host fragment matches live policy, resolved config trusts the public certificate,
+  and effective NVIDIA settings enable `modules-sign` with the intended key/cert.
+- [x] Build `bequiet-secure`. Retained image/config match completed-build hashes,
+  native kernel release matches, and the compiled trusted-certificate list is an
+  exact DER match to the public db certificate. Live NVIDIA signing policy remains
+  enabled with the intended key/cert.
+- [x] Install `bequiet-secure`: `sbverify` accepts the EFI image with the public
+  db certificate; OpenSSL verifies all four installed NVIDIA module signatures
+  against that certificate. Module version/release and retained build link match.
+  Host kmod lacks OpenSSL support, so blank `modinfo` signer fields do not indicate
+  unsigned modules. Secure Boot remains disabled.
+- [x] Operator's root EFI listing confirms Boot0008 points to the signed
+  `bequiet-secure` image on the intended ESP, with no extra arguments. Boot0007
+  is current and the distribution fallback remains Boot000A.
+- [x] Boot the separate signed candidate through BootNext with
+  `module.sig_enforce=1` and Secure Boot disabled. BootCurrent is 0008, expected
+  release/command line match, and `sig_enforce` is `Y`. The journal confirms the
+  db certificate loaded; all four NVIDIA modules are loaded, both GPUs appear
+  with driver `595.104.02`, Hyprland runs and systemd reports no failed units.
+  BootNext is consumed; the unsigned bring-up entry remains first in BootOrder.
+- Fallback requirement: the operator accepts a full console boot with networking.
+  Keep the packaged kernel/initramfs and existing firmware selection. Do not add
+  Shim/MOK, Nouveau support or local NVIDIA module trust for this recovery path.
+- [x] Accept Boot000A console/network recovery with Secure Boot enabled and
+  Setup Mode disabled. Its tested entry retains root/initramfs inputs and adds
+  `systemd.unit=multi-user.target systemd.mask=getty@tty1.service`. Console login
+  works, encrypted Btrfs `@` is read/write, Ethernet has an address, DNS resolves,
+  HTTPS returns 200 and systemd reports no failed units. The packaged kernel
+  enforces module signatures; no separate module blacklist is needed for this
+  accepted recovery path. BootNext is consumed and signed Boot0008 remains the
+  default for the next ordinary reboot.
+- [x] Recheck enrollment inputs: SetupMode=1, SecureBoot=0 and no active
+  PK/KEK/db/dbx; firmware default databases exist. Both Linux EFI signatures
+  verify against their respective local/package certificates. Gentoo fallback
+  certificate SHA256:
+  `B9:09:37:4A:D0:AB:39:B2:7E:7D:73:B3:EA:B6:E9:98:09:C9:76:CA:6C:92:BD:35:A5:75:23:14:6E:28:CE:F7`.
+- [x] Operator confirms Windows Secure Boot acceptance and the requested
+  encryption/protection checks, including normal unlock after reboot and resuming
+  BitLocker if it was suspended. Its recovery key is backed up if applicable.
+- [x] Put the tested signed Boot0008 first in BootOrder, preserving the other
+  entries and their relative order. Native EFI reports it as current/default.
+- [ ] After staging Gentoo's certificate, refresh the offline `/var/lib/sbctl`
+  backup under a new archive name and verify it, as required by the guide.
+- [x] Stage Gentoo's certificate and run native enrollment with
+  `--microsoft --firmware-builtin --custom`. The command reports success; the
+  enrolled list includes the local PK/KEK/db identities, Gentoo, Microsoft and
+  Gigabyte. PK/KEK/db variables exist and enrollment survives restart.
+- [x] Restart and accept the custom kernel under firmware enforcement.
+  `sbctl status` and EFI variables confirm SetupMode=0 and SecureBoot=1;
+  `6.18.62-gentoo-bequiet-secure` boots with `sig_enforce=Y`. All four NVIDIA
+  modules load, both GPUs work with driver `595.104.02`, Hyprland runs and there
+  are no failed systemd units. The journal confirms Secure Boot and the expected
+  db certificate. The console/network fallback is accepted separately above.
 
 Close after the agreed host checks and later phases are complete or explicitly
 split into separate cards. Record completion in the finishing commit and board
