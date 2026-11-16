@@ -46,8 +46,7 @@ through the existing firmware apply workflow. Both kernels and normal peripheral
 including suspend/resume, are accepted after trimming. AMD microcode comes from that package;
 `--microcode auto` detects AMD when installation runs on Bequiet, or select
 `--microcode amd` explicitly. A reviewed custom-kernel fragment is supplied;
-module workflow, signing and firmware acceptance are defined and tracked in the
-[active work card](../../kanban/Open/026-bequiet-custom-kernel.md).
+see the [kernel workflow](../kernel.md) and acceptance below.
 
 ## Devices and installation acceptance
 
@@ -71,35 +70,42 @@ Hyprland session when installed. Test required GPU compute workloads separately;
 the profile does not install a CUDA toolkit or application stack. Validate used
 Ethernet ports, Wi-Fi/Bluetooth, NVMe/SATA data access, audio, USB/input devices,
 and intended suspend/resume behavior. Display layout retains shared defaults.
-Hardware acceptance on the new installation remains pending.
+Normal-use hardware and suspend/resume acceptance are complete for this host.
 
-## Kernel secure boot and module signing
+## Kernel and Secure Boot acceptance
 
-The signing-specific kernel change is in Bequiet’s host fragment
-(etc/agentoo/kernel/hosts/bequiet.config:14), deployed as
-/etc/agentoo/kernel/hosts/ bequiet.config:
+Custom-kernel onboarding completed on 2026-11-16 with:
 
-CONFIG_SYSTEM_TRUSTED_KEYS="/etc/kernel/certs/db.pem"
+- `6.18.62-gentoo-bequiet-secure`: Secure Boot enabled, Setup Mode disabled,
+  module-signature enforcement active, NVIDIA `595.104.02` on both GPUs and a
+  working Hyprland desktop. USB root unlock, normal-use hardware and trimmed
+  firmware are accepted.
+- `6.18.62-gentoo-dist-bin`: packaged console/network recovery under Secure Boot,
+  with read/write encrypted Btrfs root, password login, Ethernet, DNS and HTTPS,
+  and no failed systemd units. Desktop graphics and NVIDIA compute are outside
+  the recovery requirement. Its boot arguments are documented in the
+  [kernel guide](../kernel.md#secure-boot).
+- Windows: direct firmware boot with Secure Boot enabled and normal unlock
+  confirmed by the operator.
 
-This embeds your public certificate so the kernel trusts NVIDIA modules
-signed with the corresponding private key.
+### Signing configuration
 
-These existing settings remain:
+The [host fragment](../../../../../../etc/agentoo/kernel/hosts/bequiet.config),
+deployed as `/etc/agentoo/kernel/hosts/bequiet.config`, sets
+`CONFIG_SYSTEM_TRUSTED_KEYS="/etc/kernel/certs/db.pem"`. This embeds the public
+certificate so the kernel trusts NVIDIA modules signed with its private key.
 
-- CONFIG_MODULE_SIG_KEY="": kernel compilation uses no private signing key. •
-- CONFIG_MODULE_SIG_ALL=n: kernel build does not automatically sign in-tree modules.
-- CONFIG_MODULE_SIG_FORCE=n: enforcement is not unconditional. Our test enables
-  it through module.sig_enforce=1; Secure Boot activates enforcement through
-  the existing IMA policy.
+- `CONFIG_MODULE_SIG_KEY=""`: kernel compilation uses no private signing key.
+- `CONFIG_MODULE_SIG_ALL=n`: kernel compilation does not automatically sign
+  in-tree modules.
+- `CONFIG_MODULE_SIG_FORCE=n`: enforcement is not unconditional. The accepted
+  entry supplies `module.sig_enforce=1`; Secure Boot also activates enforcement
+  through the existing IMA policy.
 
-The resolved build configuration is the candidate’s .config
-(/home/graham/.local/state/agentoo/kernel/6.18.62-gentoo-bequiet-secure/kernel/6.18.62-gentoo-
-bequiet-secure/.config).
-
-NVIDIA signing itself is configured separately through native Portage
-settings in Bequiet’s make.defaults
-(usr/local/share/agentoo/portage/profiles/hosts/ bequiet/make.defaults) and
-package.use (usr/local/share/agentoo/portage/profiles/hosts/bequiet/package.use). The
-shared kernel baseline was unchanged.
-
-
+The resolved configuration is `kernel/<release>/.config` inside the workspace
+described in the [kernel guide](../kernel.md#configure). NVIDIA signing uses native
+Portage settings in Bequiet's [make.defaults](../../portage/profiles/hosts/bequiet/make.defaults)
+and [package.use](../../portage/profiles/hosts/bequiet/package.use). The shared
+kernel baseline is unchanged. Initial keys, public certificate setup and firmware
+enrollment are covered by the [kernel](../kernel.md#bequiet-signed-candidate) and
+[Secure Boot](../secure-boot.md) guides.

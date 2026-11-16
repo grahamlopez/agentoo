@@ -23,8 +23,7 @@ selection, not the destination hardware or storage. Missing or malformed profile
 fail before workspace/source changes. Thinktop, flattop, startop and bequiet
 fragments are supplied; Startop has build/boot and peripheral acceptance.
 Bequiet's custom kernel boots with Secure Boot and signed NVIDIA modules;
-remaining onboarding work is tracked in the
-[active card](../kanban/Open/026-bequiet-custom-kernel.md).
+see its [host acceptance](hosts/bequiet.md#kernel-and-secure-boot-acceptance).
 Other hosts need reviewed fragments first.
 
 The starting config supplies the shared driver/capability union. Host fragments
@@ -37,8 +36,8 @@ config and resolved with native Kconfig. Its archive path and firmware list are
 empty; the workspace and selected host fragment provide those inputs.
 Adding a host must not prune the shared driver union. Bequiet's fragment enables
 modules and signature verification for NVIDIA while preserving built-in drivers.
-NVIDIA module signing uses native Portage policy; subsequent driver-update
-maintenance remains tracked in the active card.
+NVIDIA module signing uses native Portage policy. Installation rebuilds the
+installed driver version for its selected custom kernel.
 
 Config inspects the mounted root through findmnt, lsblk and sysfs. The supported
 layout is Btrfs subvolume `@`, directly on one LUKS2 mapping backed by a GPT
@@ -72,8 +71,8 @@ It checks host settings after each Kconfig resolution and refuses silent changes
 workspace.
 
 Installed firmware remains independent: follow the native savedconfig procedure
-in [firmware maintenance](firmware.md). Thinktop, Flattop and Startop have reviewed native
-savedconfig lists; applying or revising them and rebuilding linux-firmware are
+in [firmware maintenance](firmware.md). Thinktop, Flattop, Startop and Bequiet have
+reviewed native savedconfig lists; applying or revising them and rebuilding linux-firmware are
 separate from kernel configuration. The Thinktop list also includes the recorded
 RTL8156 dock Ethernet correction, which needs application on that host.
 Use `agentoo kernel firmware` for read-only status, including savedconfig precedence,
@@ -438,7 +437,8 @@ The existing password login on tty2 remains available (Ctrl+Alt+F2); masking tty
 avoids its shell-driven desktop autostart. Normal multi-user services include
 dhcpcd. This leaves packaged kernel/initramfs maintenance unchanged and requires
 no fallback NVIDIA signing, Nouveau setup or extra firmware. Physical Secure Boot,
-console and network acceptance is recorded in the active card.
+console and network acceptance is recorded in the
+[host guide](hosts/bequiet.md#kernel-and-secure-boot-acceptance).
 
 [Historical baseline and Secure Boot experiments](history/kernel-baseline-build.md#signing-images-for-secure-boot)
 preserve earlier notes on separate signed custom images, a distribution-kernel
@@ -499,8 +499,7 @@ the working bring-up entry and distribution fallback. Test the new candidate wit
 `module.sig_enforce=1` in its separate EFI entry while Secure Boot is disabled.
 Both GPUs must work with signature enforcement active. Bequiet's custom kernel,
 Windows and packaged console/network fallback are accepted with Secure Boot
-enabled; remaining work is tracked in the
-[work card](../kanban/Open/026-bequiet-custom-kernel.md).
+enabled; see the [host guide](hosts/bequiet.md#kernel-and-secure-boot-acceptance).
 
 Use `eselect kernel` to select the Gentoo source tree; `config` defaults to that
 selection and records its concrete path for later builds. `--sources` is an
@@ -508,6 +507,10 @@ optional per-workspace override. Normal Portage integration with retained output
 trees remains under review: the native module helpers require the matching output
 context, and linux-firmware's regeneration hook assumes an image in its source
 directory. Repeatedly changing the source selector is not the intended workflow.
-This implementation rebuilds NVIDIA only for the candidate being installed;
-ordinary driver updates, firmware-hook integration and module signing remain in
-the [work card](../kanban/Open/026-bequiet-custom-kernel.md).
+This implementation rebuilds NVIDIA only for the candidate being installed.
+After changing the installed NVIDIA version, rebuild its modules for the custom
+kernel before rebooting into it; module and userspace versions must agree.
+Re-running `agentoo kernel install --label LABEL` rebuilds the installed NVIDIA
+version against that workspace without requiring a new kernel compilation.
+The proposed native package-based workflow is described in
+[card 051](../kanban/Backlog/051-gentoo-kernel-native-workflow.md).

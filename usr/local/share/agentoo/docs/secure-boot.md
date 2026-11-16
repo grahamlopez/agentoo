@@ -15,13 +15,15 @@ Prepare signed external modules and establish their kernel trust before enabling
 Secure Boot when the kernel requires them. Bequiet's current custom and fallback
 configs enable `CONFIG_IMA_ARCH_POLICY=y` and `CONFIG_MODULE_SIG=y`; the native
 IMA EFI policy enables module-signature enforcement under Secure Boot even with
-`CONFIG_MODULE_SIG_FORCE` disabled. Its bring-up NVIDIA modules are unsigned.
+`CONFIG_MODULE_SIG_FORCE` disabled.
 
 Use Gentoo's native `modules-sign` policy and signing inputs for NVIDIA, and
-verify trust separately in both kernels. Firmware enrollment of an EFI signing
-certificate does not by itself establish module-signing trust. Bequiet's module
-setup remains in [card 026](../kanban/Open/026-bequiet-custom-kernel.md); this guide's
-image signing/enrollment steps alone do not complete that setup.
+verify trust in each kernel that needs those modules. Firmware enrollment of an
+EFI signing certificate does not by itself establish module-signing trust.
+Bequiet's custom kernel embeds its module-signing certificate; its packaged
+fallback is accepted as console/network recovery without NVIDIA. See the
+[kernel guide](kernel.md#bequiet-signed-candidate) for its native signing inputs
+and [host acceptance](hosts/bequiet.md#kernel-and-secure-boot-acceptance).
 
 ## 1. Prepare Windows if present
 

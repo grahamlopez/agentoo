@@ -7,7 +7,7 @@ Status: Open — implementation complete; host acceptance pending
 
 - Config does not write or back up the source Makefile. Bequiet's native module
   integration now preserves source EXTRAVERSION without a command-line override;
-  see [card 026](026-bequiet-custom-kernel.md) for its current workflow and checks.
+  see the [kernel guide](../../docs/kernel.md) for its current workflow.
 - Custom command lines default to `ro console=tty0 loglevel=5`; `config --cmdline TEXT` explicitly
   selects other policy, including arguments required by supplied archives.
   Removed crypt_root/root_trim generation and command-line style handling.

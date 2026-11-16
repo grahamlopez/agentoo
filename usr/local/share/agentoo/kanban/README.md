@@ -57,3 +57,4 @@ git show "$(git log -1 --format=%H --diff-filter=D -- "$path")^:$path"
 - 048 Centralize derived Portage compiler settings after host selection (`048-derived-portage-compiler-settings.md`)
 
 - 024 Onboard Startop custom kernel v0.4 and trim installed firmware (`024-startop-kernel-v0.4-onboarding.md`); both 6.18.60 boot paths and requested peripherals/suspend accepted.
+- 026 Onboard Bequiet custom kernels (`026-bequiet-custom-kernel.md`); signed NVIDIA desktop, Windows and packaged console/network recovery accepted with Secure Boot; trimmed firmware and normal-use hardware accepted.

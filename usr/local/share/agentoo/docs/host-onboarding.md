@@ -119,13 +119,14 @@ from another host into Git.
 | Thinktop | Present | Present | Present | Hyprland and Kitty |
 | Flattop | Present | Present | Present | Hyprland; Kitty defaults |
 | Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Hyprland; Kitty defaults |
-| Bequiet | Present; Zen 2 CPU and NVIDIA graphics | Unsigned boot/USB unlock and both GPUs accepted | Trimmed selection and both boot paths accepted | Shared defaults |
+| Bequiet | Present; Zen 2 CPU and NVIDIA graphics | Secure Boot, USB unlock and both GPUs accepted; packaged console/network recovery accepted | Trimmed selection and both boot paths accepted | Shared defaults |
 
 Startop selects Arrow Lake compiler targets and Intel graphics, with a
 shared-memory build directory and twelve-job build limit. See its
 [hardware baseline](hosts/startop.md). The installer prints its EFI registration
 command with the full device path required by its firmware.
 
-Bequiet uses the distribution kernel and packaged NVIDIA open modules. See its
-[hardware baseline and installation checks](hosts/bequiet.md). Custom-kernel
-onboarding is defined in the [active card](../kanban/Open/026-bequiet-custom-kernel.md).
+Bequiet's custom kernel uses packaged NVIDIA open modules; its distribution
+kernel provides console/network recovery. Custom Linux, recovery Linux and
+Windows are accepted with Secure Boot enabled. See its
+[hardware baseline and acceptance](hosts/bequiet.md).

@@ -8,7 +8,8 @@ Status: Backlog
 Track remaining common work for the shared driver/capability union across
 thinktop, startop, flattop and bequiet. Host boot arguments, firmware/microcode
 and initramfs inputs remain exceptions. Shared `MODULES=n` and Nouveau exclusion
-remain; Bequiet's module exception and workflow are defined in its active card.
+remain; Bequiet's module exception and workflow are defined in its host fragment
+and the [kernel guide](../../docs/kernel.md).
 No bonding/teaming/VRFs or hibernation is required. Ordinary suspend and swap,
 GPU compute, Intel/AMD KVM and PCI/GPU passthrough remain requirements.
 
@@ -23,7 +24,8 @@ and after suspend. Its host card records boot-log evidence and remaining scope.
 Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
 [Startop acceptance](../../docs/hosts/startop.md#installed-firmware-acceptance),
 [flattop](025-flattop-kernel-v0.3-followups.md),
-[bequiet](../Open/026-bequiet-custom-kernel.md). Record per-host results there.
+[Bequiet acceptance](../../docs/hosts/bequiet.md#kernel-and-secure-boot-acceptance).
+Record per-host results there.
 
 ## Common validation, where used
 

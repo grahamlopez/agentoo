@@ -1,7 +1,7 @@
 # Simplify custom kernels using Gentoo's source-built kernel package
 
 Created: 2026-11-13
-Status: Backlog — explore after Bequiet onboarding with the existing implementation
+Status: Backlog
 
 ## Goal and boundaries
 
@@ -10,9 +10,9 @@ Evaluate replacing most of `agentoo kernel`'s custom build/install lifecycle wit
 kernel installation facilities. Preserve the capabilities we need while reducing
 Agentoo-owned code, state and maintenance procedures.
 
-Finish [Bequiet onboarding](../Open/026-bequiet-custom-kernel.md) using the current
-implementation first. This proposal is not a dependency of that card and does not
-authorize migration, implementation or replacement of working boot artifacts.
+[Bequiet onboarding](../../docs/hosts/bequiet.md#kernel-and-secure-boot-acceptance)
+is complete using the existing implementation. This proposal does not authorize
+migration, implementation or replacement of working boot artifacts.
 
 Retain the shared driver/capability union, selected host specialization, local
 overrides, minimal embedded initramfs and direct EFI boot. Prefer native mechanisms;
@@ -73,8 +73,8 @@ Reviewed the installed Gentoo repository on 2026-11-13, including
   image under `KV_DIR`, so a separate output setting alone does not fix that hook.
 
 These are source review and native-helper observations, not an accepted
-`gentoo-kernel` build, installation or boot of our configuration. Automatic NVIDIA
-maintenance for both custom and binary fallback kernels is not yet established.
+`gentoo-kernel` build, installation or boot of our configuration. Bequiet's binary
+fallback is accepted console/network recovery and does not require NVIDIA modules.
 
 ## Evaluation and acceptance
 
@@ -88,7 +88,8 @@ maintenance for both custom and binary fallback kernels is not yet established.
   without generating an unwanted external initramfs or changing firmware entries.
 - [ ] Verify RAM compilation, installed prepared-tree discovery and ordinary
   module/firmware maintenance through native Gentoo facilities. Test NVIDIA and
-  userspace version agreement for both the custom kernel and binary fallback.
+  userspace version agreement for the custom kernel; retain the binary fallback's
+  accepted console/network recovery behavior.
 - [ ] Preserve explicit EFI registration and the required signing behavior;
   coordinate with [image signing](../Open/050-kernel-image-signing.md).
 - [ ] Validate native `secureboot`/`modules-sign` with the existing sbctl identity:
@@ -97,8 +98,8 @@ maintenance for both custom and binary fallback kernels is not yet established.
   files through native Portage handling; retire the manually published public
   certificate and its config references when no remaining consumer needs it.
   Keep private signing material out of installed artifacts and binary packages.
-  Test both Linux boot paths separately: rebuilding the custom kernel does not
-  establish module trust in the existing binary fallback.
+  Test both Linux boot paths separately, preserving console/network recovery
+  without requiring NVIDIA in the packaged fallback.
 - [ ] Define the remaining Agentoo responsibilities: host preparation, local
   initramfs inputs, useful validation, native package invocation and EFI guidance.
   Keep a wrapper only where it adds a concrete operation or clarity.
