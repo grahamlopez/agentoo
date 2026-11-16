@@ -47,6 +47,21 @@ Reviewed the installed Gentoo repository on 2026-11-13, including
 - Portage can compile in RAM through its native temporary-directory setting and
   install durable package-owned results. Native kernel installation provides EFI
   copy/signing hooks; manual `efibootmgr` registration remains a separate action.
+- Signing review on 2026-11-16: `kernel-build_pkg_setup` reads explicit
+  `MODULES_SIGN_KEY` and `MODULES_SIGN_CERT` as root. The native eclass prepares
+  a combined PEM in its temporary directory for compilation, and selects it through
+  `CONFIG_MODULE_SIG_KEY`. This should remove the need for our current manually
+  published `/etc/kernel/certs/db.pem`; use sbctl's original key/certificate paths
+  for the kernel and NVIDIA. `secureboot.eclass` already recognizes sbctl's
+  standard db files for EFI signing. Reuse the existing enrolled identity.
+- With `USE=modules-sign`, the native kernel eclass enables module signing,
+  automatic signing and enforcement. Savedconfig and `config.d` can override
+  these settings; `config.d` also follows the native signing-key fragment.
+  Remove the current bring-up overrides (`MODULE_SIG_KEY=""`, disabled
+  `MODULE_SIG_ALL`/`MODULE_SIG_FORCE`) and public-copy `SYSTEM_TRUSTED_KEYS` path
+  from the migrated inputs where native signing supplies their replacements.
+  Do not carry the complete existing config forward without resolving these
+  conflicts. This is source evidence; the signed build still requires acceptance.
 - The existing implementation successfully boots Bequiet with USB unlock and
   NVIDIA. Its labelled output is not automatically discovered by `linux-info`
   when only the clean source tree is selected: the helper searches using the
@@ -76,6 +91,14 @@ maintenance for both custom and binary fallback kernels is not yet established.
   userspace version agreement for both the custom kernel and binary fallback.
 - [ ] Preserve explicit EFI registration and the required signing behavior;
   coordinate with [image signing](../Open/050-kernel-image-signing.md).
+- [ ] Validate native `secureboot`/`modules-sign` with the existing sbctl identity:
+  kernel embeds the intended certificate, in-tree and NVIDIA modules are signed,
+  enforcement accepts them, and the EFI image verifies. Read the original sbctl
+  files through native Portage handling; retire the manually published public
+  certificate and its config references when no remaining consumer needs it.
+  Keep private signing material out of installed artifacts and binary packages.
+  Test both Linux boot paths separately: rebuilding the custom kernel does not
+  establish module trust in the existing binary fallback.
 - [ ] Define the remaining Agentoo responsibilities: host preparation, local
   initramfs inputs, useful validation, native package invocation and EFI guidance.
   Keep a wrapper only where it adds a concrete operation or clarity.

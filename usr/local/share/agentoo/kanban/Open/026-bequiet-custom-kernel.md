@@ -172,15 +172,37 @@ with the current commands and explicit native targeting where needed.
   Bluetooth keyboard, USB Ethernet, audio/camera/microphone and intended
   suspend/resume acceptance on both kernels.
 
-## Deferred signing and driver maintenance
+## Secure Boot onboarding and driver maintenance
 
 - Secure Boot prerequisite: both configs enable `IMA_ARCH_POLICY` and
   `MODULE_SIG`. Native `security/integrity/ima/ima_efi.c:arch_get_ima_policy`
   enables module-signature enforcement when EFI Secure Boot is active, even
   without `MODULE_SIG_FORCE`. Both installed NVIDIA module sets are unsigned.
   EFI image signing/enrollment alone is insufficient for this host.
+- Host state: Setup Mode enabled, Secure Boot disabled; firmware default trust
+  databases remain available. Local sbctl keys are created but not enrolled.
+- [x] Create Bequiet's sbctl identity, Owner GUID
+  `b4bd2c67-353c-47a8-abbc-349782544a03`. Public db certificate SHA256:
+  `77:C1:03:91:89:72:F0:14:16:FA:DF:C3:47:88:B6:70:5D:D1:72:72:68:5E:09:E0:5C:21:30:29:5C:FA:90:3B`.
+- [x] Operator confirms backup of `/var/lib/sbctl` to secure offline storage and
+  archive verification before proceeding with trust configuration or enrollment.
+- [x] Prepare native signing policy: kernel trusts `/etc/kernel/certs/db.pem`;
+  NVIDIA enables `modules-sign` and uses that public certificate plus sbctl's
+  private db key. No installer runtime code or certificate snapshots are added.
+- [x] Publish `/etc/kernel/certs/db.pem` with mode `0644`; its SHA256 fingerprint
+  matches the backed-up sbctl identity above. The selected source remains
+  `/usr/src/linux-6.18.62-gentoo`.
+- [ ] Apply repository policy live and build/install a separate `bequiet-secure`
+  candidate. Verify its signed NVIDIA modules under enforced module checking
+  before enabling firmware Secure Boot; retain the unsigned bring-up entry.
+- Establish fallback module trust before enrollment. Native module verification
+  uses the builtin/secondary keyrings; UEFI db certificates are imported into the
+  separate platform keyring. The stock fallback has no reserved extra-certificate
+  slot, and its Gentoo signing private key is unavailable. A db-enrollment-only
+  module-signing recipe is insufficient; settle the native trust path explicitly
+  without assuming the custom kernel's embedded certificate also fixes fallback.
 - [ ] Design and implement native NVIDIA module signing and kernel trust, then
-  provision/back up keys and accept both Linux boot paths and Windows with
+  enroll prepared trust and accept both Linux boot paths and Windows with
   Secure Boot enabled. Reuse native mechanisms before adding workspace state.
 - [ ] Establish subsequent driver-update maintenance for the custom and fallback
   kernels. Do not add a cross-kernel update command before settling this scope.

@@ -2,3 +2,7 @@
 COMMON_FLAGS="-march=znver2 -O2 -pipe"
 RUSTFLAGS="${RUSTFLAGS} -C target-cpu=znver2"
 VIDEO_CARDS="-* nvidia"
+
+# Native Portage module signing; only the public certificate enters the kernel.
+MODULES_SIGN_KEY="/var/lib/sbctl/keys/db/db.key"
+MODULES_SIGN_CERT="/etc/kernel/certs/db.pem"

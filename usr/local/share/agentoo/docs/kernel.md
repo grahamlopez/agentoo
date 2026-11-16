@@ -449,29 +449,41 @@ cancellation, and 2 for invalid CLI arguments. A successful build/install does n
 establish successful boot or hardware acceptance. Retain a working recovery
 kernel while testing the candidate.
 
-## Bequiet boot bring-up before signing
+## Bequiet signed candidate
 
-Apply the repository changes on the host and keep Secure Boot disabled. Bequiet's
-profile selects `-modules-sign` for this first milestone. Config/build do not need
-signing keys or a certificate, and installation still builds NVIDIA against the
-final kernel and verifies its package version, release and installed paths.
+Unsigned boot and firmware acceptance are complete. Keep Secure Boot disabled
+while preparing a separate signed candidate. Bequiet's profile enables native
+NVIDIA `modules-sign`, using sbctl's private db key and the public certificate at
+`/etc/kernel/certs/db.pem`. The kernel fragment embeds that public certificate
+as a trusted key. Create and back up the sbctl identity as described in
+[secure-boot.md](secure-boot.md), then publish only the public certificate:
 
 ```sh
-agentoo kernel config --label bequiet-bringup \
-  --config /usr/local/share/agentoo/docs/kernel-shared-v04-config \
-  --sources /usr/src/linux-6.18.62-gentoo
-agentoo kernel build --label bequiet-bringup
-agentoo kernel install --label bequiet-bringup --unsigned
+sudo install -d -m 0755 /etc/kernel/certs
+sudo install -m 0644 /var/lib/sbctl/keys/db/db.pem /etc/kernel/certs/db.pem
+openssl x509 -in /etc/kernel/certs/db.pem -noout -subject -fingerprint -sha256
 ```
 
-Use the installed source version when it changes. `--unsigned` explicitly skips
-EFI image signing; module signing follows native `modules-sign` independently.
-The shared lockdown LSM selects module verification. The fragment leaves signature
-enforcement and automatic signing disabled and generates no signing key. No
-module signing keys or certificates are used for this milestone.
-Retain the distribution fallback. Register a separate firmware entry and test USB
-unlock, normal startup, both GPUs, displays/Hyprland and used peripherals before
-starting signing/enrollment or firmware trimming.
+Check the fingerprint against the backed-up identity before building. These
+machine-local certificates are excluded from Git; private keys remain under
+sbctl's protected directory. With repository policy applied on the host:
+
+```sh
+agentoo kernel config --label bequiet-secure \
+  --config /usr/local/share/agentoo/docs/kernel-shared-v04-config \
+  --accept-defaults
+agentoo kernel build --label bequiet-secure
+agentoo kernel install --label bequiet-secure
+```
+
+Installation signs the EFI image and rebuilds NVIDIA through Portage's signing
+policy. Kernel compilation needs only the public certificate; automatic in-tree
+module signing remains disabled and no kernel signing key is generated. Retain
+the working bring-up entry and distribution fallback. Test the new candidate with
+`module.sig_enforce=1` in its separate EFI entry while Secure Boot is disabled.
+Both GPUs must work with signature enforcement active. Firmware enrollment and
+the distribution fallback's separate module trust requirement remain tracked in
+the [work card](../kanban/Open/026-bequiet-custom-kernel.md).
 
 Use `eselect kernel` to select the Gentoo source tree; `config` defaults to that
 selection and records its concrete path for later builds. `--sources` is an

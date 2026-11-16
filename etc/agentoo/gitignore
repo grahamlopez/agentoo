@@ -36,8 +36,9 @@ __pycache__/
 /etc/fstab
 /etc/kernel/cmdline
 /etc/kernel/gentoo-dist-esp.uuid
+/etc/kernel/certs/
 /etc/portage/savedconfig/**/sys-kernel/linux-firmware
 /etc/portage/savedconfig/**/sys-kernel/linux-firmware-*
 
-# Persistent per-user kernel workspaces and public signing snapshots.
+# Persistent per-user kernel workspaces.
 .local/state/agentoo/kernel/
