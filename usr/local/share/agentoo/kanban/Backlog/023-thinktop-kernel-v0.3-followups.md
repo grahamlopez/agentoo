@@ -51,15 +51,21 @@ gentoo-kernel conversion. No panic, kernel Oops, Btrfs error or storage I/O
 failure was found in the reviewed logs. The operator accepted the custom v0.5
 kernel; see [card 051](../Open/051-gentoo-kernel-native-workflow.md).
 
-- [ ] **First priority: check the ESP filesystem.** `/dev/nvme1n1p1`, mounted
+- [x] **Check and repair the ESP filesystem.** `/dev/nvme1n1p1`, mounted
   at `/boot`, repeatedly reports `Volume was not properly unmounted` and asks
   for fsck. This warning also occurs with v0.4.1, and the preceding shutdown
-  logs a successful `/boot` unmount. It does not by itself establish corruption
-  or its cause. `fsck.fat`/`fsck.vfat` are absent, despite the fstab check-pass
-  setting of 2; review native dosfstools/check integration. Check the verified
-  ESP while unmounted, inspect the findings before repair, and confirm the
-  warning stays absent after a clean reboot. No filesystem repair was performed
-  during the review.
+  logs a successful `/boot` unmount. On 2026-11-17 the operator installed
+  dosfstools and reloaded systemd; the generated mount unit now requires native
+  systemd-fsck for this ESP, matching fstab check-pass 2. An unmounted read-only
+  check found only the dirty flag and the corresponding boot-sector/backup
+  difference at byte 65 (01/00), with no reported file-chain/allocation errors.
+  The operator ran fsck.fat -a while unmounted; a subsequent fsck.fat -n was
+  clean, with neither warning and unchanged file/cluster counts. `/boot` was
+  remounted. The subsequent 2026-11-17 11:34 binary fallback boot ran native
+  systemd-fsck successfully with a clean result; no FAT warning recurred.
+- [ ] Include dosfstools in target-installation prerequisites for native ESP
+  checking. The repaired host now has the package and the expected generated
+  mount dependency; ensure new installations receive it as well.
 - [ ] **Investigate SPD5118 resume errors.** Both the v0.4.1 boot and the
   preceding v0.5 boot report `spd5118 17-0050: Failed to write b = 0: -6`,
   `spd5118_resume returns -6`, and failed asynchronous device resume. The device

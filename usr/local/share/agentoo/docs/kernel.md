@@ -8,9 +8,14 @@ binary fallback kernel uses `sys-kernel/gentoo-kernel-bin`.
 
 The custom gentoo-kernel build currently requires `CONFIG_MODULES=n`. Thinktop's
 `6.18.62-agentoo-v0.5` custom kernel was accepted by the operator on 2026-11-17
-following a successful Secure Boot startup and hardware checks. Binary fallback,
-maintenance validation and cleanup remain in
-[card 051](../kanban/Open/051-gentoo-kernel-native-workflow.md).
+following a successful Secure Boot startup and hardware checks. Its same-version
+rebuild passed, including package-owned built-in driver indexes. The binary
+fallback `6.18.62-gentoo-dist-bin` also booted under Secure Boot into encrypted
+Btrfs root with network recovery; `/usr/src/linux` retained the custom selection.
+Future update validation, configuration reduction and optional development work
+are tracked in [card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
+Older Thinktop boot/power/service findings remain in
+[card 023](../kanban/Backlog/023-thinktop-kernel-v0.3-followups.md).
 Bequiet/NVIDIA and other module-enabled host acceptance are deferred. There is
 one supported build interface: native Portage commands.
 

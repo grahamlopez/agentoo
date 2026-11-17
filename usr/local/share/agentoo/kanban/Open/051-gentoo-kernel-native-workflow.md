@@ -2,7 +2,7 @@
 
 Created: 2026-11-13
 Updated: 2026-11-17
-Status: Open — Thinktop custom kernel accepted; fallback/update checks and cleanup remain
+Status: Complete — Thinktop custom and binary fallback kernels accepted (2026-11-17)
 
 ## Scope and implementation
 
@@ -43,7 +43,7 @@ manual one-off Thinktop setup before deployment:
   lifecycle and their commands/tests are deleted. Native PORTAGE_TMPDIR and
   package-owned prepared trees replace them. No selector or emerge wrapper added.
 - Obsolete signing/genkernel simplification cards are superseded here; outstanding
-  physical keyboard/signing/update checks remain acceptance work below. Old kernel
+  physical acceptance results and deferred maintenance are recorded below. Old kernel
   baseline runbooks and duplicate baseline snapshots are removed.
 
 The active shared localversion is `-agentoo-v0.5` (for example,
@@ -114,8 +114,9 @@ or firmware mutation occurred.
 | Package-image audit | No loadable modules, external boot archives, sandbox library or copy of private signing key |
 
 Rootless build-info records sandbox/usersandbox/network/ipc/pid features and
-unprivileged mode. Privileged emerge/userpriv and production-key access still
-need live acceptance. Upstream signature checking was disabled in trials;
+unprivileged mode. Later privileged source build/install and production-key
+access succeeded, followed by the accepted custom boot and same-version rebuild
+recorded below. Upstream signature checking was disabled in trials;
 Manifest verification remained enabled. Native build uses about 9.2 GiB plus
 link temporaries and staged image. A prior trial exceeded quota with old output
 trees retained; obsolete outputs were removed and the final run passed without
@@ -125,7 +126,7 @@ Native install QA flags retained certs/system_certificates.o. Inspection found
 no section with both W and X, but no GNU-stack note; this is a retained build
 object rather than EFI image or external module. No workaround was introduced.
 
-Local disposable evidence remains under `/tmp/agentoo-kernel-051`, including
+Original disposable evidence was recorded under `/tmp/agentoo-kernel-051`, including
 `automatic-build.log`, `automatic-candidate-audit.json`, native hook/input
 fixtures, archive/loader checks and experiment results. The staged image is
 under `automatic-tmp/portage/sys-kernel/gentoo-kernel-6.18.62/image`. It uses a test
@@ -179,7 +180,8 @@ identity and is not an image to deploy with trusted Secure Boot.
   early CPIO contains both vendor microcode files and the selected Thinktop Intel
   payload verbatim. Native configuration ordering overrides both firmware
   packages' disabled early-microcode defaults. The rootless build logs ldconfig
-  warnings; privileged installed fallback and physical boot remain unaccepted.
+  warnings; the later privileged fallback refresh and physical boot are recorded
+  below.
 - Logs and fixtures: `/tmp/agentoo-kernel-final-suite-host.log`,
   `/tmp/agentoo-kernel-final-installer.log`, `/tmp/agentoo-kernel-final-policy/`,
   and `/tmp/agentoo-kernel-repo-check/configure-final-policy-host.log`.
@@ -216,7 +218,7 @@ identity and is not an image to deploy with trusted Secure Boot.
 - [x] Document Thinktop's existing-system conversion as a manual one-off. The
   rollback branch is available. No migration machinery is implemented or retained.
   Maintained kernel/initramfs/installation/CLI guides are updated together.
-  Performing that live conversion remains deployment work below.
+  The manual live conversion subsequently completed as recorded below.
 
 Signing clarification: `gentoo-kernel[secureboot]` signs the staged image through
 `kernel-build.eclass` / `secureboot_sign_efi_file` before installkernel copies it
@@ -232,8 +234,8 @@ Decision: `/usr/src/linux` selects the installed prepared tree of the custom
 gentoo-kernel build, e.g. `/usr/src/linux-6.18.62-agentoo-v0.5`, through native
 `eselect kernel`. The binary fallback uses its explicit versioned paths.
 All policy decisions needed for implementation are settled. Implementation and
-disposable two-kernel maintenance validation are complete. Live acceptance
-remains pending.
+disposable two-kernel maintenance validation are complete. Both live boot paths
+and the custom same-version rebuild have subsequently passed.
 
 - [x] Document the accepted default selection in the maintained guides.
 - [x] Establish selection through native `eselect kernel` in the custom package's
@@ -246,7 +248,7 @@ remains pending.
 - [x] Review linux-info/KERNEL_DIR consumers and firmware maintenance. Firmware
   hooks no longer dispatch all-kernels installation; source configuration and
   explicit binary refresh use their own versioned inputs. Live package-update
-  acceptance remains below.
+  results are recorded below.
 
 ### Make firmware maintenance explicit for both kernels
 
@@ -263,7 +265,8 @@ Decision: the operator explicitly refreshes both kernels after firmware updates.
 Accepted because the extra operator work is small and avoids Agentoo policy hooks
 or dispatchers. Intel microcode updates use the same automatic all-kernels path
 and are included in this decision. Implementation and disposable validation are
-complete; live acceptance remains pending.
+complete. The operator subsequently refreshed/rebuilt both live kernels and
+booted both successfully, as recorded below.
 
 - [x] Disable automatic initramfs maintenance for `sys-kernel/linux-firmware`
   and `sys-firmware/intel-microcode` using native `-initramfs` USE settings.
@@ -287,7 +290,7 @@ complete; live acceptance remains pending.
   configuration selects a fresh archive without creating an external one. Native
   install/reinstall trials and effective package environments verify source-only
   overrides do not leak onto the binary path. Full custom embedding is covered
-  by the earlier accepted build; privileged refresh/rebuild remains below.
+  by the earlier accepted build; later privileged refresh/rebuild is recorded below.
   Review other applicable
   `add-all`/`installkernel --all` callers; the generic all-kernels operation is not
   the supported refresh workflow for this mixed setup.
@@ -296,10 +299,21 @@ complete; live acceptance remains pending.
   External initramfs regeneration is not a substitute for embedding fresh inputs.
 
 The disposable checks supplement the earlier build/signing/archive and operator
-storage-smoke evidence. Keep privileged build/userpriv, retained-object QA,
-binary-package and physical acceptance limits below open.
+storage-smoke evidence. Later live acceptance is recorded below. The retained
+object QA observation does not establish an EFI image defect; binary-package
+format auditing is explicitly deferred to card 052 before local package use or
+distribution. No module-enabled or fleet acceptance is inferred.
 
 ## Deployment and acceptance
+
+Binary fallback boot evidence (2026-11-17 11:34): live inspection confirms
+6.18.62-gentoo-dist-bin under Secure Boot, encrypted Btrfs @ root, and microcode
+revision 0x122. The custom prepared tree remains selected by /usr/src/linux.
+Wi-Fi acquired carrier, obtained a DHCP lease and installed a default route;
+the initial dhcpcd "no valid interfaces" message was transient. Native ESP
+filesystem checking ran successfully after the dosfstools installation/repair,
+with no recurring FAT warning. This verifies the fallback recovery boot path;
+it does not extend custom/module-enabled host hardware acceptance.
 
 Thinktop boot evidence (2026-11-17): the operator rebooted and live inspection
 confirms `6.18.62-agentoo-v0.5`, Secure Boot enabled in user mode, and the custom
@@ -368,29 +382,58 @@ successful build/install and operator boot acceptance.
 - [x] Complete the privileged custom source build/install with the existing
   enrolled identity and installed configuration; the candidate boots under
   Secure Boot alongside the retained binary fallback.
-- [ ] Confirm custom installation invokes no dracut or standalone microcode
+- [x] Confirm custom installation invokes no dracut or standalone microcode
   generation, creates no external boot archive, checks the intended ESP and
   prints correct create-only guidance without changing firmware entries.
 - [x] Accept the separate Thinktop candidate under Secure Boot. Live boot checks
   and operator acceptance cover the custom kernel and requested hardware checks
   above, including MICMUTE. Individual passphrase-retry results are not recorded;
   this acceptance does not establish binary fallback or other-host acceptance.
-- [ ] Independently verify the binary fallback kernel's privileged dracut
-  generation, early microcode and physical recovery. After applying the firmware
-  USE changes, verify real package updates perform no boot-image maintenance;
-  explicitly refresh both kernels. Keep working entries until acceptance.
+- [x] Verify the refreshed binary fallback archive contains early microcode,
+  crypt and Btrfs support, and boots under Secure Boot into encrypted-root
+  recovery with Wi-Fi. Both installed firmware packages have initramfs disabled
+  and no custom installation environment; their native postinst guards therefore
+  skip automatic boot-image maintenance. Explicit refresh/rebuild and both boot
+  paths have passed. Retain tested recovery entries.
 - [x] Exercise a same-version rebuild and reboot with the deployed indexing hook;
   confirm readable package-installed indexes and successful built-in recognition.
-- [ ] Track subsequent kernel version update acceptance separately: review new
-  Kconfig choices, release paths and native prepared-tree discovery. Rebuild
-  after installed initramfs/library/firmware input changes.
-- [ ] Inspect binary-package signing-key handling before using/distributing locally
-  produced binary packages. Package-image checks alone do not audit that format.
-- [ ] Accept detached incremental configuration/build testing if desired; no
-  persistent Agentoo workspace framework is required.
-- [ ] Keep Bequiet/NVIDIA conversion and fleet physical acceptance explicitly
-  deferred, without maintaining old lifecycle code or bring-up certificate policy.
+- [x] Carry subsequent-version update validation, baseline-policy reduction,
+  binary-package auditing and optional detached build/install acceptance into
+  [card 052](../Backlog/052-native-kernel-maintenance-followups.md). These are
+  not reported as tested by the accepted same-version Thinktop conversion.
+- [x] Keep Bequiet/NVIDIA conversion and other-host acceptance deferred in the
+  shared/fleet followups. Keep Thinktop boot/power/service findings and target
+  dosfstools provisioning in [card 023](../Backlog/023-thinktop-kernel-v0.3-followups.md).
+  The MICMUTE workaround remains installed; controlled removal is separate card
+  020, not established by accepting microphone-key behavior with it present.
 
-Record live validation and decision in the finishing commit/completed index;
-delete the card when Thinktop acceptance is complete. Do not mark unrelated
-hosts or physical boot accepted from static or disposable tests.
+## Final installed-system audit and closeout
+
+The 2026-11-17 read-only audit confirms installed source USE=secureboot,
+modules-sign and -initramfs/-generic-uki/-savedconfig. Only that source atom
+receives the custom config root and plugin allowlist. The live hook matches the
+checkout. The allowlist includes the shared ESP guard and copy/guidance hooks,
+with no dracut, standalone microcode or sbctl installation hook. Native config
+selects initrd_generator=none for custom installation; no external custom archive
+exists on the ESP. The actual successful install log shows native image copy and
+create-only EFI guidance, and both tested kernels boot under Secure Boot.
+
+Portage CONTENTS owns the custom modules.order, modules.builtin.bin and
+modules.builtin.alias.bin. The rebuilt files have mode 0644 and boot-time kmod
+recognizes i2c_dev as built in. The installed package contains no signing_key.pem;
+this does not replace the deferred binary-package format audit. The installed
+custom EFI image has a Database Key signature.
+
+The binary fallback remains initramfs-enabled without the custom environment.
+Its refreshed archive contains Intel and AMD early-microcode payloads and crypt/
+Btrfs support. Installed linux-firmware and intel-microcode both have initramfs
+disabled; Intel split-ucode remains enabled. The source rebuild and independent
+fallback refresh/boot exercise the explicit maintenance policy. Latest installed
+metadata is recorded in /tmp/agentoo-kernel-final-installed-audit.json and archive
+listing in /tmp/agentoo-fallback-closeout-listing.txt; these disposable paths are
+supporting evidence, not required persistent configuration.
+
+Thinktop custom-kernel physical acceptance, same-version rebuild acceptance and
+binary fallback recovery boot are complete. Known older warnings and all deferred
+work have explicit destinations above. Commit this completed card before its
+removal, then remove it in a separate commit and add the completed-index entry.
