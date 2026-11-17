@@ -91,8 +91,10 @@ The [native kernel workflow](../../docs/kernel.md) owns current builds and
 configuration. Preserve the shared driver union and host-specific firmware,
 review Kconfig changes during version bumps and validate required hardware/workloads
 on each host. Module-enabled Bequiet/NVIDIA acceptance remains separately scoped.
-The source workflow conversion and outstanding physical acceptance are tracked in
-[card 051](../Open/051-gentoo-kernel-native-workflow.md).
+Thinktop's custom v0.5 and binary fallback boot paths are accepted under Secure
+Boot. Subsequent native maintenance and development work is tracked in
+[card 052](052-native-kernel-maintenance-followups.md); this does not establish
+module-enabled or other-host conversion acceptance.
 
 ## Evidence and completion
 

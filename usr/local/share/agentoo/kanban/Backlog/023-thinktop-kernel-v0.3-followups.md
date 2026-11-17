@@ -49,7 +49,8 @@ rebuild, the preceding v0.5 boot, and the retained v0.4.1 boot beginning
 also occur with v0.4.1; they are not established regressions from the native
 gentoo-kernel conversion. No panic, kernel Oops, Btrfs error or storage I/O
 failure was found in the reviewed logs. The operator accepted the custom v0.5
-kernel; see [card 051](../Open/051-gentoo-kernel-native-workflow.md).
+kernel; see the [accepted native workflow](../../docs/kernel.md). Completed card
+051 is retained in Git history through the [completed index](../README.md#completed).
 
 - [x] **Check and repair the ESP filesystem.** `/dev/nvme1n1p1`, mounted
   at `/boot`, repeatedly reports `Volume was not properly unmounted` and asks

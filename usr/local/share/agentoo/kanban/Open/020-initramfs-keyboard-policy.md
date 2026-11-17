@@ -13,5 +13,6 @@ a controlled cold boot of Thinktop with this initramfs and no manual correction.
 Verify microphone keycode 248 and that keyd/Hyprland receive MICMUTE. Restore the
 rule if this fails; remove it permanently only after successful verification.
 The development sandbox cannot perform physical keyboard or reboot validation.
-Record results before closing this card and
-[card 051](051-gentoo-kernel-native-workflow.md).
+The [native custom kernel conversion](../../docs/kernel.md) is accepted with this
+workaround retained. That acceptance does not establish that the rule is
+redundant. Record the controlled removal test before closing this card.
