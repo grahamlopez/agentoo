@@ -50,6 +50,6 @@ a fresh kernel configuration/build and a boot test; they are not yet accepted
 on hardware.
 
 The ACPI errors referencing missing `RP28.PXSX.WIST` and aborting `CNVW.IFUN`
-and `CNVW._DSM` also occur with the distribution kernel. They remain a separate
+and `CNVW._DSM` also occur with the binary fallback kernel. They remain a separate
 firmware/kernel investigation; this fragment does not suppress them or alter
 console logging policy.

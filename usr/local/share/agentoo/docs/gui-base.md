@@ -83,7 +83,7 @@ reported `No gpus in scanGPUs`, while a manual retry succeeded. This is
 independent of Lua configuration warnings.
 
 After applying the Startop fragment, rebuild the booted
-distribution kernel's initramfs through the existing kernel-install hooks:
+binary fallback kernel's initramfs through the existing kernel-install hooks:
 
 ```sh
 sudo kernel-install add "$(uname -r)" "/usr/lib/modules/$(uname -r)/vmlinuz"
@@ -98,7 +98,7 @@ sudo lsinitrd -f etc/cmdline.d/20-force_drivers.conf "/boot/EFI/Gentoo/initramfs
 ```
 
 Expect `rd.driver.pre=i915`. Then reboot and verify automatic desktop startup.
-This dracut policy applies to the distribution fallback; custom images have
+This dracut policy applies to the binary fallback kernel; custom images have
 their own kernel and initramfs workflow.
 
 ## Before pulling on thinktop

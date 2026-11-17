@@ -16,7 +16,7 @@ drivers remain built in; NVIDIA can load after the real-root handoff.
 
 ## Package and boot-image lifecycle
 
-Install the generator before configuring/building the native source kernel:
+Install the generator before preparing the custom gentoo-kernel build:
 
 ```sh
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
@@ -28,14 +28,14 @@ Portage fetches/verifies BusyBox sources and compiles the private binary using
 its selected compiler and flags. The build requires static glibc libraries. It
 does not install normal BusyBox applet links into the running system.
 
-The source kernel's package-specific `post_src_prepare` hook invokes the installed
+The custom gentoo-kernel build's `post_src_prepare` hook invokes the installed
 generator, assembling a fresh archive inside WORKDIR and selecting that archive
 with native `scripts/config` before configuration/compilation. Assembly needs no
 compiler, source archive, network or root privileges. The initramfs package alone
 does not generate an archive, rebuild a kernel, write the ESP or change firmware.
 
 After changing the implementation or installed cryptsetup/libraries, install the
-new inputs first, then force a source kernel rebuild:
+new inputs first, then force a custom gentoo-kernel rebuild:
 
 ```sh
 sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'

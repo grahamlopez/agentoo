@@ -14,13 +14,13 @@ only persistent host selector. Stage3's base system already supplies
 reporting before selecting the destination profile. Later phases reject a target
 that differs from the selected profile. See [host selection](../../../../../etc/agentoo/README.md#host-selection).
 
-Bequiet uses the distribution kernel and packaged NVIDIA open modules; see its
+Bequiet uses the binary fallback kernel and packaged NVIDIA open modules; see its
 [hardware baseline and acceptance checks](hosts/bequiet.md). Its custom-kernel
 onboarding is deferred.
 
 The initial world update excludes NVIDIA drivers to defer their kernel dependency
 until boot inputs exist. The kernel phase includes `@profile` alongside the
-binary distribution kernel. Native `dist-kernel` dependencies handle external
+binary fallback kernel. Native `dist-kernel` dependencies handle external
 module builds; the installer then regenerates the initramfs.
 
 Hardware packages come from the selected profile's `@profile` membership; GUI
@@ -52,8 +52,8 @@ removed after repeated namespace-holder failures made its complexity excessive.
 
 Kernel policy is tracked in `/etc/portage/package.use/kernel`,
 `/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
-The stable binary distribution kernel remains the fallback; the custom
-source workflow uses `agentoo kernel prepare` followed by native `emerge` commands
+The binary fallback kernel remains independent; the custom gentoo-kernel build
+uses `agentoo kernel prepare` followed by native `emerge` commands
 ([kernel guide](kernel.md)). `/etc/kernel/cmdline` contains local
 boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
 data, not a permanently maintained running-kernel requirement.

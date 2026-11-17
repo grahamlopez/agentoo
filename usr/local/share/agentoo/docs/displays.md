@@ -475,7 +475,7 @@ If monitor reconfiguration also removes external power, the battery lid policy
 can still suspend the laptop; this rule adds no timed disconnect grace period.
 USB-C power readings can settle after logind's last display/USB hotplug event.
 On thinktop this left a closed laptop awake after unplugging one Thunderbolt
-port under both the custom kernel and the matching Gentoo distribution kernel.
+port under both the custom kernel and the matching binary fallback kernel.
 The same ACPI `BRNS`/`_Q27` errors also occurred on a port that suspended
 successfully, so they do not by themselves explain the missed suspend.
 
@@ -486,7 +486,7 @@ closed-lid policy against the settled power readings. It neither requests
 suspend nor changes inhibitors or lid settings. The timer adds a retry, not
 a minimum grace period: logind can still suspend earlier. No polling daemon
 or timer enablement is needed. A temporary delayed-Ping experiment successfully
-suspended the previously failing port on the distribution kernel; the permanent
+suspended the previously failing port on the binary fallback kernel; the permanent
 udev/timer path and the custom kernel still require physical acceptance.
 After installing the rule and both units, run `sudo systemctl daemon-reload`
 and `sudo udevadm control --reload-rules`. Future power-supply events activate

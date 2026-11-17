@@ -2,7 +2,7 @@
 
 The fresh Agentoo installation inspected on 2026-11-03 has an Intel Core Ultra
 9 285H (Arrow Lake), 16 logical CPUs and 62 GiB usable RAM. Its Intel graphics
-device is PCI `8086:7d51`, bound to i915 on the distribution kernel
+device is PCI `8086:7d51`, bound to i915 on the binary fallback kernel
 `6.18.60-gentoo-dist-bin`. Wi-Fi is an Intel AX210 (`8086:2725`), bound to
 iwlwifi. The Arrow Lake audio controller (`8086:7728`) uses snd_hda_intel;
 driver binding alone does not establish working audio.
@@ -69,7 +69,7 @@ units failed, and the operator reported the requested peripheral and functional
 suspend/resume checks passing. Early microcode updated from 0x121 to 0x122.
 After trimming and distribution-initramfs regeneration, the operator completed
 the requested power-cycle, peripheral and suspend/resume checks on the
-distribution kernel and then the custom kernel, reporting all checks passing.
+binary fallback kernel and then the custom kernel, reporting all checks passing.
 Both kernels reported zero failed systemd units.
 
 ## Installed firmware acceptance

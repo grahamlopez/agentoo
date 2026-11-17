@@ -322,7 +322,7 @@ ME, sleep-mode, PowerTOP, or Wi-Fi-radio tuning.
 1. Read the rejected-hypothesis table and secondary-SSD isolation results
    first. The latter proves a useful device path but does not prove the SSD
    itself defective or prove that one specific latency field is the sole cause.
-2. Keep the existing distribution kernel bootable. For the first comparison,
+2. Keep the existing binary fallback kernel bootable. For the first comparison,
    retain its configuration as closely as practical rather than simultaneously
    trimming drivers and changing the kernel version. Preserve the exact tested
    config and version; a custom kernel with different settings tests both

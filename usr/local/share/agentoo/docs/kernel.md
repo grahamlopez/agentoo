@@ -3,11 +3,11 @@
 Portage owns kernel configuration merging, compilation, signing, prepared trees
 and installation. Agentoo supplies the shared built-in driver union, selected
 host fragment, minimal embedded initramfs, boot-critical validation and manual
-EFI guidance. The custom source package is `sys-kernel/gentoo-kernel`; the
-independent binary fallback is `sys-kernel/gentoo-kernel-bin`.
+EFI guidance. The custom gentoo-kernel build uses `sys-kernel/gentoo-kernel`; the
+binary fallback kernel uses `sys-kernel/gentoo-kernel-bin`.
 
-The source workflow currently requires `CONFIG_MODULES=n`. Thinktop's disposable
-native builds and storage smoke test have passed; deployment, physical boot and
+The custom gentoo-kernel build currently requires `CONFIG_MODULES=n`. Thinktop's
+disposable native builds and storage smoke test have passed; deployment, physical boot and
 normal-update acceptance remain open in [card 051](../kanban/Open/051-gentoo-kernel-native-workflow.md).
 Bequiet/NVIDIA and other module-enabled host acceptance are deferred. There is
 one supported build interface: native Portage commands.
@@ -63,7 +63,7 @@ excludes Portage preload libraries from the archive. The installed generator,
 BusyBox and cryptsetup/libraries supply the archive; no sources are downloaded
 by archive generation itself. See [initramfs development](initramfs.md).
 
-Portage merges native distribution inputs and config.d, generates the custom
+Portage merges Gentoo package defaults and config.d, generates the custom
 archive, resolves Kconfig, validates the final boot/host settings, compiles and
 stages the native prepared tree. `secureboot modules-sign` satisfies Gentoo's
 flag constraint; `CONFIG_MODULES=n` remains mandatory and no module signing key
@@ -72,7 +72,8 @@ Missing keys fail setup rather than generating a replacement identity.
 
 Installation copies the signed source image to
 `/boot/EFI/Gentoo/kernel-<release>.efi` after checking the mounted ESP against
-`/etc/kernel/gentoo-dist-esp.uuid`. The shared suffix is `-gentoo-dist-agentoo`.
+`/etc/kernel/gentoo-dist-esp.uuid`. The shared localversion is `-agentoo-v0.5`;
+version 6.18.62 produces release `6.18.62-agentoo-v0.5`. Binary fallback kernel labels are unchanged.
 It generates no external initramfs and invokes neither dracut nor standalone
 microcode generation. The selected firmware/microcode is embedded in the kernel.
 Native results live under `/usr/src/linux-<release>` and `/lib/modules/<release>`;
@@ -102,10 +103,11 @@ boot menu for first acceptance. Startop guidance adds its required full-device-p
 option using the selected host profile. No command in this workflow reboots,
 enrolls keys or changes firmware entries automatically.
 
-The installkernel guidance hook calls the same helper. For binary distribution
+The installkernel guidance hook calls the same helper. For binary fallback kernel
 images ending `-gentoo-dist-bin.efi` (and standard external-initramfs distribution
 images ending `-gentoo-dist.efi`), it includes `/etc/kernel/cmdline` and the matching
-external `initrd=` path. Source Agentoo images use their embedded boot policy.
+external `initrd=` path. The custom gentoo-kernel build uses its embedded boot
+policy.
 `--args 'loglevel=7'` adds optional firmware arguments; `--label TEXT` changes the
 display label. Firmware arguments supplement the built-in command line; repeated
 parameters have parameter-specific precedence. The minimal initramfs uses its
@@ -141,8 +143,8 @@ sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 Update the generator and other archive inputs first. A normal source build's
 prepare phase creates a new archive from the inputs installed at that time; a
 later userspace upgrade does not update an already embedded archive. Recompilation
-is required. `emerge --config` only reinstalls an existing source kernel; it
-cannot refresh its embedded archive or firmware. Review EFI guidance after every
+is required. `emerge --config` only reinstalls an existing custom gentoo-kernel
+build; it cannot refresh its embedded archive or firmware. Review EFI guidance after every
 new release and independently boot-test maintenance results.
 
 ## Configuration experiments

@@ -1,8 +1,8 @@
-# Distribution fallback: packaged generation/copy, manual physical registration.
+# Binary fallback kernel: packaged generation/copy, manual physical registration.
 */* dist-kernel
 sys-kernel/installkernel systemd dracut -efistub -grub -systemd-boot -refind -uki -ukify -ugrd
 sys-kernel/dracut systemd
 sys-kernel/gentoo-kernel-bin initramfs -generic-uki
 sys-firmware/intel-microcode -hostonly
-# Custom source build: embedded archive, signed EFI image, no external initramfs.
+# Custom gentoo-kernel build: embedded archive, signed EFI image, no external initramfs.
 sys-kernel/gentoo-kernel -savedconfig -initramfs -generic-uki secureboot modules-sign

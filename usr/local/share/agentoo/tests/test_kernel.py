@@ -52,7 +52,7 @@ class NativeKernelTests(unittest.TestCase):
         self.addCleanup(change.stop)
         self.device = dict(path='/dev/test1', pkname='/dev/test', partn=1, partuuid=UUID,
                            parttype='c12a7328-f81f-11d2-ba4b-00a0c93ec93b')
-        self.image = self.root / 'EFI/Gentoo/kernel-6.18.62-gentoo-dist-agentoo.efi'
+        self.image = self.root / 'EFI/Gentoo/kernel-6.18.62-agentoo-v0.5.efi'
         self.image.parent.mkdir(parents=True)
         self.image.write_bytes(b'EFI image')
         self.mount = dict(source='/dev/test1', target=str(self.root), fstype='vfat')
@@ -75,7 +75,7 @@ class NativeKernelTests(unittest.TestCase):
         cmd = self.efi('--args', arguments, '--label', "Thinktop's kernel")
         self.assertEqual(cmd, ['sudo', 'efibootmgr', '--create-only', '--disk', '/dev/test', '--part', '1',
                               '--label', "Thinktop's kernel", '--loader',
-                              r'\EFI\Gentoo\kernel-6.18.62-gentoo-dist-agentoo.efi', '--unicode', '--', arguments])
+                              r'\EFI\Gentoo\kernel-6.18.62-agentoo-v0.5.efi', '--unicode', '--', arguments])
         self.assertNotIn('initrd=', ' '.join(self.efi()))
         with patch.object(host, 'read_host', return_value='startop'):
             self.assertIn('--full-dev-path', self.efi())
@@ -202,7 +202,7 @@ class NativeKernelTests(unittest.TestCase):
         (tools / 'findmnt').write_text('#!/bin/sh\ncase "$*" in *FSTYPE*) echo vfat ;; *) echo "$ESP_UUID" ;; esac\n')
         for tool in tools.iterdir():
             tool.chmod(0o755)
-        for release in ('6.18.62-gentoo-dist-bin', '6.18.62-gentoo-dist-agentoo'):
+        for release in ('6.18.62-gentoo-dist-bin', '6.18.62-agentoo-v0.5'):
             for uuid, mounted, status in [('ABCD-1234', '0', 0), ('wrong', '0', 1), ('ABCD-1234', '1', 1)]:
                 result = subprocess.run(['bash', str(script), 'add', release], capture_output=True, text=True,
                                         env={**os.environ, 'PATH': f'{tools}:'+os.environ['PATH'],
@@ -224,7 +224,7 @@ class NativeKernelTests(unittest.TestCase):
         script.write_text(text)
         logging = self.root / 'logging'
         logging.mkdir()
-        result = subprocess.run(['bash', str(script), 'add', '6.18.62-gentoo-dist-agentoo'],
+        result = subprocess.run(['bash', str(script), 'add', '6.18.62-agentoo-v0.5'],
                                 capture_output=True, text=True,
                                 env={**os.environ, 'T': str(self.root), 'EBUILD_PHASE': 'postinst'})
         self.assertEqual(result.returncode, 0, result.stderr)

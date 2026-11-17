@@ -5,9 +5,9 @@ Status: Open — native implementation ready for deployment; physical acceptance
 
 ## Scope and implementation
 
-The supported source kernel is `sys-kernel/gentoo-kernel`, with a custom minimal
+The custom gentoo-kernel build uses `sys-kernel/gentoo-kernel`, with a custom minimal
 embedded initramfs and `CONFIG_MODULES=n`. Dracut belongs only to the independent
-binary fallback. Bequiet/NVIDIA/module-enabled acceptance is deferred; current
+binary fallback kernel. Bequiet/NVIDIA/module-enabled acceptance is deferred; current
 source validation rejects module-enabled configs. The operator has retained a
 rollback branch; this repository carries no compatibility commands or parallel
 build/configuration lifecycle.
@@ -36,6 +36,10 @@ The [kernel guide](../../docs/kernel.md) is the authoritative user workflow:
 - Obsolete signing/genkernel simplification cards are superseded here; outstanding
   physical keyboard/signing/update checks remain acceptance work below. Old kernel
   baseline runbooks and duplicate baseline snapshots are removed.
+
+The active shared localversion is `-agentoo-v0.5` (for example,
+`6.18.62-agentoo-v0.5`). Binary fallback kernel labels remain unchanged.
+Recorded trial releases below retain their actual tested names.
 
 ## Evidence already accepted
 
@@ -129,7 +133,7 @@ identity and is not an image to deploy with trusted Secure Boot.
   trial config. Removing stale compiler-probe metadata from the shared input
   caused no other resolved changes.
 - Native package.env selection was checked for both atoms: source receives the
-  custom config/plugin selection, binary fallback receives neither override.
+  custom config/plugin selection, binary fallback kernel receives neither override.
 - Fixture-only generator/checker/test-key paths replace installed paths during
   staging. Its eselect query requires consistent host ROOT/SYSROOT because repo
   paths are symlinked into the alternate tree; no production selector workaround
@@ -144,7 +148,7 @@ identity and is not an image to deploy with trusted Secure Boot.
   1-r1 before native kernel compilation. Run `agentoo kernel prepare` on Thinktop,
   reviewing actual root/ESP/local input changes.
 - [ ] Review native emerge plan for @kernel-dev, source USE/signing inputs and
-  coexistence with the installed binary fallback. Perform privileged build/install
+  coexistence with the installed binary fallback kernel. Perform privileged build/install
   with the existing enrolled identity and verify the installed signature/config.
 - [ ] Confirm custom installation invokes no dracut or standalone microcode
   generation, creates no external boot archive, checks the intended ESP and
@@ -153,7 +157,7 @@ identity and is not an image to deploy with trusted Secure Boot.
   passphrase retry/unlock, internal/USB input, Btrfs `@`, discards, microcode,
   normal startup, graphics/audio/network, peripherals and suspend/resume. Check
   Thinktop MICMUTE under the [keyboard-policy acceptance](020-initramfs-keyboard-policy.md).
-- [ ] Independently verify the binary fallback's dracut generation and physical
+- [ ] Independently verify the binary fallback kernel's dracut generation and physical
   recovery remain accepted. Keep working installed entries until acceptance.
 - [ ] Exercise a same-version rebuild and subsequent kernel version update;
   review new Kconfig choices, release paths and native prepared-tree discovery.

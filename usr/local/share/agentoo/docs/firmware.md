@@ -180,7 +180,7 @@ compared with 2,087,238,841 bytes in the broad linux-firmware-20261019 installat
 a measured 99.9% reduction after rebuilding linux-firmware-20261019. Installed
 paths, durable input and active versioned snapshot all match the host list. The
 Portage-protected snapshot was reviewed and accepted at its native versioned path.
-Both custom and distribution kernels boot after trimming, with both GPUs,
+Both custom and binary fallback kernels boot after trimming, with both GPUs,
 Wi-Fi/Bluetooth firmware initialization and onboard 2.5 Gb/s Ethernet confirmed.
 The fallback embeds no extra firmware. The operator confirms cold-start,
 functional peripheral and suspend/resume acceptance on both kernels.
