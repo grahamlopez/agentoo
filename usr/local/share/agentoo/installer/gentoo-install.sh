@@ -1875,13 +1875,14 @@ kernel_target_data() {
 }
 
 # The binary fallback is available on every target. Initialize the custom path
-# only for a reviewed no-module host and a supported early-boot storage transport.
+# only for a reviewed host and a supported early-boot storage transport.
+# Bequiet is the only target allowed to load modules after real-root handoff.
 configure_custom_kernel_inputs() {
   local fragment=/etc/agentoo/kernel/hosts/$TARGET_HOST.config
   local activation=/etc/kernel/config.d/20-host.config
   local partuuid transport inputs
   [[ -f $fragment ]] || return 0
-  if grep -qx 'CONFIG_MODULES=y' "$fragment"; then
+  if [[ $TARGET_HOST != bequiet ]] && grep -qx 'CONFIG_MODULES=y' "$fragment"; then
     log "Custom kernel setup deferred for module-enabled host $TARGET_HOST"
     return 0
   fi
@@ -2254,7 +2255,8 @@ BOOT_ROOT=/boot
 
 Shared tmpfiles rules establish the custom installkernel configuration link and
 mask sbctl's incompatible BLS/UKI hook. The installer records local custom-kernel
-inputs and activates a reviewed no-module host fragment on supported storage.
+inputs and activates a reviewed host fragment on supported storage. Only Bequiet
+may enable modules; early-boot drivers must remain built in on every target.
 The binary fallback is installed first; custom compilation remains a later step.
 
 The layout copies an EFI kernel and separate initramfs onto the mounted ESP;

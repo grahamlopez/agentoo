@@ -54,8 +54,9 @@ Kernel policy is tracked in `/etc/portage/package.use/kernel`,
 `/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
 The binary fallback kernel remains independent; the custom gentoo-kernel build
 uses native `emerge` commands after installation-time local setup
-([kernel guide](kernel.md)). The installer activates a supported no-module host
-fragment, records its initramfs inputs, and applies shared tmpfiles rules for the
+([kernel guide](kernel.md)). The installer activates a supported host fragment
+(modules are allowed only on Bequiet), records its initramfs inputs, and applies
+shared tmpfiles rules for the
 custom installkernel link and sbctl hook mask. The custom package selects its
 prepared tree with native eselect after installation. Firmware updates require
 explicit binary fallback refresh and custom kernel recompilation.

@@ -141,6 +141,33 @@ class NativeKernelTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn('invalid choice', result.stderr)
 
+    def test_bequiet_requires_signed_modules_and_builtin_boot_drivers(self):
+        self.profile = self.profile.rename(self.profile.with_name('bequiet.config'))
+        self.profile.write_text(self.profile.read_text() + 'CONFIG_MODULES=y\nCONFIG_MODULE_UNLOAD=y\n')
+        self.link.unlink()
+        self.link.symlink_to(self.profile)
+        path = self.config()
+        path.write_text(path.read_text().replace('CONFIG_MODULES=n\n', '') +
+                        'CONFIG_MODULE_SIG=y\nCONFIG_MODULE_SIG_ALL=y\nCONFIG_MODULE_SIG_FORCE=y\n')
+        with patch.object(host, 'read_host', return_value='bequiet'):
+            host.validate_config(path, 'nvme')
+            accepted = path.read_text()
+            for symbol in ('MODULES', 'MODULE_SIG', 'MODULE_SIG_ALL', 'MODULE_SIG_FORCE',
+                           'BLK_DEV_NVME', 'USB_HID'):
+                with self.subTest(symbol=symbol):
+                    path.write_text(accepted.replace(f'CONFIG_{symbol}=y\n', f'CONFIG_{symbol}=n\n'))
+                    with self.assertRaisesRegex(RuntimeError, f'CONFIG_{symbol}=y|CONFIG_{symbol}: wanted y'):
+                        host.validate_config(path, 'nvme')
+
+    def test_other_targets_cannot_enable_modules(self):
+        path = self.config()
+        path.write_text(path.read_text().replace('CONFIG_MODULES=n', 'CONFIG_MODULES=y'))
+        for name in ('generic', 'qemu', 'thinktop', 'startop', 'flattop'):
+            with self.subTest(host=name), patch.object(host, 'read_host', return_value=name):
+                self.profile.with_name(f'{name}.config').write_text(self.profile.read_text())
+                with self.assertRaisesRegex(RuntimeError, 'CONFIG_MODULES=n except on bequiet'):
+                    host.validate_config(path, 'nvme')
+
     def test_configure_hook_maps_empty_native_sysroot_to_live_root(self):
         hook = SHARE.parents[3] / 'etc/portage/env/sys-kernel/gentoo-kernel'
         script = '''
@@ -193,6 +220,13 @@ ED="$2" KV_FULL="$3" post_src_install
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('builtin i2c_dev', result.stdout)
         self.assertFalse(list(modules.rglob('*.ko')))
+        # A module-enabled build already has an authoritative ordering file.
+        order = 'kernel/drivers/example.ko\n'
+        (modules / 'modules.order').write_text(order)
+        result = subprocess.run(['bash', '-c', script, 'install-hook',
+                                 str(hook), str(image), release], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((modules / 'modules.order').read_text(), order)
 
     def test_shared_esp_guard_checks_custom_and_binary_targets_before_copy(self):
         guard = SHARE.parents[3] / 'etc/kernel/install.d/04-agentoo-esp.install'

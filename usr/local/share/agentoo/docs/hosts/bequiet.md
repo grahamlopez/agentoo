@@ -92,9 +92,12 @@ Custom-kernel onboarding completed on 2026-11-16 with:
 
 The accepted boot/hardware results above describe the installed images. The
 maintained source workflow is now native `gentoo-kernel` with an embedded custom
-archive, initially accepted in disposable no-module Thinktop trials. Bequiet's
-module-enabled/NVIDIA conversion is deferred; its host fragment deliberately
-requires modules, so current native no-module validation rejects it.
+archive, accepted on Thinktop. Bequiet alone may enable modules in this workflow;
+validation requires module signing and enforcement as well as built-in early-boot
+drivers. Installer input setup includes Bequiet on supported storage. Native
+Bequiet boot, same-version rebuild and version-update acceptance remain pending.
+Follow the [conversion procedure](../kernel.md#bequiet-conversion), including
+certificate matching and candidate-specific NVIDIA builds before booting.
 
 Native NVIDIA package policy references sbctl's original db key and certificate.
 There is no manually published certificate copy or retained custom workspace

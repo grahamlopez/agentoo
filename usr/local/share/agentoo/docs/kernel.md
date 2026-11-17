@@ -6,7 +6,9 @@ host fragment, minimal embedded initramfs, boot-critical validation and manual
 EFI guidance. The custom gentoo-kernel build uses `sys-kernel/gentoo-kernel`; the
 binary fallback kernel uses `sys-kernel/gentoo-kernel-bin`.
 
-The custom gentoo-kernel build currently requires `CONFIG_MODULES=n`. Thinktop's
+Custom gentoo-kernel builds require `CONFIG_MODULES=n` except on Bequiet, which
+requires signed modules with signature enforcement. All hosts retain built-in
+early-boot drivers. Thinktop's
 `6.18.62-agentoo-v0.5` custom kernel was accepted by the operator on 2026-11-17
 following a successful Secure Boot startup and hardware checks. Its same-version
 rebuild passed, including package-owned built-in driver indexes. The binary
@@ -16,7 +18,8 @@ Future update validation, configuration reduction and optional development work
 are tracked in [card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
 Older Thinktop boot/power/service findings remain in
 [card 023](../kanban/Backlog/023-thinktop-kernel-v0.3-followups.md).
-Bequiet/NVIDIA and other module-enabled host acceptance are deferred. There is
+Bequiet/NVIDIA native boot and rebuild acceptance remain pending; other hosts
+cannot enable modules. See [Bequiet conversion](#bequiet-conversion). There is
 one supported build interface: native Portage commands.
 
 ## Host specialization
@@ -33,9 +36,9 @@ Configuration is authoritative at these locations, applied in native filename or
 | `/etc/portage/env/kernel-local` | Local initramfs PARTUUID, mapping name and root transport; optional keymap override |
 
 The selected Agentoo Portage profile is the sole host selection. Target
-installation activates the matching no-module host fragment and records local
+installation activates the matching reviewed host fragment and records local
 inputs from its validated LUKS2/Btrfs `@` layout and NVMe/AHCI storage. Generic,
-QEMU and deferred module-enabled targets retain the binary fallback workflow.
+QEMU and module-enabled targets other than Bequiet retain the binary fallback workflow.
 The installer records the mounted ESP UUID for both kernel installation paths.
 
 These inputs are installation-time setup. After changing storage, the selected
@@ -112,8 +115,11 @@ by archive generation itself. See [initramfs development](initramfs.md).
 Portage merges Gentoo package defaults and config.d, generates the custom
 archive, resolves Kconfig, validates the final boot/host settings, compiles and
 stages the native prepared tree. `secureboot modules-sign` satisfies Gentoo's
-flag constraint; `CONFIG_MODULES=n` remains mandatory and no module signing key
-is configured. Native signing reads sbctl's original key/certificate paths.
+flag constraint. No-module hosts configure no module signing key. Bequiet's native
+profile supplies the existing sbctl db key/certificate for kernel and NVIDIA module
+signing; Gentoo supplies the module-signing Kconfig settings. Final validation
+requires modules, signing, signing of all in-tree modules and signature enforcement
+on Bequiet. Native EFI signing reads sbctl's original key/certificate paths.
 Missing keys fail setup rather than generating a replacement identity.
 
 Installation copies the signed source image to
@@ -288,7 +294,68 @@ fallback's packaged signing certificate and firmware acceptance separately.
 Bequiet's accepted fallback remains console/network recovery. When registering
 that host's fallback, add `--args 'systemd.unit=multi-user.target
 systemd.mask=getty@tty1.service'`; tty2 retains password login. NVIDIA support is
-not part of binary recovery or this source-workflow acceptance.
+outside the binary recovery requirement; it is required for Bequiet's custom
+kernel acceptance.
+
+## Bequiet conversion
+
+The Bequiet exception is implemented; native kernel/NVIDIA boot, same-version
+rebuild and version-update acceptance have not been performed. Keep the accepted
+`6.18.62-gentoo-bequiet-secure` image/entry and binary console/network recovery.
+Reuse the existing enrolled sbctl identity; this conversion does not require new
+keys or reenrollment.
+
+Follow the migration steps below on Bequiet, using its own root partition,
+mapping and transport. Confirm the selected profile is Bequiet and activate
+`/etc/agentoo/kernel/hosts/bequiet.config`. Review existing local overrides so
+they do not replace the new release or native signing policy. The embedded
+initramfs does not load modules; NVIDIA loads after real-root handoff, with its
+package-owned GSP firmware and graphics configuration.
+
+After building the source kernel in step 4, inspect its resolved configuration:
+
+```sh
+release=6.18.62-agentoo-v0.5
+rg '^CONFIG_(MODULES|MODULE_UNLOAD|MODULE_SIG|MODULE_SIG_ALL|MODULE_SIG_FORCE|MODULE_SIG_HASH|MODULE_SIG_KEY)=' \
+  "/usr/src/linux-$release/.config"
+openssl x509 -inform DER -in "/usr/src/linux-$release/certs/signing_key.x509" \
+  -noout -fingerprint -sha256
+sudo openssl x509 -in /var/lib/sbctl/keys/db/db.pem -noout -fingerprint -sha256
+```
+
+Require `MODULES`, `MODULE_UNLOAD`, `MODULE_SIG`, `MODULE_SIG_ALL` and
+`MODULE_SIG_FORCE` to be `y`, and matching certificate fingerprints.
+`MODULE_SIG_KEY` may reference a temporary native build input; external modules
+use the original sbctl paths from Bequiet's profile.
+
+Build NVIDIA explicitly for the candidate using the native kernel selection input:
+
+```sh
+sudo env KERNEL_DIR="/usr/src/linux-$release" \
+  emerge --ask --oneshot --usepkg=n x11-drivers/nvidia-drivers
+for module in nvidia nvidia_modeset nvidia_drm nvidia_uvm; do
+  modinfo -k "$release" -F filename "$module"
+  modinfo -k "$release" -F vermagic "$module"
+  modinfo -k "$release" -F signer "$module"
+done
+```
+
+Check the build log names the candidate release, module paths/version magic match
+it, signers match the intended identity and dependency indexes exist. Stop before
+booting if any check fails. These are preboot checks; module loading with signature
+enforcement establishes kernel trust. Continue step 4's EFI verification and
+manual registration, then boot the candidate under Secure Boot. Check
+`sbctl status`, `uname -r`, `/sys/module/module/parameters/sig_enforce`, both GPUs
+with `nvidia-smi`, Hyprland, USB unlock, normal peripherals and suspend/resume.
+Test GPU compute workloads separately if required. Independently test recovery.
+
+Repeat acceptance after a same-version kernel rebuild and a subsequent version
+update. Check whether native `dist-kernel` dependencies rebuild NVIDIA for the
+intended custom release when both kernel providers are installed; do not assume
+that selector changes or a source rebuild refresh external modules. Until this
+is established, explicitly rebuild NVIDIA for the candidate as above and inspect
+the result before boot. Record evidence in the Bequiet host guide. No custom
+module dispatcher or workspace lifecycle is used.
 
 ## gentoo-sources to gentoo-kernel migration
 
@@ -307,7 +374,9 @@ sudo systemd-tmpfiles --create agentoo-kernel.conf
 target_host=$(python3 -B /usr/local/share/agentoo/lib/host_selection.py)
 printf 'Selected host: %s\n' "$target_host"
 
-Confirm this prints flattop or startop, as appropriate.
+Confirm this prints flattop, startop or bequiet, as appropriate. For Bequiet,
+also follow [Bequiet conversion](#bequiet-conversion) before registering or booting
+the candidate.
 
 ### 2. Establish local kernel inputs
 
@@ -360,13 +429,16 @@ Keep the currently installed firmware versions while applying the USE changes:
 firmware_atom=$(portageq best_version / sys-kernel/linux-firmware)
 microcode_atom=$(portageq best_version / sys-firmware/intel-microcode)
 
-sudo emerge --ask --oneshot --newuse --usepkg=n \
-  "=$firmware_atom" "=$microcode_atom"
+sudo emerge --ask --oneshot --newuse --usepkg=n "=$firmware_atom"
+if [ -n "$microcode_atom" ]; then
+  sudo emerge --ask --oneshot --newuse --usepkg=n "=$microcode_atom"
+fi
 
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
 sudo emerge --ask --noreplace sys-fs/dosfstools
 sudo systemctl daemon-reload
 
+Bequiet gets AMD microcode from linux-firmware and does not need intel-microcode.
 Preserve the existing firmware savedconfig selection. Flattop firmware trimming
 can remain separate.
 

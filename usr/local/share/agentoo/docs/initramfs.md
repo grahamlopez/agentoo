@@ -49,7 +49,9 @@ manual EFI guidance, experiments and remaining host acceptance.
 ## Host inputs
 
 Target installation uses the selected Agentoo Portage profile and validated
-storage layout to activate its tracked no-module host Kconfig fragment. It records
+storage layout to activate its tracked host Kconfig fragment. Only Bequiet may
+enable modules, loaded after real-root handoff; boot drivers remain built in.
+It records
 explicit PARTUUID, mapper and transport in untracked
 `/etc/portage/env/kernel-local`; an optional `AGENTOO_INITRAMFS_KEYMAP` overrides
 the packaged default. The native source-package environment supplies these inputs

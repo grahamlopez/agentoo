@@ -11,8 +11,10 @@ vary. Start with both Linux boot paths working and Secure Boot disabled.
 
 ## Module-enabled hosts
 
-The maintained source workflow currently requires built-in drivers and no modules.
-Bequiet/NVIDIA conversion is deferred. The installed Bequiet images have their
+The maintained source workflow permits signed, enforced modules only on Bequiet;
+all other targets require no modules. Early-boot drivers remain built in on every
+host. Bequiet's native boot and rebuild acceptance are pending; follow the
+[conversion checks](kernel.md#bequiet-conversion). The installed Bequiet images have their
 own recorded [host acceptance](hosts/bequiet.md#kernel-and-secure-boot-acceptance);
 those results do not accept the new module-enabled source workflow. Firmware EFI
 trust and kernel module-signing trust are separate requirements. See the

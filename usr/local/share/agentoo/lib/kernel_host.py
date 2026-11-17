@@ -91,9 +91,12 @@ def validate_config(path, transport, root=Path('/')):
             values[match[1]] = match[2]
         elif disabled:
             values[disabled[1]] = 'n'
-    if values.get('CONFIG_MODULES') != 'n':
-        raise RuntimeError('native custom-kernel acceptance currently requires CONFIG_MODULES=n; module hosts are deferred')
-    _, profile, _, expected = read_profile(root=root)
+    host, profile, _, expected = read_profile(root=root)
+    if host == 'bequiet':
+        check_expected(values, {'CONFIG_MODULES': 'y', 'CONFIG_MODULE_SIG': 'y',
+                               'CONFIG_MODULE_SIG_ALL': 'y', 'CONFIG_MODULE_SIG_FORCE': 'y'})
+    elif values.get('CONFIG_MODULES') != 'n':
+        raise RuntimeError('native custom kernels require CONFIG_MODULES=n except on bequiet')
     active = Path(root) / HOST_LINK.relative_to('/')
     if not active.is_symlink() or active.resolve() != profile.resolve():
         raise RuntimeError('active /etc/kernel/config.d/20-host.config must link to the selected host fragment')

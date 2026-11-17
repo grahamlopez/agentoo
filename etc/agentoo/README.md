@@ -79,8 +79,9 @@ native per-package environment. It does not select another host or build a custo
 Shared kernel policy lives in `/etc/kernel/config.d/10-agentoo.config`; local
 config.d fragments provide overrides. Portage owns the custom gentoo-kernel build lifecycle.
 The embedded-initramfs path is generated in each native build, not tracked policy.
-The binary fallback kernel's `/etc/kernel/cmdline` is separate. Module-enabled Bequiet/NVIDIA
-conversion is deferred; [native kernel guide](../../usr/local/share/agentoo/docs/kernel.md)
+The binary fallback kernel's `/etc/kernel/cmdline` is separate. Only Bequiet may
+enable modules, with signing and enforcement; its native boot/rebuild acceptance
+is pending. The [native kernel guide](../../usr/local/share/agentoo/docs/kernel.md)
 describes current scope and acceptance.
 
 ## Related guides

@@ -213,8 +213,9 @@ lsblk() { [[ ${@: -1} == /dev/target ]] || exit 90; echo nvme; }
 blkid() { [[ ${@: -1} == /dev/target2 ]] || exit 91; echo 33333333-3333-4333-8333-333333333333; }
 configure_custom_kernel_inputs
 '''
-            def run(extra=''):
-                return subprocess.run(['bash', '-s'], input=source + harness + extra,
+            def run(extra='', target='thinktop'):
+                return subprocess.run(['bash', '-s'], input=source + harness.replace(
+                    'TARGET_HOST=thinktop', f'TARGET_HOST={target}') + extra,
                                       capture_output=True, text=True)
             result = run()
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -241,6 +242,16 @@ configure_custom_kernel_inputs
             self.assertEqual(run().returncode, 0)
             self.assertFalse(inputs.exists())
             self.assertFalse(activation.is_symlink())
+            bequiet = fragment.with_name('bequiet.config')
+            bequiet.write_text('CONFIG_MODULES=y\n')
+            result = run(target='bequiet')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(activation.readlink(), bequiet)
+            self.assertIn('AGENTOO_INITRAMFS_MAPPER=cryptroot', inputs.read_text())
+            result = run('LUKS_NAME=wrong; configure_custom_kernel_inputs\n', target='bequiet')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('manual review', result.stderr)
+            self.assertNotIn('wrong', inputs.read_text())
 
     def test_profile_query_runs_inside_the_requested_destination(self):
         result = self.run_installer('/mnt/target', harness='''
