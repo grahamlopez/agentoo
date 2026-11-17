@@ -51,8 +51,9 @@ acceptance. See the [kernel guide](../../docs/kernel.md).
 Bequiet/NVIDIA and other module-enabled conversions remain deferred; shared/fleet
 requirements stay in [card 027](027-shared-kernel-v0.3-followups.md). Thinktop's
 older boot/power/service findings and target dosfstools provisioning stay in
-[card 023](023-thinktop-kernel-v0.3-followups.md). The controlled MICMUTE workaround
-retirement remains [card 020](../Open/020-initramfs-keyboard-policy.md).
+[card 023](023-thinktop-kernel-v0.3-followups.md). Card 020’s MICMUTE workaround
+retirement was accepted after the controlled cold-boot test recorded in the
+[kernel guide](../../docs/kernel.md).
 
 ## Completion
 

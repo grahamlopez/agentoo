@@ -34,6 +34,7 @@ git show "$(git log -1 --format=%H --diff-filter=D -- "$path")^:$path"
 - 016 Reduce kernel code using test and usage evidence (`016-kernel-reduction-and-evidence.md`)
 - 018 Trim installed firmware through host selected savedconfig (`018-host-firmware-savedconfig.md`)
 - 019 Make Hyprland media and system function keys work (`019-hyprland-media-system-keys.md`)
+- 020 Retire the Thinktop microphone mapping workaround (`020-initramfs-keyboard-policy.md`); microphone button accepted after a cold boot without the rule on 6.18.62-agentoo-v0.5; live udev state confirmed the correction was absent.
 - 021 Restructure the Agentoo CLI and establish durable command conventions (`021-cli-restructure-and-conventions.md`)
 - 022 Restore shared clipboard across Neovim, tmux, and Hyprland (`022-shared-desktop-clipboard.md`)
 - 029 Improve agentoo secrets diagnostics and usability (`029-secrets-usability.md`)

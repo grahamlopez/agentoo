@@ -179,7 +179,15 @@ sudo sbverify --cert /var/lib/sbctl/keys/db/db.pem \
 A matching signature does not establish firmware trust or physical boot success.
 Check selected release, passphrase retries, internal/USB keyboards, Btrfs `@`,
 discards, microcode, systemd startup, networking, displays/audio and suspend/resume.
-Thinktop also needs its MICMUTE acceptance check. Preserve binary recovery.
+Include Thinktop’s microphone mute button in input checks. Preserve binary recovery.
+
+On 2026-11-17, the operator confirmed that Thinktop’s microphone mute button
+worked after a full shutdown and power-on into `6.18.62-agentoo-v0.5` with
+`90-thinktop-micmute.rules` disabled. Inspection confirmed that the rename
+preceded boot, no active udev rule supplied the correction, and the live
+ThinkPad input device had no `KEYBOARD_KEY_1a` property. The legacy genkernel
+workaround was retired on this evidence (card 020). Raw keycode 248 was not
+separately captured.
 
 ## Updates and rebuilds
 
