@@ -48,7 +48,12 @@ acceptance. See the [kernel guide](../../docs/kernel.md).
   ddcutil's packaged declaration supplies the binary fallback requirement. Keep
   built-in index generation; masking module loading is not the indexing fix.
 
-Bequiet/NVIDIA and other module-enabled conversions remain deferred; shared/fleet
+Bequiet's native conversion passed Secure Boot/NVIDIA, hardware and refreshed
+binary recovery acceptance on 2026-11-17; see its
+[host evidence](../../docs/hosts/bequiet.md#native-conversion-status). Validate a
+same-version custom rebuild followed by NVIDIA rebuilding and reboot, then a
+subsequent version update including native external-module dependency handling.
+Other module-enabled conversions remain deferred; shared/fleet
 requirements stay in [card 027](027-shared-kernel-v0.3-followups.md). Thinktop's
 older boot/power/service findings and target dosfstools provisioning stay in
 [card 023](023-thinktop-kernel-v0.3-followups.md). Card 020’s MICMUTE workaround

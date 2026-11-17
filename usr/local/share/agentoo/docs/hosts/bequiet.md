@@ -95,12 +95,21 @@ maintained source workflow is now native `gentoo-kernel` with an embedded custom
 archive, accepted on Thinktop. Bequiet alone may enable modules in this workflow;
 validation requires module signing and enforcement as well as built-in early-boot
 drivers. Installer input setup includes Bequiet on supported storage. Native
-Bequiet boot, same-version rebuild and version-update acceptance remain pending.
+Bequiet first boot passed on 2026-11-17 with `6.18.62-agentoo-v0.5`: Secure Boot
+enabled, Setup Mode disabled, module-signature enforcement `Y`, NVIDIA
+`595.104.02` recognizing both GPUs and Hyprland running. Before reboot, all four
+NVIDIA module PKCS#7 signatures were independently verified against the candidate
+kernel's embedded certificate. kmod 34.2 was built without OpenSSL, so its empty
+signer fields and unknown signature hash did not indicate unsigned modules.
+The operator subsequently confirmed USB root unlock, normal peripherals,
+networking, audio and suspend/resume on this release, console login, encrypted
+root and network recovery on the refreshed `6.18.62-gentoo-dist-bin`, and return
+to the custom kernel. Native conversion boot/hardware acceptance is complete.
+Same-version rebuild and version-update acceptance remain pending.
 Follow the [conversion procedure](../kernel.md#bequiet-conversion), including
 certificate matching and candidate-specific NVIDIA builds before booting.
 
 Native NVIDIA package policy references sbctl's original db key and certificate.
 There is no manually published certificate copy or retained custom workspace
-procedure. Do not infer Bequiet acceptance from Thinktop trials. Preserve its
-installed boot entries until the module/signing/update requirements are separately
-validated. See the [kernel guide](../kernel.md) and [Secure Boot guide](../secure-boot.md).
+procedure. Preserve tested recovery entries during maintenance. See the
+[kernel guide](../kernel.md) and [Secure Boot guide](../secure-boot.md).

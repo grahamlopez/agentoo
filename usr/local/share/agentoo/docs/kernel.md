@@ -18,8 +18,10 @@ Future update validation, configuration reduction and optional development work
 are tracked in [card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
 Older Thinktop boot/power/service findings remain in
 [card 023](../kanban/Backlog/023-thinktop-kernel-v0.3-followups.md).
-Bequiet/NVIDIA native boot and rebuild acceptance remain pending; other hosts
-cannot enable modules. See [Bequiet conversion](#bequiet-conversion). There is
+Bequiet's native Secure Boot/NVIDIA, hardware and refreshed binary recovery
+acceptance passed on 2026-11-17; remaining rebuild acceptance is recorded in its
+[host guide](hosts/bequiet.md#native-conversion-status). Other hosts cannot enable
+modules. See [Bequiet conversion](#bequiet-conversion). There is
 one supported build interface: native Portage commands.
 
 ## Host specialization
@@ -299,8 +301,10 @@ kernel acceptance.
 
 ## Bequiet conversion
 
-The Bequiet exception is implemented; native kernel/NVIDIA boot, same-version
-rebuild and version-update acceptance have not been performed. Keep the accepted
+The native Bequiet conversion passed Secure Boot/NVIDIA, hardware and refreshed
+binary recovery acceptance; see the
+[host evidence](hosts/bequiet.md#native-conversion-status) for pending maintenance
+checks. Keep the accepted
 `6.18.62-gentoo-bequiet-secure` image/entry and binary console/network recovery.
 Reuse the existing enrolled sbctl identity; this conversion does not require new
 keys or reenrollment.
@@ -328,33 +332,38 @@ Require `MODULES`, `MODULE_UNLOAD`, `MODULE_SIG`, `MODULE_SIG_ALL` and
 `MODULE_SIG_KEY` may reference a temporary native build input; external modules
 use the original sbctl paths from Bequiet's profile.
 
-Build NVIDIA explicitly for the candidate using the native kernel selection input:
+Confirm `eselect kernel show` selects the installed custom candidate, then build
+NVIDIA using that native selection:
 
 ```sh
-sudo env KERNEL_DIR="/usr/src/linux-$release" \
-  emerge --ask --oneshot --usepkg=n x11-drivers/nvidia-drivers
+eselect kernel show
+sudo emerge -av --usepkg=n x11-drivers/nvidia-drivers
 for module in nvidia nvidia_modeset nvidia_drm nvidia_uvm; do
   modinfo -k "$release" -F filename "$module"
   modinfo -k "$release" -F vermagic "$module"
   modinfo -k "$release" -F signer "$module"
 done
+modprobe --set-version "$release" --show-depends nvidia_drm
 ```
 
 Check the build log names the candidate release, module paths/version magic match
-it, signers match the intended identity and dependency indexes exist. Stop before
-booting if any check fails. These are preboot checks; module loading with signature
+it and dependency indexes resolve the modules. Signer metadata requires kmod's
+OpenSSL support; without it, empty signer fields and an unknown hash are
+inconclusive. Bequiet's first conversion independently verified the module PKCS#7
+signatures against the embedded certificate. These are preboot checks; module loading with signature
 enforcement establishes kernel trust. Continue step 4's EFI verification and
 manual registration, then boot the candidate under Secure Boot. Check
 `sbctl status`, `uname -r`, `/sys/module/module/parameters/sig_enforce`, both GPUs
 with `nvidia-smi`, Hyprland, USB unlock, normal peripherals and suspend/resume.
 Test GPU compute workloads separately if required. Independently test recovery.
 
-Repeat acceptance after a same-version kernel rebuild and a subsequent version
-update. Check whether native `dist-kernel` dependencies rebuild NVIDIA for the
-intended custom release when both kernel providers are installed; do not assume
-that selector changes or a source rebuild refresh external modules. Until this
-is established, explicitly rebuild NVIDIA for the candidate as above and inspect
-the result before boot. Record evidence in the Bequiet host guide. No custom
+After custom kernel rebuilds, rebuild NVIDIA with the same emerge command above
+before booting. A same-version rebuild or conversion does not change
+`virtual/dist-kernel`'s subslot and does not automatically trigger its dependent
+rebuilds. Native `dist-kernel` dependency handling supports version updates; its
+behavior with both kernel providers still needs Bequiet acceptance. Repeat boot
+checks after a same-version rebuild and a subsequent version update, inspecting
+the resulting modules before boot. Record evidence in the Bequiet host guide. No custom
 module dispatcher or workspace lifecycle is used.
 
 ## gentoo-sources to gentoo-kernel migration

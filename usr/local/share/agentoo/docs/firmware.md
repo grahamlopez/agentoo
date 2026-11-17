@@ -184,11 +184,13 @@ Wi-Fi/Bluetooth firmware initialization and onboard 2.5 Gb/s Ethernet confirmed.
 The fallback embeds no extra firmware. The operator confirms cold-start,
 functional peripheral and suspend/resume acceptance on both kernels.
 
-Bequiet's native source/module-enabled boot and rebuild acceptance remain pending;
+Bequiet's native source/module-enabled boot, hardware and refreshed binary
+recovery acceptance passed; same-version rebuild and version-update acceptance
+remain pending. See the [host evidence](hosts/bequiet.md#native-conversion-status);
 the [native kernel workflow](kernel.md#bequiet-conversion) permits enforced,
 signed modules only on Bequiet.
 Do not infer Bequiet update acceptance from Thinktop trials. Refresh its binary
-fallback explicitly; its existing custom image remains outside this conversion.
+fallback explicitly and recompile embedded inputs in the native custom kernel.
 
 ## Startop application follow-up
 

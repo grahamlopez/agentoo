@@ -90,7 +90,9 @@ Record per-host results there.
 The [native kernel workflow](../../docs/kernel.md) owns current builds and
 configuration. Preserve the shared driver union and host-specific firmware,
 review Kconfig changes during version bumps and validate required hardware/workloads
-on each host. Module-enabled Bequiet/NVIDIA acceptance remains separately scoped.
+on each host. Bequiet's module-enabled native conversion passed boot/hardware
+and refreshed binary recovery acceptance; rebuild/update validation remains in
+card 052.
 Thinktop's custom v0.5 and binary fallback boot paths are accepted under Secure
 Boot. Subsequent native maintenance and development work is tracked in
 [card 052](052-native-kernel-maintenance-followups.md); this does not establish
