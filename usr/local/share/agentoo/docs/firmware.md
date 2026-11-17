@@ -201,7 +201,7 @@ sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin KBUILD_OUTPUT= \
 
 Use the installed distribution version when it changes. This leaves the normal
 `eselect kernel` selection unchanged. The proposed
-[package-based replacement](../kanban/Backlog/051-gentoo-kernel-native-workflow.md)
+[package-based replacement](../kanban/Open/051-gentoo-kernel-native-workflow.md)
 is deferred until Bequiet onboarding is complete; it does not gate trimming.
 
 This selection retains every linux-firmware-owned payload embedded in the working

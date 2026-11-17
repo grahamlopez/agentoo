@@ -513,4 +513,4 @@ kernel before rebooting into it; module and userspace versions must agree.
 Re-running `agentoo kernel install --label LABEL` rebuilds the installed NVIDIA
 version against that workspace without requiring a new kernel compilation.
 The proposed native package-based workflow is described in
-[card 051](../kanban/Backlog/051-gentoo-kernel-native-workflow.md).
+[card 051](../kanban/Open/051-gentoo-kernel-native-workflow.md).
