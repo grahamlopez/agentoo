@@ -301,6 +301,17 @@ binary-package and physical acceptance limits below open.
 
 ## Deployment and acceptance
 
+Live configure follow-up: Thinktop's privileged emerge reached final validation
+but failed because native `ESYSROOT` was empty for the live root. The hook passed
+that empty string to Python, which resolved host paths relative to the source
+directory. Fixed the hook to pass `${ESYSROOT:-/}`. A regression test covers empty,
+explicit `/` and alternate roots; all eight kernel tests pass. The corrected hook
+also validates the disposable configured build against the live host policy.
+The earlier alternate-root fixture did not cover this live-root convention.
+The live build's config is not readable by the unprivileged agent; deploying the
+fix and retrying privileged emerge remain pending. No physical acceptance follows
+from this failed configure attempt.
+
 - [ ] Deploy the completed configuration and apply
   `sudo systemd-tmpfiles --create agentoo-kernel.conf`. Establish Thinktop's
   untracked kernel-local inputs, host activation and ESP UUID manually as in

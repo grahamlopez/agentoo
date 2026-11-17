@@ -140,6 +140,24 @@ class NativeKernelTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn('invalid choice', result.stderr)
 
+    def test_configure_hook_maps_empty_native_sysroot_to_live_root(self):
+        hook = SHARE.parents[3] / 'etc/portage/env/sys-kernel/gentoo-kernel'
+        script = '''
+source "$1"
+python3() { printf '%s\\n' "$@"; }
+die() { exit 1; }
+WORKDIR="$2" AGENTOO_INITRAMFS_TRANSPORT=nvme ESYSROOT="$3" post_src_configure
+'''
+        for sysroot, expected in [('', '/'), ('/', '/'), (str(self.root), str(self.root))]:
+            with self.subTest(sysroot=sysroot):
+                result = subprocess.run(['bash', '-c', script, 'configure-hook',
+                                         str(hook), str(self.root), sysroot],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [
+                    '-B', '/usr/local/share/agentoo/lib/kernel_host.py',
+                    str(self.root / 'build/.config'), 'nvme', expected])
+
     def test_shared_esp_guard_checks_custom_and_binary_targets_before_copy(self):
         guard = SHARE.parents[3] / 'etc/kernel/install.d/04-agentoo-esp.install'
         # SHARE is usr/local/share/agentoo; its third parent is the repo root.
