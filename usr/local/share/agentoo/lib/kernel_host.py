@@ -1,4 +1,4 @@
-"""Resolve explicit host policy and the local encrypted-root identity.
+"""Validate explicit host policy and built-in boot capabilities.
 
 No configuration is sourced as shell code and no storage is changed.
 """
@@ -6,14 +6,11 @@ import json
 from pathlib import Path
 import re
 import sys
-import uuid
 
 from host_selection import HOST_NAME, read_host
 
 HOSTS = Path('/etc/agentoo/kernel/hosts')
 HOST_LINK = Path('/etc/kernel/config.d/20-host.config')
-KEYMAP = '/usr/share/keymaps/i386/qwerty/us-caps.map.gz'
-SYS_BLOCK = Path('/sys/class/block')
 MINIMAL_BUILTINS = (
     'BINFMT_ELF', 'DEVTMPFS', 'PROC_FS', 'SYSFS', 'TMPFS', 'EFI_PARTITION',
     'BLK_DEV_DM', 'DM_CRYPT', 'CRYPTO_AES', 'CRYPTO_XTS', 'BTRFS_FS',
@@ -64,43 +61,6 @@ def read_profile(host=None, *, root=Path('/')):
     return host, path, text, values
 
 
-def identifier(value):
-    try:
-        return str(uuid.UUID(value))
-    except (ValueError, TypeError, AttributeError) as error:
-        raise RuntimeError(f'missing or invalid storage UUID: {value!r}') from error
-
-
-def resolve_identity(run):
-    mounts = json.loads(run(['findmnt', '--json', '--output', 'SOURCE,FSTYPE,FSROOT', '--target', '/'], capture=True))['filesystems']
-    if len(mounts) != 1 or mounts[0]['fstype'] != 'btrfs' or mounts[0]['fsroot'] != '/@':
-        raise RuntimeError('host specialization requires the installed Btrfs @ root on one LUKS2 partition')
-    source = mounts[0]['source'].split('[', 1)[0]
-    devices = json.loads(run(['lsblk', '--json', '--tree', '--inverse', '--paths', '--output',
-                             'PATH,KNAME,TYPE,FSTYPE,UUID,PARTUUID,TRAN', source], capture=True))['blockdevices']
-    if len(devices) != 1:
-        raise RuntimeError('cannot inspect the mounted root device; run on the destination host with block-device access')
-    root = devices[0]
-    parents = root.get('children', [])
-    if root['type'] != 'crypt' or root['fstype'] != 'btrfs' or len(parents) != 1:
-        raise RuntimeError('expected Btrfs directly on a single encrypted mapping; LVM/RAID layouts need separate initramfs support')
-    partition = parents[0]
-    if partition['type'] != 'part' or partition['fstype'] != 'crypto_LUKS':
-        raise RuntimeError('expected the encrypted root backing device to be a LUKS partition')
-    disks = partition.get('children', [])
-    transport = disks[0].get('tran') if len(disks) == 1 and disks[0]['type'] == 'disk' else None
-    sysfs = SYS_BLOCK / Path(root['kname']).name / 'dm'
-    if not (sysfs / 'uuid').read_text().startswith('CRYPT-LUKS2-'):
-        raise RuntimeError('the minimal initramfs requires LUKS2')
-    mapper = (sysfs / 'name').read_text().strip()
-    if not re.fullmatch(r'[a-zA-Z0-9_+-]+', mapper):
-        raise RuntimeError('unsupported root mapping name')
-    identity = dict(root_uuid=identifier(root['uuid']), luks_uuid=identifier(partition['uuid']),
-                    partuuid=identifier(partition['partuuid']), mapper=mapper, subvolume='@', keymap=KEYMAP,
-                    transport=transport)
-    return identity
-
-
 def check_minimal_config(values, identity):
     storage = {'nvme': ('BLK_DEV_NVME',), 'sata': ('SCSI', 'BLK_DEV_SD', 'ATA', 'SATA_AHCI')}
     transport = identity.get('transport')
@@ -136,7 +96,7 @@ def validate_config(path, transport, root=Path('/')):
     _, profile, _, expected = read_profile(root=root)
     active = Path(root) / HOST_LINK.relative_to('/')
     if not active.is_symlink() or active.resolve() != profile.resolve():
-        raise RuntimeError('active kernel fragment does not match the selected profile; run agentoo kernel prepare')
+        raise RuntimeError('active /etc/kernel/config.d/20-host.config must link to the selected host fragment')
     check_expected(values, expected)
     check_minimal_config(values, {'transport': transport})
     check_expected(values, {'CONFIG_EFI_STUB': 'y', 'CONFIG_BLK_DEV_INITRD': 'y',

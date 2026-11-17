@@ -2,7 +2,7 @@
 
 Created: 2026-11-13
 Updated: 2026-11-17
-Status: Open — setup/policy and firmware-maintenance corrections pending before deployment
+Status: Open — implementation complete; Thinktop deployment and live acceptance pending
 
 ## Scope and implementation
 
@@ -13,14 +13,18 @@ source validation rejects module-enabled configs. The operator has retained a
 rollback branch; this repository carries no compatibility commands or parallel
 build/configuration lifecycle.
 
-The [kernel guide](../../docs/kernel.md) describes the implementation below; its
-setup instructions must be revised with the current tasks before deployment:
+The [kernel guide](../../docs/kernel.md) describes the implementation and the
+manual one-off Thinktop setup before deployment:
 
 - Shared kernel policy lives in `/etc/kernel/config.d/10-agentoo.config`.
   Native sorted fragments provide selected host specialization and local overrides.
-- The current implementation bundles local setup and shared policy in
-  `agentoo kernel prepare`. That interface was not agreed and is to be removed;
-  its replacement responsibilities are assigned below.
+- Target installation records local initramfs/storage inputs and activates a
+  supported no-module host fragment using its already validated target data.
+  `agentoo kernel prepare` and its exclusive helpers/tests/completion are removed.
+  The generator owns the default keymap; kernel-local can override it explicitly.
+- Shared native tmpfiles rules create the custom installkernel configuration link
+  and sbctl hook mask. The installer applies them before kernel transactions;
+  existing hosts apply them once after deploying the configuration.
 - A source-package native Portage phase hook generates a fresh build-owned archive
   using the installed initramfs package and sets its computed source path with
   `scripts/config`. Final Kconfig validation checks built-in boot capabilities,
@@ -28,8 +32,11 @@ setup instructions must be revised with the current tasks before deployment:
 - Native source signing uses sbctl's original key/certificate paths. Native
   package environment/plugin selection excludes dracut, standalone microcode and
   sbctl boot-layout hooks from the custom path. The shared ESP guard protects both
-  source and binary installations. This separates direct package installation,
-  but does not yet correctly scope firmware-triggered all-kernel maintenance.
+  source and binary installations. Firmware packages use `-initramfs`; the
+  operator explicitly refreshes the binary fallback archive and recompiles the
+  custom kernel. Shared dracut policy retains early microcode.
+- The source package's native post-install hook selects its installed prepared
+  tree with `eselect kernel`. Binary fallback updates preserve that selection.
 - EFI guidance is implemented once in `gen-efi-cmd`; the install hook calls it.
   Generated commands use `--create-only`, preserving BootOrder and BootNext.
 - Agentoo-owned workspace metadata, RAM copying/retention, build/install/module
@@ -126,8 +133,8 @@ identity and is not an image to deploy with trusted Secure Boot.
 
 ## Current implementation verification
 
-- Final repository suite: all 349 Python tests and all six Lua suites passed
-  outside the agent sandbox, including native-preparation, wrong-target ESP,
+- Earlier repository suite: all 349 Python tests and all six Lua suites passed
+  outside the agent sandbox, including then-current setup, wrong-target ESP,
   create-only EFI quoting/boot-input and shared install-guidance forwarding tests.
 - Native unpack/prepare/configure against a disposable copy of the actual new
   repo config passed, including automatic generation and final validation. Only
@@ -144,37 +151,72 @@ identity and is not an image to deploy with trusted Secure Boot.
   searches and diff whitespace checks pass. Validation logs remain under
   `/tmp/agentoo-kernel-repo-check` and `/tmp/kernel-repo-accepted-suite.log`.
 
-## Current tasks before deployment
+### Final implementation checks (2026-11-17)
+
+- All 348 Python tests and six Lua suites pass outside the agent sandbox. The
+  removed preparation/storage-discovery tests are replaced by target-installer
+  input/retry/wrong-target checks. A final installer-only run passes all 22 tests.
+- Fresh native unpack/prepare/configure uses the current repository fragments,
+  revised hooks, default packaged keymap and disposable signing identity. It
+  passes outside the agent sandbox with normal Gentoo sandbox features. The
+  resolved config differs from the accepted complete build only in localversion
+  (`-agentoo-v0.5`) and generated archive path; CONFIG_MODULES remains disabled.
+- Effective Portage settings retain binary `initramfs` and Intel `split-ucode`,
+  disable both firmware packages' `initramfs`, and restrict custom config/plugin
+  selection to the source atom. Actual firmware ebuild postinst bodies skip
+  boot maintenance with these flags; no firmware/package merge was performed.
+- Native tmpfiles creates/reapplies both shared links, including replacing a
+  stale sbctl hook in a disposable root. No tracked symlinks or permission-rule
+  exceptions are needed.
+- Native eselect plus Gentoo's source-link update functions pass binary-first,
+  custom-first, binary-update, custom-update and localversion-change checks.
+  Binary updates preserve a valid custom selection.
+- Native installkernel check/copy plugins pass install and reinstall for both
+  paths in `/tmp`; only dracut execution is recorded by a test double. The custom
+  path calls no dracut and creates no external archive; the binary path does both.
+  Shared ESP guard and guidance are covered separately by repository tests.
+- A real rootless dracut build also produces a disposable fallback archive. Its
+  early CPIO contains both vendor microcode files and the selected Thinktop Intel
+  payload verbatim. Native configuration ordering overrides both firmware
+  packages' disabled early-microcode defaults. The rootless build logs ldconfig
+  warnings; privileged installed fallback and physical boot remain unaccepted.
+- Logs and fixtures: `/tmp/agentoo-kernel-final-suite-host.log`,
+  `/tmp/agentoo-kernel-final-installer.log`, `/tmp/agentoo-kernel-final-policy/`,
+  and `/tmp/agentoo-kernel-repo-check/configure-final-policy-host.log`.
+  No live configuration, packages, keys, boot images or firmware entries changed.
+
+## Implemented decisions
 
 ### Remove prepare; use installation-time setup and shared policy
 
-- [ ] Remove `agentoo kernel prepare` outright, its dispatch/completion surface,
+- [x] Remove `agentoo kernel prepare` outright, its dispatch/completion surface,
   exclusive implementation/helpers and obsolete tests/docs. Preserve useful
   checks in the installer and normal build/install paths. No alias, migration
   command, recurring bootstrap operation or compatibility layer.
-- [ ] Extend the existing target installer to establish native local initramfs
-  inputs (PARTUUID, mapper, keymap and transport), selected host-fragment
+- [x] Extend the existing target installer to establish native local initramfs
+  inputs (PARTUUID, mapper and transport; generator-default keymap), selected host-fragment
   activation and target ESP UUID. Reuse the installer's already validated host,
   root and ESP data; do not add a second discovery/selection mechanism or store
   another authoritative host identity.
-- [ ] Treat those persisted local values as installation-time setup, revisited
+- [x] Treat those persisted local values as installation-time setup, revisited
   only after relevant storage/profile/ESP changes. Document direct native edits
   for those changes rather than another management command. UUIDs remain untracked.
-- [ ] Place the custom installkernel configuration arrangement in shared
+- [x] Place the custom installkernel configuration arrangement in shared
   configuration/deployment or target installation. The current link is
   `/etc/kernel/custom/install.conf -> ../install.conf`, not `/usr/src/linux`;
   it reuses common efistub settings while the custom drop-in selects no external
   generator. Prefer native sharing without copied policy or a custom loader.
-- [ ] Make disabling the incompatible sbctl hook explicit shared distribution
+- [x] Make disabling the incompatible sbctl hook explicit shared distribution
   policy, independent of local storage setup. Resolve its native mask/deployment
   and permissions handling; do not leave a global signing-policy change hidden
   in a user preparation command.
-- [ ] Keep ongoing work in its appropriate native path: fresh archive generation,
+- [x] Keep ongoing work in its appropriate native path: fresh archive generation,
   configuration merging/boot validation, compilation/signing, and checking the
   mounted ESP before copy. Moving setup does not remove these safety checks.
-- [ ] Handle Thinktop's existing-system conversion manually as a one-off. The
-  rollback branch is available. Do not implement or retain migration machinery.
-  Update the maintained kernel/initramfs/installation/CLI guides together.
+- [x] Document Thinktop's existing-system conversion as a manual one-off. The
+  rollback branch is available. No migration machinery is implemented or retained.
+  Maintained kernel/initramfs/installation/CLI guides are updated together.
+  Performing that live conversion remains deployment work below.
 
 Signing clarification: `gentoo-kernel[secureboot]` signs the staged image through
 `kernel-build.eclass` / `secureboot_sign_efi_file` before installkernel copies it
@@ -184,23 +226,29 @@ The installed `91-sbctl.install` assumes a BLS `ENTRY_DIR_ABS/linux` or UKI
 binary fallback kernel retains its packaged signature. No replacement signing
 mechanism is needed merely because that hook is disabled.
 
-### Settle the default /usr/src/linux selection
+### Establish the default /usr/src/linux selection
 
-- [ ] Confirm/document the proposed policy: `/usr/src/linux` selects the installed
-  prepared tree of the custom gentoo-kernel build, e.g.
-  `/usr/src/linux-6.18.62-agentoo-v0.5`, through native eselect kernel. This has
-  been recommended, not yet accepted as a tested two-kernel maintenance policy.
-- [ ] Establish selection during target installation after that kernel exists;
-  select it manually for the one-off Thinktop conversion. Do not introduce
-  per-operation selector flipping or a new kernel selector.
-- [ ] Verify native updates to either package leave selection in the intended
+Decision: `/usr/src/linux` selects the installed prepared tree of the custom
+gentoo-kernel build, e.g. `/usr/src/linux-6.18.62-agentoo-v0.5`, through native
+`eselect kernel`. The binary fallback uses its explicit versioned paths.
+All policy decisions needed for implementation are settled. Implementation and
+disposable two-kernel maintenance validation are complete. Live acceptance
+remains pending.
+
+- [x] Document the accepted default selection in the maintained guides.
+- [x] Establish selection through native `eselect kernel` in the custom package's
+  post-install hook, once its prepared tree exists, for both new installations
+  and Thinktop's conversion. No per-operation selector flipping or new selector.
+- [x] Verify native updates to either package leave selection in the intended
   family and advance it appropriately. Review selection when localversion changes.
   Both packages retain their own explicit versioned trees/per-release links;
   their native installation routines should not depend on changing this default.
-- [ ] Exercise consumers using linux-info/KERNEL_DIR, including firmware
-  maintenance. Selecting this link alone cannot fix the all-kernel issue below.
+- [x] Review linux-info/KERNEL_DIR consumers and firmware maintenance. Firmware
+  hooks no longer dispatch all-kernels installation; source configuration and
+  explicit binary refresh use their own versioned inputs. Live package-update
+  acceptance remains below.
 
-### Fix linux-firmware-triggered all-kernel maintenance
+### Make firmware maintenance explicit for both kernels
 
 The installed linux-firmware ebuild, with initramfs/dist-kernel integration,
 requests `dist-kernel_reinstall_initramfs ... --all`. Native installkernel
@@ -211,33 +259,52 @@ then selects dracut for the custom gentoo-kernel build as well. This can generat
 an unwanted external archive or fail during firmware maintenance; it cannot
 refresh firmware or the archive embedded in the already compiled custom image.
 
-- [ ] Find the simplest native scoping/maintenance policy that refreshes the
-  binary fallback kernel's external initramfs without running dracut or standalone
-  microcode generation for the custom gentoo-kernel build. Check upstream/native
-  facilities before adding glue; do not add another dispatcher/framework.
-- [ ] If the chosen policy requires explicit binary fallback kernel regeneration
-  instead of linux-firmware's automatic --all hook, make that an explicit reviewed
-  workflow change. Preserve fallback upkeep and update its callers/docs together;
-  do not simply disable the hook and silently lose recovery maintenance.
-- [ ] Test the firmware-package invocation context and all-installed-kernels path,
-  not only direct emerge of each kernel atom. Include direct install/reinstall,
-  firmware updates and any other callers of add-all/installkernel --all that apply.
-  Verify no source-package environment override leaks onto the binary path.
-- [ ] Keep recompilation of the custom gentoo-kernel build explicit after changes
+Decision: the operator explicitly refreshes both kernels after firmware updates.
+Accepted because the extra operator work is small and avoids Agentoo policy hooks
+or dispatchers. Intel microcode updates use the same automatic all-kernels path
+and are included in this decision. Implementation and disposable validation are
+complete; live acceptance remains pending.
+
+- [x] Disable automatic initramfs maintenance for `sys-kernel/linux-firmware`
+  and `sys-firmware/intel-microcode` using native `-initramfs` USE settings.
+  Retain the firmware/microcode files needed by both kernel workflows. Do not
+  add a custom all-kernels filtering plugin or patch the upstream ebuilds.
+- [x] Explicitly enable early microcode in the binary fallback's native dracut
+  configuration: the firmware packages' `-initramfs` settings also change their
+  supplied dracut defaults to disable it. Verify the configuration precedence
+  and resulting archive; disabling automatic maintenance must not lose microcode.
+- [x] Document the operator sequence after firmware/microcode updates: regenerate
+  each retained binary fallback kernel's external archive with
+  `sudo emerge --config '=sys-kernel/gentoo-kernel-bin-VERSION'`, then rebuild
+  the custom gentoo-kernel build with
+  `sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'`.
+  Replace VERSION with the intended installed package version. Update maintained
+  callers/docs together; firmware installation alone does not refresh boot images.
+- [x] Check effective package settings and exercise actual firmware and Intel
+  microcode postinst bodies: no automatic boot-image installation, dracut
+  invocation or standalone microcode generation.
+  Verify real disposable fallback generation includes microcode, and custom
+  configuration selects a fresh archive without creating an external one. Native
+  install/reinstall trials and effective package environments verify source-only
+  overrides do not leak onto the binary path. Full custom embedding is covered
+  by the earlier accepted build; privileged refresh/rebuild remains below.
+  Review other applicable
+  `add-all`/`installkernel --all` callers; the generic all-kernels operation is not
+  the supported refresh workflow for this mixed setup.
+- [x] Keep recompilation of the custom gentoo-kernel build explicit after changes
   to embedded firmware/microcode, initramfs implementation or linked libraries.
   External initramfs regeneration is not a substitute for embedding fresh inputs.
 
-The earlier disposable build/signing/archive and operator storage-smoke evidence
-remains valid within its scope. It does not establish acceptance of these newly
-identified setup and maintenance paths. Keep the existing rootless/userpriv,
-retained-object QA, binary-package and physical acceptance limits below open.
+The disposable checks supplement the earlier build/signing/archive and operator
+storage-smoke evidence. Keep privileged build/userpriv, retained-object QA,
+binary-package and physical acceptance limits below open.
 
 ## Deployment and acceptance
 
-- [ ] Complete the setup/policy and maintenance corrections above, then deploy.
-  Install agentoo-initramfs revision 1-r1 before native kernel compilation and
-  apply the reviewed one-off Thinktop native local setup manually. Do not use
-  the prepare command slated for removal.
+- [ ] Deploy the completed configuration and apply
+  `sudo systemd-tmpfiles --create agentoo-kernel.conf`. Establish Thinktop's
+  untracked kernel-local inputs, host activation and ESP UUID manually as in
+  the kernel guide. Install agentoo-initramfs revision 1-r1 before compilation.
 - [ ] Review native emerge plan for @kernel-dev, source USE/signing inputs and
   coexistence with the installed binary fallback kernel. Perform privileged build/install
   with the existing enrolled identity and verify the installed signature/config.
@@ -248,8 +315,10 @@ retained-object QA, binary-package and physical acceptance limits below open.
   passphrase retry/unlock, internal/USB input, Btrfs `@`, discards, microcode,
   normal startup, graphics/audio/network, peripherals and suspend/resume. Check
   Thinktop MICMUTE under the [keyboard-policy acceptance](020-initramfs-keyboard-policy.md).
-- [ ] Independently verify the binary fallback kernel's dracut generation and physical
-  recovery remain accepted. Keep working installed entries until acceptance.
+- [ ] Independently verify the binary fallback kernel's privileged dracut
+  generation, early microcode and physical recovery. After applying the firmware
+  USE changes, verify real package updates perform no boot-image maintenance;
+  explicitly refresh both kernels. Keep working entries until acceptance.
 - [ ] Exercise a same-version rebuild and subsequent kernel version update;
   review new Kconfig choices, release paths and native prepared-tree discovery.
   Rebuild after installed initramfs/library/firmware input changes.

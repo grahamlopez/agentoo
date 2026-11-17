@@ -121,11 +121,12 @@ verify_pinned_release_signature unused "$1"
             root = Path(directory)
             atom = 'sys-kernel/gentoo-kernel-bin-6.18.60'
             for name in ['etc/kernel', 'etc/portage/package.use', 'etc/dracut.conf.d',
-                         'etc/kernel/install.d', 'var/lib/agentoo/repository.git',
+                         'etc/kernel/install.d', 'etc/tmpfiles.d', 'var/lib/agentoo/repository.git',
                          f'var/db/pkg/{atom}', 'boot']:
                 (root / name).mkdir(parents=True, exist_ok=True)
             for name in ['etc/gentoo-release', 'etc/portage/package.use/kernel',
                          'etc/kernel/install.conf', 'etc/dracut.conf.d/agentoo-dist.conf',
+                         'etc/tmpfiles.d/agentoo-kernel.conf',
                          'etc/kernel/install.d/04-agentoo-esp.install']:
                 (root / name).touch()
             release = root / 'include/config/kernel.release'
@@ -146,6 +147,7 @@ require_command() { :; }
 selected_target_host() { echo bequiet; }
 prepare_install_binpkgs() { :; }
 emaint() { :; }
+systemd-tmpfiles() { :; }
 eselect() { :; }
 git() { :; }
 agentoo() { :; }
@@ -192,6 +194,53 @@ kernel_foundation_chroot
                 self.assertNotIn('--exclude', line)
             self.assertLess(transactions.index(world[-1]), transactions.index(kernel[0]))
             self.assertEqual((root / 'verified').read_text(), '6.18.60-gentoo-dist-bin\n')
+
+    def test_custom_kernel_inputs_use_target_identity_and_reject_retargeting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ('etc/agentoo/kernel/hosts', 'etc/kernel/config.d', 'etc/portage/env'):
+                (root / name).mkdir(parents=True)
+            fragment = root / 'etc/agentoo/kernel/hosts/thinktop.config'
+            fragment.write_text('CONFIG_EXTRA_FIRMWARE="device.bin"\n')
+            source = INSTALLER.read_text().removesuffix('main "$@"\n')
+            source = source.replace('/etc/', directory + '/etc/')
+            harness = r'''
+TARGET_HOST=thinktop
+TARGET_DISK=/dev/target
+CRYPT_PARTITION=/dev/target2
+LUKS_NAME=cryptroot
+lsblk() { [[ ${@: -1} == /dev/target ]] || exit 90; echo nvme; }
+blkid() { [[ ${@: -1} == /dev/target2 ]] || exit 91; echo 33333333-3333-4333-8333-333333333333; }
+configure_custom_kernel_inputs
+'''
+            def run(extra=''):
+                return subprocess.run(['bash', '-s'], input=source + harness + extra,
+                                      capture_output=True, text=True)
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            inputs = root / 'etc/portage/env/kernel-local'
+            self.assertEqual(inputs.read_text(),
+                             'AGENTOO_INITRAMFS_PARTUUID=33333333-3333-4333-8333-333333333333\n'
+                             'AGENTOO_INITRAMFS_MAPPER=cryptroot\nAGENTOO_INITRAMFS_TRANSPORT=nvme\n')
+            activation = root / 'etc/kernel/config.d/20-host.config'
+            self.assertEqual(activation.readlink(), fragment)
+            self.assertEqual(run().returncode, 0)
+            result = run('LUKS_NAME=wrong; configure_custom_kernel_inputs\n')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('manual review', result.stderr)
+            self.assertNotIn('wrong', inputs.read_text())
+            activation.unlink()
+            activation.symlink_to(root / 'other-host.config')
+            result = run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('manual review', result.stderr)
+            self.assertEqual(activation.readlink(), root / 'other-host.config')
+            fragment.write_text('CONFIG_MODULES=y\n')
+            inputs.unlink()
+            activation.unlink()
+            self.assertEqual(run().returncode, 0)
+            self.assertFalse(inputs.exists())
+            self.assertFalse(activation.is_symlink())
 
     def test_profile_query_runs_inside_the_requested_destination(self):
         result = self.run_installer('/mnt/target', harness='''

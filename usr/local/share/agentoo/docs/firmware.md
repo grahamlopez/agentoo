@@ -6,7 +6,7 @@ Host firmware has three owners, each selected by the native Agentoo Portage prof
 | --- | --- | --- |
 | Extra firmware packages, such as SOF | profile `packages` | Portage `@profile` and world updates |
 | Installed linux-firmware trimming | `/etc/agentoo/firmware/<name>.list` plus native profile `package.use` | `agentoo kernel firmware apply`, then Portage |
-| Firmware embedded in a custom kernel | `CONFIG_EXTRA_FIRMWARE` in `/etc/agentoo/kernel/hosts/<name>.config` | `agentoo kernel prepare` and native source rebuild ([kernel guide](kernel.md#host-specialization)) |
+| Firmware embedded in a custom kernel | `CONFIG_EXTRA_FIRMWARE` in `/etc/agentoo/kernel/hosts/<name>.config` | Native source rebuild ([kernel guide](kernel.md#host-specialization)) |
 
 CPU microcode follows the installer's `--microcode` choice. The rest of this guide
 covers installed linux-firmware trimming.
@@ -64,10 +64,11 @@ binary-only defaults, without passing negative `*pkgonly` options that some
 Portage resolver paths interpret by their presence. Host USE policy still applies.
 
 On success it compares the generated versioned snapshot and installed package
-paths against the host list and reports installed payload bytes. Distribution
-initramfs regeneration follows the effective `dist-kernel`/`initramfs` policy.
-It does not rebuild the custom kernel, alter its embedded firmware, register EFI
-entries or reboot. Repeat cold-boot and functional/suspend checks on both kernels.
+paths against the host list and reports installed payload bytes. Firmware packages
+use `-initramfs`; no boot artifact is refreshed automatically. Explicitly refresh
+the binary fallback's external archive and rebuild the custom gentoo-kernel build
+as described below, then repeat cold-boot and functional/suspend checks on both
+kernels. Apply does not register EFI entries or reboot.
 
 `--dry-run` performs no changes, sudo requests or confirmation. `--yes` accepts
 the displayed apply plan, but does not bypass sudo authentication; the existing
@@ -117,17 +118,15 @@ sudo emerge --oneshot --usepkg=n '=sys-kernel/linux-firmware-20260622'
 
 Use the appropriate version on later rebuilds. Check the build log's
 `Building using saved configfile` path is the intended unversioned file, and
-check successful distribution initramfs regeneration through `dist-kernel`.
+explicitly refresh both boot artifacts as described below.
 Inspect the newly generated versioned savedconfig for the actual installed list.
 No custom Portage hook or binary-package guard is installed; use source builds
 when applying or updating the selection, and review missing/renamed firmware manually.
 
 A new package version normally uses the unversioned input because an older
 version's snapshot does not match. A rebuild of the same version prefers its
-generated snapshot: move it aside again when revising the durable list. Neither
-kernel needs rebuilding solely to trim installed files. Regenerate custom
-initramfs copies if needed; rebuild the custom kernel when its embedded inputs
-change.
+generated snapshot: move it aside again when revising the durable list. Follow each firmware update or selection change with the explicit refresh
+sequence below, keeping both boot artifacts consistent with installed inputs.
 
 ## Flattop selection and Thinktop dock correction
 
@@ -185,25 +184,10 @@ Wi-Fi/Bluetooth firmware initialization and onboard 2.5 Gb/s Ethernet confirmed.
 The fallback embeds no extra firmware. The operator confirms cold-start,
 functional peripheral and suspend/resume acceptance on both kernels.
 
-For Bequiet's installed accepted images, the firmware transaction can use the
-native prepared binary tree as KERNEL_DIR. Its source/module-enabled conversion
-remains deferred; the [native kernel workflow](kernel.md) currently requires
-CONFIG_MODULES=n. Do not infer Bequiet update acceptance from Thinktop trials.
-
-```sh
-sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin \
-  agentoo kernel firmware apply --dry-run
-sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin \
-  agentoo kernel firmware apply
-```
-
-Use the installed binary version when it changes. Source kernel firmware inputs
-must be rebuilt into the embedded image after their installed payloads change;
-`emerge --config` cannot update embedded firmware.
-
-This selection retains every linux-firmware-owned payload embedded in the working
-custom kernel; that kernel does not need rebuilding. Verify fallback initramfs
-regeneration and test cold starts, Wi-Fi/Bluetooth, Ethernet and resume afterwards.
+Bequiet's source/module-enabled conversion remains deferred; the
+[native kernel workflow](kernel.md) currently requires CONFIG_MODULES=n.
+Do not infer Bequiet update acceptance from Thinktop trials. Refresh its binary
+fallback explicitly; its existing custom image remains outside this conversion.
 
 ## Startop application follow-up
 
@@ -213,21 +197,29 @@ but apply correctly stopped because its expected versioned path was absent.
 Review the pending file against the host list and accept that specific update,
 then check `agentoo kernel firmware`; do not assume a protected file is active.
 
-linux-firmware's native regeneration hook can also stop early if `/usr/src/linux`
-selects an out-of-tree custom build with no in-tree `.config`/image. A successful
-package merge alone does not establish distribution-initramfs regeneration.
-On Startop, `emerge --config '=sys-kernel/gentoo-kernel-bin-6.18.60'` rebuilt the
-distribution initramfs and reinstalled its artifacts before both boot paths were
-accepted. Use the installed distribution package version on other systems.
-
 ## Routine maintenance
+
+
+After firmware or Intel microcode updates, including selection changes through
+`agentoo kernel firmware apply`, refresh both boot artifacts explicitly:
+
+```sh
+sudo emerge --config '=sys-kernel/gentoo-kernel-bin-VERSION'
+sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
+```
+
+Use each package's intended installed version and refresh every binary fallback
+you intend to retain. The first regenerates an external archive; the second
+recompiles embedded firmware and initramfs inputs. Shared dracut configuration
+keeps early microcode enabled for the binary fallback. Do not use an all-kernels
+refresh command for this mixed configuration. See the [kernel guide](kernel.md).
 
 | Change | Operator action |
 |---|---|
 | Distribution kernel update | Update normally. Check firmware errors and hardware operation after booting it. If its drivers require new names, revise the host list and rebuild linux-firmware. |
 | Custom kernel update | Follow the working kernel/initramfs build procedure. Review firmware requirements when changing drivers or kernel versions; the installed selection does not update the embedded list. |
 | linux-firmware update | Review added/removed firmware names and relevant API versions. Update the explicit list as needed, reinstall it, check snapshot precedence, and build from source. New files are not selected automatically. |
-| Host-list edit | Deploy and run `agentoo kernel firmware apply`, even if the package version is unchanged. It reinstalls the list, retires matching overrides and rebuilds from source. Regenerate custom artifacts if embedded inputs change. |
+| Host-list edit | Deploy and run `agentoo kernel firmware apply`, even if the package version is unchanged. It reinstalls the list, retires matching overrides and rebuilds from source. Explicitly refresh both boot artifacts afterward. |
 | New hardware or driver | Review firmware requirements first; restore broad coverage while investigating if necessary. |
 
 After a selection change, test a cold boot of both custom and distribution
@@ -284,7 +276,6 @@ sudo env USE="-savedconfig" emerge --oneshot --usepkg=n '=sys-kernel/linux-firmw
 For persistent broad coverage on this machine, add
 `sys-kernel/linux-firmware -savedconfig` to `/etc/portage/package.use/local`
 and rebuild. Change the host profile's `package.use` instead when revising
-managed policy for every installation of that profile. Check distribution
-initramfs regeneration and recreate affected custom artifacts. Keep a known
+managed policy for every installation of that profile. Explicitly refresh both boot artifacts afterward. Keep a known
 working boot path or installation media: the fallback kernel shares the same
 root firmware directory.

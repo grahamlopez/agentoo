@@ -23,16 +23,26 @@ Configuration is authoritative at these locations, applied in native filename or
 | `/etc/kernel/config.d/20-host.config` | Local symlink activating the selected host fragment |
 | `/etc/kernel/config.d/80-local-boot.config` | Optional untracked command-line/release settings |
 | `/etc/kernel/config.d/90-local.config` | Optional untracked overrides and experiments |
-| `/etc/portage/env/kernel-local` | Local initramfs PARTUUID, mapping name, keymap and root transport |
+| `/etc/portage/env/kernel-local` | Local initramfs PARTUUID, mapping name and root transport; optional keymap override |
 
-The selected Agentoo Portage profile is the sole host selection. `prepare`
-validates Btrfs `@` directly on one LUKS2 GPT partition, NVMe/AHCI transport and the
-mounted FAT GPT ESP, then displays and confirms the native local input changes.
-It creates the host activation and custom installkernel configuration symlinks,
-records the ESP UUID, and masks sbctl's BLS/UKI install hook. EFI signing instead
-belongs to the source eclass; the fallback retains its packaged signature.
-Local config.d overrides are not overwritten. Re-run preparation after changing
-the selected host or storage identity; review replacements before accepting.
+The selected Agentoo Portage profile is the sole host selection. Target
+installation activates the matching no-module host fragment and records local
+inputs from its validated LUKS2/Btrfs `@` layout and NVMe/AHCI storage. Generic,
+QEMU and deferred module-enabled targets retain the binary fallback workflow.
+The installer records the mounted ESP UUID for both kernel installation paths.
+
+These inputs are installation-time setup. After changing storage, the selected
+profile or ESP, review `/etc/portage/env/kernel-local`, the host activation link
+and `/etc/kernel/gentoo-dist-esp.uuid` directly. Keep UUIDs outside Git. Local
+config.d overrides are preserved. The generator owns the default console keymap;
+set `AGENTOO_INITRAMFS_KEYMAP` in kernel-local only to override it.
+
+Shared `/etc/tmpfiles.d/agentoo-kernel.conf` creates the custom installkernel
+configuration link and masks sbctl's incompatible BLS/UKI install hook. The
+custom link reuses shared efistub policy; its drop-in disables external archive
+generation. EFI signing belongs to the source eclass; the binary fallback
+retains its packaged signature. Apply these rules immediately after deploying
+configuration, before either kernel is installed; they also apply at boot.
 
 No kernel savedconfig layer is used. Resolved installed configs are evidence,
 not another policy source. The source package's native phase hook generates a
@@ -41,19 +51,48 @@ fresh archive inside WORKDIR after fragment merging and sets its computed
 not a persistent local override. Archive paths in an installed config need not
 survive Portage cleanup.
 
-## Prepare and build
+## Setup and build
 
 Deploy this repository's configuration first. Keep the working boot images and
 entries available while accepting the candidate. Establish and back up your
 existing sbctl identity using the [Secure Boot guide](secure-boot.md); private
 keys stay under `/var/lib/sbctl/keys/db` and outside Git.
 
-Install the revised generator **before** building the kernel, then prepare on the
-destination host and select the native development set:
+Apply shared installation policy, install the revised generator **before**
+building the kernel, then select the native development set:
 
 ```sh
+sudo systemd-tmpfiles --create agentoo-kernel.conf
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
-agentoo kernel prepare
+```
+
+For the one-off Thinktop conversion, first inspect `eselect --brief --colour=no
+profile show`, `findmnt --target /`, `findmnt --mountpoint /boot` and
+`lsblk -o NAME,TYPE,FSTYPE,PARTUUID,TRAN`.
+Require the intended Thinktop profile, Btrfs `@` directly on LUKS2/NVMe and the
+mounted target FAT GPT ESP. Record the encrypted partition's **PARTUUID**, not
+its LUKS UUID, with `sudoedit /etc/portage/env/kernel-local`:
+
+```sh
+AGENTOO_INITRAMFS_PARTUUID=ENCRYPTED_PARTITION_PARTUUID
+AGENTOO_INITRAMFS_MAPPER=cryptroot
+AGENTOO_INITRAMFS_TRANSPORT=nvme
+```
+
+Activate the host fragment and record the mounted ESP's filesystem UUID:
+
+```sh
+sudo ln -sfnT /etc/agentoo/kernel/hosts/thinktop.config /etc/kernel/config.d/20-host.config
+findmnt -n -o UUID --mountpoint /boot
+sudoedit /etc/kernel/gentoo-dist-esp.uuid
+```
+
+The ESP file contains only that UUID. Review existing values before replacing
+any local setup. The installer establishes these inputs on new supported targets;
+there is no recurring preparation or migration command. Once the local inputs
+are established, review and build the native development set:
+
+```sh
 sudo emerge --ask --pretend --verbose --usepkg=n @kernel-dev
 sudo emerge --ask --usepkg=n @kernel-dev
 ```
@@ -76,8 +115,15 @@ Installation copies the signed source image to
 version 6.18.62 produces release `6.18.62-agentoo-v0.5`. Binary fallback kernel labels are unchanged.
 It generates no external initramfs and invokes neither dracut nor standalone
 microcode generation. The selected firmware/microcode is embedded in the kernel.
-Native results live under `/usr/src/linux-<release>` and `/lib/modules/<release>`;
-there are no Agentoo build workspaces, manifests, image backups or module staging.
+Native results live under `/usr/src/linux-<release>` and `/lib/modules/<release>`.
+After a custom package installation, its native Portage hook runs `eselect kernel
+set linux-<release>` so `/usr/src/linux` selects that installed prepared tree.
+Binary fallback installation uses its own release paths and preserves a valid
+custom selection; do not flip the default for binary refreshes. Inspect it with
+`eselect kernel show`. Until a custom build is installed, the binary tree may
+be selected. Native eselect rejects an existing real `/usr/src/linux` directory;
+review it manually rather than replacing it with a link.
+There are no Agentoo build workspaces, manifests, image backups or module staging.
 Portage's replacement/removal behavior applies. Keep a separately tested boot
 entry; do not treat same-release replacement as an automatic rollback mechanism.
 
@@ -146,6 +192,29 @@ later userspace upgrade does not update an already embedded archive. Recompilati
 is required. `emerge --config` only reinstalls an existing custom gentoo-kernel
 build; it cannot refresh its embedded archive or firmware. Review EFI guidance after every
 new release and independently boot-test maintenance results.
+
+### Firmware and microcode updates
+
+`linux-firmware` and `intel-microcode` use `-initramfs`: updating their installed
+payloads does not regenerate or reinstall either boot artifact. Shared dracut
+policy explicitly enables early microcode for the binary fallback, overriding
+the firmware packages' disabled generator defaults. No custom filtering hook
+or all-kernels maintenance dispatcher is used.
+
+After installing firmware/microcode updates, explicitly refresh both kernels:
+
+```sh
+sudo emerge --config '=sys-kernel/gentoo-kernel-bin-VERSION'
+sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
+```
+
+Replace each VERSION with that package's intended installed version; they need
+not match. Refresh each binary fallback version you intend to retain. The first
+command regenerates its external archive; the second recompiles embedded inputs.
+The same requirement applies after `agentoo kernel firmware apply`. Check both
+results and cold-boot the affected kernels. `kernel-install add-all` and
+`installkernel --all` do not select our custom package environment and are not
+the refresh workflow for this mixed setup.
 
 ## Configuration experiments
 

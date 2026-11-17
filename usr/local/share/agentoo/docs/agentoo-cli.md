@@ -52,8 +52,8 @@ for scope, local exclusions, bare work trees, and output contracts.
 
 ## Kernel builds
 
-`agentoo kernel prepare` validates the destination host's root/ESP and activates
-its native kernel fragment and local initramfs inputs. Portage's `gentoo-kernel`
+Target installation establishes the native host fragment and local initramfs
+inputs. Portage's `gentoo-kernel`
 package owns builds, signing and installation. See [native kernel workflow](kernel.md)
 for commands, configuration layering and experiments, and [initramfs development](initramfs.md)
 for the packaged embedded archive.

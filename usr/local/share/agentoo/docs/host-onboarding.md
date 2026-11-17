@@ -101,8 +101,12 @@ from another host into Git.
   independently of the hostname. Inspect with `eselect --brief --colour=no profile show`.
 - [ ] **`/etc/kernel/cmdline`**, **`/etc/kernel/gentoo-dist-esp.uuid`** and
   **`/etc/fstab`** — local
-  storage/boot identity. Custom kernel configuration validates the actual layout
-  against local boot arguments; tracked host profiles contain no disk UUIDs.
+  storage/boot identity. The installer verifies the target layout; tracked host
+  profiles contain no disk UUIDs.
+- [ ] **`/etc/portage/env/kernel-local`** and
+  **`/etc/kernel/config.d/20-host.config`** — installation-time custom initramfs
+  inputs and native host activation. Review after storage/profile changes;
+  the resolved build validates host settings and required built-in boot drivers.
 - [ ] **`/etc/portage/savedconfig/sys-kernel/linux-firmware`** and matching
   version/triplet snapshots — native local firmware inputs/output, managed by
   `agentoo kernel firmware apply` when trimming is selected. Adding a tracked

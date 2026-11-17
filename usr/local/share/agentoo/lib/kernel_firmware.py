@@ -267,7 +267,7 @@ def apply(args, state, *, run, confirm, notice):
     if mount_boot:
         notice('Mount /boot through its existing mount configuration before rebuilding.')
     notice('Source rebuild: ' + ' '.join(command))
-    notice('Distribution initramfs regeneration follows the effective dist-kernel/initramfs USE policy. Custom kernel/EFI registration remain separate.')
+    notice('After firmware installation, explicitly refresh the binary fallback with emerge --config and rebuild the custom gentoo-kernel build; see the kernel guide.')
     if args.dry_run:
         return
     missing = [name for name in ('emerge', 'install', 'mktemp', 'mv', *(['mount'] if mount_boot else [])) if shutil.which(name) is None]
@@ -305,7 +305,7 @@ def apply(args, state, *, run, confirm, notice):
                 notice('Package-owned paths absent/broken on disk: ' + ', '.join(actual['missing']))
             raise RuntimeError('rebuild returned successfully but installed selection needs review; run agentoo kernel firmware')
         notice(f'Applied {len(selected)} paths; installed payloads: {actual["bytes"]:,} bytes. Backup: {backup}')
-        notice('Cold-boot the custom and distribution recovery kernels and repeat hardware/suspend checks. Embedded firmware and device caches can conceal missing installed files.')
+        notice('Refresh both boot artifacts, then cold-boot the custom gentoo-kernel build and binary fallback kernel and repeat hardware/suspend checks. Embedded firmware and device caches can conceal missing installed files.')
     except (OSError, ValueError, RuntimeError, KeyboardInterrupt, EOFError):
         if backup is not None:
             notice(f'Apply interrupted/failed; configuration may already be updated. Backups: {backup}. No automatic rollback was performed.')

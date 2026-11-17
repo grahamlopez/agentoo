@@ -69,7 +69,6 @@ class CompletionTests(unittest.TestCase):
                     'agentoo scre': 'agentoo screenshot ',
                     'agentoo rep': 'agentoo repos ',
                     'agentoo ker': 'agentoo kernel ',
-                    'agentoo kernel pre': 'agentoo kernel prepare ',
                     'agentoo kernel gen-efi-cmd --ima': 'agentoo kernel gen-efi-cmd --image ',
                     'agentoo kernel fir': 'agentoo kernel firmware ',
                     'agentoo kernel firmware app': 'agentoo kernel firmware apply ',

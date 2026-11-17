@@ -71,10 +71,10 @@ checks reporting before selecting the Agentoo profile.
 
 Hyprland and Kitty load their native `/etc/xdg/{hypr,kitty}/hosts/<name>`
 fragments through that shared adapter. Dracut's early-i915 exception and the
-kernel-install EFI guidance also use it. `agentoo kernel prepare` validates the
-mounted root/ESP, activates `/etc/agentoo/kernel/hosts/<name>.config` through a
+kernel-install EFI guidance also use it. Target installation uses its validated
+storage layout to activate `/etc/agentoo/kernel/hosts/<name>.config` through a
 local native config.d symlink, and records local initramfs inputs in Portage's
-native per-package environment. It does not select another host or build an image.
+native per-package environment. It does not select another host or build a custom image.
 
 Shared kernel policy lives in `/etc/kernel/config.d/10-agentoo.config`; local
 config.d fragments provide overrides. Portage owns the custom gentoo-kernel build lifecycle.

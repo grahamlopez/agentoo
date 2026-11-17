@@ -1,15 +1,23 @@
 # Native package-specific bashrc; policy lives in kernel/config.d fragments.
 post_src_prepare() {
     local generated
+    local -a keymap=()
+    [[ -z ${AGENTOO_INITRAMFS_KEYMAP:-} ]] || keymap=(--keymap "${AGENTOO_INITRAMFS_KEYMAP}")
     generated=$(mktemp -d "${WORKDIR}/agentoo-initramfs.XXXXXX") || die
     /usr/libexec/agentoo-initramfs/build --work "${generated}/archive" \
-        --partuuid "${AGENTOO_INITRAMFS_PARTUUID:?run agentoo kernel prepare}" \
-        --mapper "${AGENTOO_INITRAMFS_MAPPER:?run agentoo kernel prepare}" \
-        --keymap "${AGENTOO_INITRAMFS_KEYMAP:?run agentoo kernel prepare}" || die
+        --partuuid "${AGENTOO_INITRAMFS_PARTUUID:?set this input in /etc/portage/env/kernel-local}" \
+        --mapper "${AGENTOO_INITRAMFS_MAPPER:?set this input in /etc/portage/env/kernel-local}" \
+        "${keymap[@]}" || die
     ./scripts/config --set-str INITRAMFS_SOURCE "${generated}/archive/initramfs.cpio" || die
 }
 
 post_src_configure() {
     python3 -B /usr/local/share/agentoo/lib/kernel_host.py \
-        "${WORKDIR}/build/.config" "${AGENTOO_INITRAMFS_TRANSPORT:?run agentoo kernel prepare}" "${ESYSROOT}" || die
+        "${WORKDIR}/build/.config" "${AGENTOO_INITRAMFS_TRANSPORT:?set this input in /etc/portage/env/kernel-local}" "${ESYSROOT}" || die
+}
+
+# Select this installed prepared tree once it exists; the binary package uses
+# its explicit release paths and leaves a valid custom-family selection intact.
+post_pkg_postinst() {
+    eselect kernel set "linux-${KV_FULL}" || die
 }

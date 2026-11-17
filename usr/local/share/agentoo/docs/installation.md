@@ -53,8 +53,13 @@ removed after repeated namespace-holder failures made its complexity excessive.
 Kernel policy is tracked in `/etc/portage/package.use/kernel`,
 `/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
 The binary fallback kernel remains independent; the custom gentoo-kernel build
-uses `agentoo kernel prepare` followed by native `emerge` commands
-([kernel guide](kernel.md)). `/etc/kernel/cmdline` contains local
+uses native `emerge` commands after installation-time local setup
+([kernel guide](kernel.md)). The installer activates a supported no-module host
+fragment, records its initramfs inputs, and applies shared tmpfiles rules for the
+custom installkernel link and sbctl hook mask. The custom package selects its
+prepared tree with native eselect after installation. Firmware updates require
+explicit binary fallback refresh and custom kernel recompilation.
+`/etc/kernel/cmdline` contains local
 boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
 data, not a permanently maintained running-kernel requirement.
 

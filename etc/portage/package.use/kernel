@@ -3,6 +3,8 @@
 sys-kernel/installkernel systemd dracut -efistub -grub -systemd-boot -refind -uki -ukify -ugrd
 sys-kernel/dracut systemd
 sys-kernel/gentoo-kernel-bin initramfs -generic-uki
-sys-firmware/intel-microcode -hostonly
+# Firmware updates install payloads only; explicitly refresh both boot artifacts.
+sys-kernel/linux-firmware -initramfs
+sys-firmware/intel-microcode -hostonly -initramfs
 # Custom gentoo-kernel build: embedded archive, signed EFI image, no external initramfs.
 sys-kernel/gentoo-kernel -savedconfig -initramfs -generic-uki secureboot modules-sign

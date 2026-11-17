@@ -20,7 +20,6 @@ Install the generator before preparing the custom gentoo-kernel build:
 
 ```sh
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
-agentoo kernel prepare
 sudo emerge --ask --usepkg=n @kernel-dev
 ```
 
@@ -44,16 +43,19 @@ sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 Even initramfs-only changes require recompilation because the archive is embedded.
 There is no persistent archive cache or separate Agentoo kernel workspace. Native
 Portage phases own temporary outputs; `emerge --config` cannot refresh embedding.
-See [kernel configuration and installation](kernel.md) for preparation, signing,
+See [kernel configuration and installation](kernel.md) for installation inputs, signing,
 manual EFI guidance, experiments and remaining host acceptance.
 
 ## Host inputs
 
-`agentoo kernel prepare` uses the selected native Agentoo Portage profile and
-validates the mounted root/ESP identities. It activates one tracked host Kconfig
-fragment and records explicit PARTUUID, mapper, keymap and transport in untracked
-`/etc/portage/env/kernel-local`. Review replacement before accepting. The native
-source-package environment supplies these inputs to the generation hook.
+Target installation uses the selected Agentoo Portage profile and validated
+storage layout to activate its tracked no-module host Kconfig fragment. It records
+explicit PARTUUID, mapper and transport in untracked
+`/etc/portage/env/kernel-local`; an optional `AGENTOO_INITRAMFS_KEYMAP` overrides
+the packaged default. The native source-package environment supplies these inputs
+to the generation hook. Review and directly edit local inputs after relevant
+storage/profile changes. The [kernel guide](kernel.md#setup-and-build) describes
+manual setup for Thinktop's one-off conversion.
 
 Generation does not query the selected profile or rediscover storage. Standalone
 and integrated generation use the same packaged implementation. No package USE

@@ -1,4 +1,4 @@
-"""Native kernel preparation, boot-critical validation and read-only EFI guidance."""
+"""Native kernel configuration, boot-critical validation and read-only EFI guidance."""
 from contextlib import redirect_stdout
 from importlib.machinery import SourceFileLoader
 import importlib.util
@@ -10,7 +10,6 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -39,10 +38,6 @@ class NativeKernelTests(unittest.TestCase):
         self.link.symlink_to(self.profile)
         for obj, name, value in ((host, 'HOSTS', self.profile.parent),
                                  (host, 'HOST_LINK', self.link),
-                                 (kernel, 'LOCAL_INPUTS', self.root / 'kernel-local'),
-                                 (kernel, 'INSTALL_CONF', self.root / 'custom/install.conf'),
-                                 (kernel, 'ESP_IDENTITY', self.root / 'esp.uuid'),
-                                 (kernel, 'SBCTL_HOOK', self.root / '91-sbctl.install'),
                                  (kernel, 'DIST_CMDLINE', self.root / 'cmdline')):
             change = patch.object(obj, name, value)
             change.start()
@@ -106,29 +101,6 @@ class NativeKernelTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'image not found'):
             self.efi()
 
-    def test_prepare_records_validated_local_inputs_and_only_activates_native_files(self):
-        identity = dict(partuuid=UUID, mapper='cryptroot', keymap='/keymap', transport='nvme')
-        writes = []
-        def run(cmd, **kwargs):
-            if cmd[0] == 'findmnt':
-                return 'ABCD-1234'
-            writes.append([str(x) for x in cmd])
-            if cmd[0] == 'install' and '-D' in cmd:
-                Path(cmd[-1]).write_text(Path(cmd[-2]).read_text())
-            return ''
-        with patch.object(host, 'resolve_identity', return_value=identity), \
-                patch.object(kernel, 'inspect_esp', return_value=(self.device, 'unused')), \
-                patch.object(kernel, 'run', side_effect=run):
-            kernel.prepare(SimpleNamespace(yes=True))
-        self.assertIn(f'AGENTOO_INITRAMFS_PARTUUID={UUID}', kernel.LOCAL_INPUTS.read_text())
-        self.assertIn('AGENTOO_INITRAMFS_TRANSPORT=nvme', kernel.LOCAL_INPUTS.read_text())
-        self.assertEqual(kernel.ESP_IDENTITY.read_text(), 'ABCD-1234\n')
-        self.assertTrue(any(cmd[:2] == ['ln', '-sfnT'] and cmd[-1] == str(self.link) for cmd in writes))
-        self.assertFalse(any(cmd[0] in ('emerge', 'efibootmgr', 'mount') for cmd in writes))
-        self.profile.write_text(self.profile.read_text() + 'CONFIG_MODULES=y\n')
-        with self.assertRaisesRegex(RuntimeError, 'module-enabled host'):
-            kernel.prepare(SimpleNamespace(yes=True))
-
     def config(self):
         archive = self.root / 'initramfs.cpio'
         archive.write_bytes(b'archive')
@@ -151,7 +123,7 @@ class NativeKernelTests(unittest.TestCase):
                 host.validate_config(path, 'nvme')
             path.write_text(text)
         self.link.unlink()
-        with self.assertRaisesRegex(RuntimeError, 'selected profile'):
+        with self.assertRaisesRegex(RuntimeError, 'selected host fragment'):
             host.validate_config(path, 'nvme')
         self.link.symlink_to(self.profile)
         (self.root / 'initramfs.cpio').unlink()
@@ -162,29 +134,8 @@ class NativeKernelTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'missing embedded firmware'):
             host.validate_config(path, 'nvme')
 
-    def test_storage_identity_rejects_wrong_layout_and_luks_version(self):
-        dm = self.root / 'sys/dm-0/dm'
-        dm.mkdir(parents=True)
-        (dm / 'name').write_text('cryptroot')
-        (dm / 'uuid').write_text('CRYPT-LUKS2-test')
-        mount = dict(source='/dev/mapper/cryptroot[/@]', fstype='btrfs', fsroot='/@')
-        root = dict(kname='dm-0', type='crypt', fstype='btrfs', uuid=UUID,
-                    children=[dict(type='part', fstype='crypto_LUKS', uuid=UUID, partuuid=UUID,
-                                   children=[dict(type='disk', tran='nvme')])])
-        def run(cmd, **kwargs):
-            return json.dumps({'filesystems': [mount]} if cmd[0] == 'findmnt' else {'blockdevices': [root]})
-        with patch.object(host, 'SYS_BLOCK', self.root / 'sys'):
-            self.assertEqual(host.resolve_identity(run)['mapper'], 'cryptroot')
-            mount['fsroot'] = '/other'
-            with self.assertRaisesRegex(RuntimeError, 'Btrfs @'):
-                host.resolve_identity(run)
-            mount['fsroot'] = '/@'
-            (dm / 'uuid').write_text('CRYPT-LUKS1-test')
-            with self.assertRaisesRegex(RuntimeError, 'LUKS2'):
-                host.resolve_identity(run)
-
     def test_removed_lifecycle_commands_are_not_aliases(self):
-        for name in ('config', 'build', 'install'):
+        for name in ('prepare', 'config', 'build', 'install'):
             result = subprocess.run([sys.executable, str(ENTRY), name], capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
             self.assertIn('invalid choice', result.stderr)

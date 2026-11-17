@@ -1874,6 +1874,36 @@ kernel_target_data() {
   printf '%s\n' "$value" >"$path"
 }
 
+# The binary fallback is available on every target. Initialize the custom path
+# only for a reviewed no-module host and a supported early-boot storage transport.
+configure_custom_kernel_inputs() {
+  local fragment=/etc/agentoo/kernel/hosts/$TARGET_HOST.config
+  local activation=/etc/kernel/config.d/20-host.config
+  local partuuid transport inputs
+  [[ -f $fragment ]] || return 0
+  if grep -qx 'CONFIG_MODULES=y' "$fragment"; then
+    log "Custom kernel setup deferred for module-enabled host $TARGET_HOST"
+    return 0
+  fi
+  transport=$(lsblk --nodeps --noheadings --output TRAN "$TARGET_DISK")
+  transport=${transport//[[:space:]]/}
+  case $transport in
+    nvme|sata) ;;
+    *) log "Custom kernel setup deferred for unsupported root transport: $transport"; return 0 ;;
+  esac
+  partuuid=$(blkid -s PARTUUID -o value "$CRYPT_PARTITION")
+  [[ $partuuid =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] \
+    || die 'could not identify the encrypted partition GPT PARTUUID'
+  printf -v inputs 'AGENTOO_INITRAMFS_PARTUUID=%q\nAGENTOO_INITRAMFS_MAPPER=%q\nAGENTOO_INITRAMFS_TRANSPORT=%q' \
+    "$partuuid" "$LUKS_NAME" "$transport"
+  if [[ -e $activation || -L $activation ]]; then
+    [[ -L $activation && $(readlink "$activation") == "$fragment" ]] \
+      || die "existing host kernel activation requires manual review: $activation"
+  fi
+  kernel_target_data /etc/portage/env/kernel-local "$inputs"
+  ln -sfnT "$fragment" "$activation"
+}
+
 # Check host-side offline firmware prerequisites before installing packages.
 # fuser returns 1 for both an unused file and some inspection failures. Keep its
 # diagnostics: missing files or failed authorization must not mean "safe to edit".
@@ -2128,11 +2158,13 @@ kernel_foundation_chroot() {
   cmdline="root=UUID=$root_uuid rootfstype=btrfs rootflags=subvol=$ROOT_SUBVOL rd.luks.uuid=luks-$luks_uuid rd.luks.name=$luks_uuid=$LUKS_NAME ro"
   [[ $TARGET_HOST != qemu ]] || cmdline+=' console=tty0 console=ttyS0,115200n8'
 
-  for policy in /etc/portage/package.use/kernel /etc/kernel/install.conf /etc/dracut.conf.d/agentoo-dist.conf /etc/kernel/install.d/04-agentoo-esp.install; do
+  for policy in /etc/portage/package.use/kernel /etc/kernel/install.conf /etc/dracut.conf.d/agentoo-dist.conf /etc/kernel/install.d/04-agentoo-esp.install /etc/tmpfiles.d/agentoo-kernel.conf; do
     [[ -f $policy && ! -L $policy ]] || die "missing tracked kernel policy: $policy"
   done
   kernel_target_data /etc/kernel/cmdline "$cmdline"
   kernel_target_data /etc/kernel/gentoo-dist-esp.uuid "$efi_uuid"
+  systemd-tmpfiles --create agentoo-kernel.conf
+  configure_custom_kernel_inputs
   [[ $TARGET_MICROCODE != intel ]] || packages+=(sys-firmware/intel-microcode)
   # Include @profile here to install deferred NVIDIA drivers after boot setup.
   # Keep the binary provider in every transaction to prevent an OR dependency
@@ -2178,7 +2210,7 @@ kernel_foundation_chroot() {
     print_physical_kernel_boot_commands "$version" "$cmdline" "$efi_uuid"
   fi
   printf 'After kernel updates, register the new version; retain a tested previous entry.\n'
-  printf 'Custom EFI images use their own build/copy workflow, without make install.\n'
+  printf 'Custom gentoo-kernel builds use native emerge and select their prepared tree with eselect kernel after installation.\n'
   agentoo git --no-pager diff --stat
 }
 
@@ -2220,6 +2252,11 @@ initrd_generator=dracut
 uki_generator=none
 BOOT_ROOT=/boot
 
+Shared tmpfiles rules establish the custom installkernel configuration link and
+mask sbctl's incompatible BLS/UKI hook. The installer records local custom-kernel
+inputs and activates a reviewed no-module host fragment on supported storage.
+The binary fallback is installed first; custom compilation remains a later step.
+
 The layout copies an EFI kernel and separate initramfs onto the mounted ESP;
 it does not require USE=efistub (which would add firmware-registration hooks).
 An ESP guard stops distribution updates if the expected FAT partition is not
@@ -2244,7 +2281,9 @@ Keep kernel-bin explicitly selected in the firmware transaction so its virtual
 dependency cannot choose a source-built provider. The last command regenerates
 the selected installed kernel's initramfs after external modules are built.
 dist-kernel provides ongoing package integration,
-including NVIDIA selected by Bequiet's @profile. The @profile transaction also
+including NVIDIA selected by Bequiet's @profile. Firmware/microcode updates install
+payloads only; explicitly refresh the binary fallback with emerge --config and
+rebuild a custom gentoo-kernel build to replace embedded inputs. The @profile transaction also
 installs hardware packages deferred from the initial world update.
 
 Read the target's host package set
@@ -2307,10 +2346,12 @@ sudo efibootmgr --create-only --disk /dev/nvme0n1 --part 1 \
 sudo efibootmgr --verbose
 sudo efibootmgr --bootnext 0007 # Only if the new entry was Boot0007.
 
-The future optimized kernel is independently built and copied to a distinct
-EFI path and explicit versioned source tree: distribution updates may change
-/usr/src/linux. Do not invoke make install for that path, which would run these
-hooks.
+The custom gentoo-kernel build is independently built and installed to a distinct
+EFI path and versioned prepared tree. Its native post-install hook selects
+that tree with eselect kernel; binary fallback updates preserve that selection.
+Use native emerge for both kernels. Firmware/microcode updates require explicit
+fallback archive refresh and custom recompilation; do not use an all-kernels
+refresh operation for this mixed setup.
 
 Register QEMU firmware offline (target qemu only)
 ------------------------------------------------
