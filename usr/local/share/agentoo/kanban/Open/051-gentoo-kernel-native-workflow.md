@@ -338,12 +338,15 @@ before/after the hook, repeated execution, and no loadable module files. A
 disposable copy of the actual installed v0.5 metadata also passes the new hook
 without warnings and reports i2c-dev as built in.
 No service-condition workaround is needed. Removing Agentoo's duplicate ddcutil
-module-load request is independent cleanup. Hook deployment and one-time live
-index repair remain pending. The installed kernel needs no rebuild for repair:
-touch /lib/modules/6.18.62-agentoo-v0.5/modules.order, then run
-depmod --all 6.18.62-agentoo-v0.5 as root and verify modinfo -k
-6.18.62-agentoo-v0.5 i2c-dev reports filename (builtin). There is no failed system
-unit. Other logged driver/service diagnostics have not yet been
+module-load request is independent cleanup. The operator first repaired the live
+indexes with depmod and normalized metadata permissions to 0644; modinfo then
+recognized i2c-dev as built in. The operator subsequently deployed the hook,
+rebuilt the same version and rebooted. Inspection of the 2026-11-17 11:24 boot
+confirms 6.18.62-agentoo-v0.5 with Secure Boot enabled, the deployed hook matching
+the checkout, and rebuilt order/index files with mode 0644. The boot journal
+reports "Module 'i2c_dev' is built in" and successful completion of module loading;
+the missing-module error is resolved. Ordinary-user modinfo also succeeds.
+Other logged driver/service diagnostics have not yet been
 attributed to this conversion; do not treat them as newly introduced without
 comparison evidence.
 
@@ -376,9 +379,11 @@ successful build/install and operator boot acceptance.
   generation, early microcode and physical recovery. After applying the firmware
   USE changes, verify real package updates perform no boot-image maintenance;
   explicitly refresh both kernels. Keep working entries until acceptance.
-- [ ] Exercise a same-version rebuild and subsequent kernel version update;
-  review new Kconfig choices, release paths and native prepared-tree discovery.
-  Rebuild after installed initramfs/library/firmware input changes.
+- [x] Exercise a same-version rebuild and reboot with the deployed indexing hook;
+  confirm readable package-installed indexes and successful built-in recognition.
+- [ ] Track subsequent kernel version update acceptance separately: review new
+  Kconfig choices, release paths and native prepared-tree discovery. Rebuild
+  after installed initramfs/library/firmware input changes.
 - [ ] Inspect binary-package signing-key handling before using/distributing locally
   produced binary packages. Package-image checks alone do not audit that format.
 - [ ] Accept detached incremental configuration/build testing if desired; no
