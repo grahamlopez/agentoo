@@ -52,22 +52,19 @@ for scope, local exclusions, bare work trees, and output contracts.
 
 ## Kernel builds
 
-`agentoo kernel config|build|install --label LABEL` rebuilds a configured custom
-EFI kernel from updated sources. See [kernel rebuilding](kernel.md)
-for persistent workspaces, RAM compilation, minimal and custom initramfs inputs, module installation
-and optional firmware registration. The default build invokes the installed
-`sys-kernel/agentoo-initramfs` generator; see [initramfs development](initramfs.md)
-for standalone generation and testing. The embedded command line defaults to
-`ro console=tty0 loglevel=5`; use `config --cmdline TEXT` for console policy or
-arguments needed by a custom archive.
+`agentoo kernel prepare` validates the destination host's root/ESP and activates
+its native kernel fragment and local initramfs inputs. Portage's `gentoo-kernel`
+package owns builds, signing and installation. See [native kernel workflow](kernel.md)
+for commands, configuration layering and experiments, and [initramfs development](initramfs.md)
+for the packaged embedded archive.
 
 `agentoo kernel gen-efi-cmd --image FILE [--args TEXT] [--label TEXT]` prints a
-shell-quoted EFI registration command for an installed image on a mounted ESP.
-It uses the selected host profile and needs no build workspace. Standard Gentoo
-distribution image names automatically include local `/etc/kernel/cmdline` and
-the matching initramfs path; `--args` supplies extra arguments. Running the
-printed command creates a new boot entry and places it first; see
-[EFI command generation](kernel.md#generate-an-efi-registration-command).
+shell-quoted `efibootmgr --create-only` command after validating a mounted FAT GPT
+ESP. It leaves firmware unchanged; executing the command creates an entry without
+changing BootOrder or BootNext. Binary fallback names also require the local
+`/etc/kernel/cmdline` and matching external initramfs. Custom Agentoo source images
+use their embedded boot policy. The installkernel guidance hook calls this same
+implementation.
 
 ## Implementation conventions
 
@@ -197,9 +194,6 @@ are reported as skipped when the Lua interpreter is unavailable.
 
 ## Kernel target selection
 
-`agentoo kernel config --target-host NAME` explicitly chooses a reviewed Kconfig
-fragment for that configuration operation. Without it, the command uses the
-selected `agentoo:hosts/NAME` Portage profile, reported by native eselect. The
-option does not change the persistent profile or enable cross-building. Firmware
-commands and `gen-efi-cmd` use the selected profile. Install uses the host
-recorded in its workspace. See [kernel builds](kernel.md).
+Kernel preparation, validation, firmware status and EFI guidance use the selected
+native Agentoo Portage profile. There is no second host selector or per-workspace
+host snapshot. See [kernel builds](kernel.md).

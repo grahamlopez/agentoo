@@ -5,4 +5,4 @@ VIDEO_CARDS="-* nvidia"
 
 # Native Portage module signing; only the public certificate enters the kernel.
 MODULES_SIGN_KEY="/var/lib/sbctl/keys/db/db.key"
-MODULES_SIGN_CERT="/etc/kernel/certs/db.pem"
+MODULES_SIGN_CERT="/var/lib/sbctl/keys/db/db.pem"

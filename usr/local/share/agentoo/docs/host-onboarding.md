@@ -31,10 +31,10 @@ configuration support only; installation and hardware acceptance are separate.
   and justified host exceptions. Derive firmware names from this hardware, not
   another host's profile. The selected Portage profile supplies the default host;
   no CLI host list needs updating.
-- [ ] **`usr/local/share/agentoo/docs/kernel-shared-v04-config`** — review the
+- [ ] **`etc/kernel/config.d/10-agentoo.config`** — review the
   shared baseline for missing required drivers/capabilities. Edit only if the
   shared union needs additions; preserve other hosts' requirements. Keep local
-  UUIDs, firmware selection and workspace paths out of shared-policy changes.
+  UUIDs, firmware selection and temporary build paths out of shared-policy changes.
 - [ ] **`usr/local/share/agentoo/tests/test_kernel.py`** — add focused coverage
   if onboarding introduces new profile handling, module or boot-input behavior.
   A new data-only host fragment does not require duplicating generic loader tests.

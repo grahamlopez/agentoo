@@ -515,8 +515,7 @@ All previous keyword exceptions were reviewed. The four retained original common
 exceptions are repository-scoped Agentoo secret/AI packages with testing keywords.
 Independently added scoped keyd/group exceptions are preserved; neither package
 is selected by `@gui-base`. Removed exceptions
-cover gentoo-sources (stable versions exist; the maintained kernel policy uses
-gentoo-kernel-bin), obsolete broad Hyprland/glaze acceptance, unselected hyprpaper,
+cover obsolete broad Hyprland/glaze acceptance, unselected hyprpaper,
 GUI utilities/toolkit, unscoped legacy keyd acceptance, cliphist, and stable
 Wayland libraries/scanner.
 Removing acceptance does not uninstall packages. Inspect any existing testing

@@ -6,7 +6,7 @@ Host firmware has three owners, each selected by the native Agentoo Portage prof
 | --- | --- | --- |
 | Extra firmware packages, such as SOF | profile `packages` | Portage `@profile` and world updates |
 | Installed linux-firmware trimming | `/etc/agentoo/firmware/<name>.list` plus native profile `package.use` | `agentoo kernel firmware apply`, then Portage |
-| Firmware embedded in a custom kernel | `CONFIG_EXTRA_FIRMWARE` in `/etc/agentoo/kernel/hosts/<name>.config` | `agentoo kernel config` ([kernel guide](kernel.md#host-specialization)) |
+| Firmware embedded in a custom kernel | `CONFIG_EXTRA_FIRMWARE` in `/etc/agentoo/kernel/hosts/<name>.config` | `agentoo kernel prepare` and native source rebuild ([kernel guide](kernel.md#host-specialization)) |
 
 CPU microcode follows the installer's `--microcode` choice. The rest of this guide
 covers installed linux-firmware trimming.
@@ -185,24 +185,21 @@ Wi-Fi/Bluetooth firmware initialization and onboard 2.5 Gb/s Ethernet confirmed.
 The fallback embeds no extra firmware. The operator confirms cold-start,
 functional peripheral and suspend/resume acceptance on both kernels.
 
-For the existing workflow, give this firmware transaction an explicit native
-kernel context. Gentoo's hook expects an image in its source directory; the
-prepared distribution tree has that image. Run the firmware operation under sudo
-so its emerge subprocesses inherit these variables without another sudo environment
-reset. Empty `KBUILD_OUTPUT` prevents an inherited custom output from taking
-precedence. After applying the repository policy to the live host, run:
+For Bequiet's installed accepted images, the firmware transaction can use the
+native prepared binary tree as KERNEL_DIR. Its source/module-enabled conversion
+remains deferred; the [native kernel workflow](kernel.md) currently requires
+CONFIG_MODULES=n. Do not infer Bequiet update acceptance from Thinktop trials.
 
 ```sh
-sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin KBUILD_OUTPUT= \
+sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin \
   agentoo kernel firmware apply --dry-run
-sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin KBUILD_OUTPUT= \
+sudo env KERNEL_DIR=/usr/src/linux-6.18.62-gentoo-dist-bin \
   agentoo kernel firmware apply
 ```
 
-Use the installed distribution version when it changes. This leaves the normal
-`eselect kernel` selection unchanged. The proposed
-[package-based replacement](../kanban/Open/051-gentoo-kernel-native-workflow.md)
-is deferred until Bequiet onboarding is complete; it does not gate trimming.
+Use the installed binary version when it changes. Source kernel firmware inputs
+must be rebuilt into the embedded image after their installed payloads change;
+`emerge --config` cannot update embedded firmware.
 
 This selection retains every linux-firmware-owned payload embedded in the working
 custom kernel; that kernel does not need rebuilding. Verify fallback initramfs

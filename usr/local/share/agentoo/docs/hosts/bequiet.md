@@ -1,6 +1,6 @@
 # Bequiet hardware baseline
 
-The [saved inventory](bequiet-inventory-20261024.tar.gz) was collected on
+The local saved inventory `bequiet-inventory-20261024.tar.gz` was collected on
 2026-10-24 as `kernel-inventory-bequiet-20261024T140803Z.tar.gz`, running
 `7.2.6-gentoo-dist`. It reports a Gigabyte X570 AORUS MASTER (BIOS F39),
 AMD Ryzen 9 3950X (Zen 2, 16 cores / 32 logical CPUs), and two NVIDIA GPUs:
@@ -84,28 +84,20 @@ Custom-kernel onboarding completed on 2026-11-16 with:
   with read/write encrypted Btrfs root, password login, Ethernet, DNS and HTTPS,
   and no failed systemd units. Desktop graphics and NVIDIA compute are outside
   the recovery requirement. Its boot arguments are documented in the
-  [kernel guide](../kernel.md#secure-boot).
+  [kernel guide](../kernel.md#binary-fallback).
 - Windows: direct firmware boot with Secure Boot enabled and normal unlock
   confirmed by the operator.
 
-### Signing configuration
+### Native conversion status
 
-The [host fragment](../../../../../../etc/agentoo/kernel/hosts/bequiet.config),
-deployed as `/etc/agentoo/kernel/hosts/bequiet.config`, sets
-`CONFIG_SYSTEM_TRUSTED_KEYS="/etc/kernel/certs/db.pem"`. This embeds the public
-certificate so the kernel trusts NVIDIA modules signed with its private key.
+The accepted boot/hardware results above describe the installed images. The
+maintained source workflow is now native `gentoo-kernel` with an embedded custom
+archive, initially accepted in disposable no-module Thinktop trials. Bequiet's
+module-enabled/NVIDIA conversion is deferred; its host fragment deliberately
+requires modules, so current native no-module validation rejects it.
 
-- `CONFIG_MODULE_SIG_KEY=""`: kernel compilation uses no private signing key.
-- `CONFIG_MODULE_SIG_ALL=n`: kernel compilation does not automatically sign
-  in-tree modules.
-- `CONFIG_MODULE_SIG_FORCE=n`: enforcement is not unconditional. The accepted
-  entry supplies `module.sig_enforce=1`; Secure Boot also activates enforcement
-  through the existing IMA policy.
-
-The resolved configuration is `kernel/<release>/.config` inside the workspace
-described in the [kernel guide](../kernel.md#configure). NVIDIA signing uses native
-Portage settings in Bequiet's [make.defaults](../../portage/profiles/hosts/bequiet/make.defaults)
-and [package.use](../../portage/profiles/hosts/bequiet/package.use). The shared
-kernel baseline is unchanged. Initial keys, public certificate setup and firmware
-enrollment are covered by the [kernel](../kernel.md#bequiet-signed-candidate) and
-[Secure Boot](../secure-boot.md) guides.
+Native NVIDIA package policy references sbctl's original db key and certificate.
+There is no manually published certificate copy or retained custom workspace
+procedure. Do not infer Bequiet acceptance from Thinktop trials. Preserve its
+installed boot entries until the module/signing/update requirements are separately
+validated. See the [kernel guide](../kernel.md) and [Secure Boot guide](../secure-boot.md).

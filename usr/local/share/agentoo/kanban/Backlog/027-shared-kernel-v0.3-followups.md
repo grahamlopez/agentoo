@@ -85,45 +85,14 @@ Record per-host results there.
   before cutting its 31 forced codec helpers. Neither source patch nor alternate
   selector is currently approved; retain support meanwhile.
 
-## Existing work and build maintenance
+## Build maintenance
 
-The kernel rebuild workflow (completed card 015)
-closed on 2026-10-27 after Thinktop operator build/install/boot acceptance. Its
-first increment supplies `agentoo kernel config|build|install`; it does not claim
-to implement shared-configuration capture or complete fleet validation.
-
-Retain these deferred workflow items for later scoping:
-
-- Host specialization is now implemented for thinktop/flattop: native tracked
-  Kconfig fragments, local `/etc/kernel/cmdline` cross-checks and recorded storage
-  identity for the minimal initramfs. Missing profiles fail explicitly; Bequiet still needs a reviewed profile.
-  Startop completed v0.4 and installed-firmware acceptance on both 6.18.60
-  boot paths on 2026-11-05. Installed-firmware apply uses the native savedconfig
-  workflow; see the maintained firmware guide for current host coverage. See the
-  [kernel guide](../../docs/kernel.md#host-specialization) for behavior and limits.
-
-- Shared configuration generation and selective menuconfig capture into Git,
-  preserving the union of required host drivers/capabilities. Keep host boot
-  identifiers, firmware/microcode and build paths separate from shared choices;
-  include dependent changes and verify regenerated results before claiming capture.
-- Real source-version migration at the next applicable update, reviewing new,
-  removed and dependency-changed options. Source adoption remains explicit;
-  repository updates must not silently rebuild or replace boot artifacts.
-- Live module-enabled and custom-initramfs validation when those paths are used;
-  external NVIDIA integration remains with the bequiet host card. Secure Boot
-  signing remains separately deferred, not a condition for the completed CLI.
-
-This does not revive the retired general kernel-reduction project. Link
-[initramfs keyboard policy](../Open/020-initramfs-keyboard-policy.md) and
-firmware maintenance (completed card 018) when relevant.
-
-For each remaining host build use its own boot/firmware/microcode inputs and
-fresh initramfs, and verify synchronized release metadata before image naming
-or external module builds. The accepted CLI builds locally for the target machine
-with native flags; use portable flags explicitly if producing an image for a
-different CPU. Review newly enabled defaults/dependencies during version bumps.
-Thinktop has completed its fresh-initramfs build/boot and release verification;
-the exact compiler flags used for that build were not independently established.
+The [native kernel workflow](../../docs/kernel.md) owns current builds and
+configuration. Preserve the shared driver union and host-specific firmware,
+review Kconfig changes during version bumps and validate required hardware/workloads
+on each host. Module-enabled Bequiet/NVIDIA acceptance remains separately scoped.
+The source workflow conversion and outstanding physical acceptance are tracked in
+[card 051](../Open/051-gentoo-kernel-native-workflow.md).
 
 ## Evidence and completion
 

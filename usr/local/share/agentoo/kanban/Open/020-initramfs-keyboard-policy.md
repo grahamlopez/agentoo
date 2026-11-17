@@ -14,4 +14,4 @@ Verify microphone keycode 248 and that keyd/Hyprland receive MICMUTE. Restore th
 rule if this fails; remove it permanently only after successful verification.
 The development sandbox cannot perform physical keyboard or reboot validation.
 Record results before closing this card and
-[card 049](049-post-genkernel-kernel-simplifications.md).
+[card 051](051-gentoo-kernel-native-workflow.md).

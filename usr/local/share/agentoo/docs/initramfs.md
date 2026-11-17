@@ -16,50 +16,49 @@ drivers remain built in; NVIDIA can load after the real-root handoff.
 
 ## Package and boot-image lifecycle
 
-Install the custom-kernel prerequisites:
+Install the generator before configuring/building the native source kernel:
 
 ```sh
-sudo emerge --ask @kernel-dev
+sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
+agentoo kernel prepare
+sudo emerge --ask --usepkg=n @kernel-dev
 ```
 
-The set includes `sys-kernel/agentoo-initramfs`; the package can also be emerged
-individually. Portage fetches/verifies BusyBox sources and compiles the private
-binary using its selected compiler and flags. The build requires static glibc
-libraries. It does not install the normal `sys-apps/busybox` package or put
-BusyBox applet links into the running system.
+Portage fetches/verifies BusyBox sources and compiles the private binary using
+its selected compiler and flags. The build requires static glibc libraries. It
+does not install normal BusyBox applet links into the running system.
 
-The installed generator assembles a host-specific archive from that BusyBox,
-installed cryptsetup and its linked libraries, boot scripts and explicit storage
-and keymap inputs. Assembly needs no compiler, source archive, network or root
-privileges. Emerging the package does not generate an archive, rebuild a kernel,
-write the ESP or change firmware entries.
+The source kernel's package-specific `post_src_prepare` hook invokes the installed
+generator, assembling a fresh archive inside WORKDIR and selecting that archive
+with native `scripts/config` before configuration/compilation. Assembly needs no
+compiler, source archive, network or root privileges. The initramfs package alone
+does not generate an archive, rebuild a kernel, write the ESP or change firmware.
 
-For an existing configured kernel workspace:
+After changing the implementation or installed cryptsetup/libraries, install the
+new inputs first, then force a source kernel rebuild:
 
 ```sh
-agentoo kernel build --label LABEL
-agentoo kernel install --label LABEL
+sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 ```
 
-See [kernel configuration and installation](kernel.md) to prepare a new workspace
-and review installation behavior. Kernel build preflights the generator, creates
-a fresh archive and embeds it before its single kernel make pass. Reuse the
-workspace for incremental builds. Even an initramfs-only change needs a kernel
-build/install for boot testing because the archive is embedded; unchanged kernel
-objects can be reused.
+Even initramfs-only changes require recompilation because the archive is embedded.
+There is no persistent archive cache or separate Agentoo kernel workspace. Native
+Portage phases own temporary outputs; `emerge --config` cannot refresh embedding.
+See [kernel configuration and installation](kernel.md) for preparation, signing,
+manual EFI guidance, experiments and remaining host acceptance.
 
 ## Host inputs
 
-The selected native Agentoo Portage profile supplies the default host for
-`agentoo kernel config`. That command records the host Kconfig policy and
-storage identity discovered from the mounted root. Its `--target-host` override
-selects kernel policy for that operation; it does not change Portage's profile
-or compilation settings. See [host selection](../../../../../etc/agentoo/README.md#host-selection).
+`agentoo kernel prepare` uses the selected native Agentoo Portage profile and
+validates the mounted root/ESP identities. It activates one tracked host Kconfig
+fragment and records explicit PARTUUID, mapper, keymap and transport in untracked
+`/etc/portage/env/kernel-local`. Review replacement before accepting. The native
+source-package environment supplies these inputs to the generation hook.
 
-Kernel build passes the recorded PARTUUID, mapper and keymap to the generator.
-Generation does not query the selected profile or detect the host again. Both
-standalone and integrated generation use the same implementation. No package
-USE flag selects a host, and tracked package sources contain no host disk UUIDs.
+Generation does not query the selected profile or rediscover storage. Standalone
+and integrated generation use the same packaged implementation. No package USE
+flag selects a host; tracked sources contain no host disk UUIDs. See
+[host selection](../../../../../etc/agentoo/README.md#host-selection).
 
 ## Standalone generation
 
@@ -85,7 +84,9 @@ keymap, required tools and cryptsetup's linked libraries without creating the
 workspace. Preflight does not establish boot acceptance.
 
 The package declares runtime dependencies for Python, cpio, loadkeys, strip,
-cryptsetup and ldd. The shared US/Caps-to-Control keymap is supplied by Agentoo's
+cryptsetup and pax-utils' lddtree. Dependency inspection reads ELF metadata
+without importing Portage's preload libraries into the archive.
+The shared US/Caps-to-Control keymap is supplied by Agentoo's
 configuration repository. The archive contains stripped copies of installed
 cryptsetup libraries; rebuild the archive and embedded kernel after relevant
 cryptsetup/library security updates. Updating installed libraries alone does not
@@ -103,7 +104,7 @@ To stage the package without merging it, run from the repository root on a
 Gentoo development host:
 
 ```sh
-initramfs_ebuild="$PWD/usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/agentoo-initramfs-1.ebuild"
+initramfs_ebuild="$PWD/usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/agentoo-initramfs-1-r1.ebuild"
 initramfs_dev=/var/tmp/agentoo-initramfs-dev
 sudo install -d -m 0755 "$initramfs_dev"
 sudo env PORTAGE_TMPDIR="$initramfs_dev" \
@@ -139,17 +140,15 @@ python3 usr/local/share/agentoo/tests/run_tests.py
 ```
 
 Then run the disposable storage test described below. It checks the generated
-archive independently of a kernel build. To embed that exact archive for a boot
-test, use the kernel build's `--initramfs /absolute/path/initramfs.cpio` option,
-then install through the normal kernel workflow.
+archive independently of a kernel build. For boot testing, install the revised generator and rebuild the native kernel;
+the preparation hook generates/selects the archive in that build's WORKDIR.
 
 Before validating the packaged default path, reinstall the package from source
 so changed local files are used even if a binary package is available:
 
 ```sh
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
-agentoo kernel build --label LABEL
-agentoo kernel install --label LABEL
+sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 ```
 
 Increment the ebuild revision when shipped scripts or BusyBox configuration

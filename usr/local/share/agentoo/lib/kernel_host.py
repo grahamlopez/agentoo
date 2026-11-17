@@ -5,11 +5,13 @@ No configuration is sourced as shell code and no storage is changed.
 import json
 from pathlib import Path
 import re
+import sys
 import uuid
 
 from host_selection import HOST_NAME, read_host
 
 HOSTS = Path('/etc/agentoo/kernel/hosts')
+HOST_LINK = Path('/etc/kernel/config.d/20-host.config')
 KEYMAP = '/usr/share/keymaps/i386/qwerty/us-caps.map.gz'
 SYS_BLOCK = Path('/sys/class/block')
 MINIMAL_BUILTINS = (
@@ -28,9 +30,9 @@ def selected_host(host=None):
     return host
 
 
-def read_profile(host=None):
+def read_profile(host=None, *, root=Path('/')):
     host = selected_host(host)
-    path = HOSTS / f'{host}.config'
+    path = Path(root) / HOSTS.relative_to('/') / f'{host}.config'
     if not path.is_file():
         raise RuntimeError(f'{path}: no kernel profile for {host}; create a reviewed host profile first')
     text = path.read_text()
@@ -103,19 +105,14 @@ def check_minimal_config(values, identity):
     storage = {'nvme': ('BLK_DEV_NVME',), 'sata': ('SCSI', 'BLK_DEV_SD', 'ATA', 'SATA_AHCI')}
     transport = identity.get('transport')
     if transport not in storage:
-        raise RuntimeError(f'minimal initramfs does not support root transport {transport!r}; use --initramfs')
+        raise RuntimeError(f'minimal initramfs does not support root transport {transport!r}')
     missing = [f'CONFIG_{name}=y' for name in (*MINIMAL_BUILTINS, *storage[transport])
                if values.get('CONFIG_' + name) != 'y']
     if not any(values.get('CONFIG_' + name) == 'y' for name in ('FB_EFI', 'FB_VESA', 'DRM_SIMPLEDRM')):
         missing.append('one built-in EFI/VESA/simpledrm framebuffer')
     if missing:
         raise RuntimeError('minimal initramfs requires built-in boot support:\n  ' + '\n  '.join(missing) +
-                           '\nEnable these capabilities or use --initramfs; early module loading is not supported.')
-
-
-def expectations(values, identity):
-    return {**values, 'CONFIG_CMDLINE_BOOL': 'y', 'CONFIG_CMDLINE_OVERRIDE': 'n',
-            'CONFIG_CMDLINE': json.dumps(identity['cmdline'])}
+                           '\nEnable these capabilities; early module loading is not supported.')
 
 
 def check_expected(actual, expected):
@@ -123,3 +120,43 @@ def check_expected(actual, expected):
                    for key, value in expected.items() if actual.get(key, 'n') != value]
     if differences:
         raise RuntimeError('host settings changed or did not survive Kconfig resolution:\n  ' + '\n  '.join(differences))
+
+
+def validate_config(path, transport, root=Path('/')):
+    values = {}
+    for line in Path(path).read_text().splitlines():
+        match = re.fullmatch(r'(CONFIG_\w+)=(.*)', line)
+        disabled = re.fullmatch(r'# (CONFIG_\w+) is not set', line)
+        if match:
+            values[match[1]] = match[2]
+        elif disabled:
+            values[disabled[1]] = 'n'
+    if values.get('CONFIG_MODULES') != 'n':
+        raise RuntimeError('native custom-kernel acceptance currently requires CONFIG_MODULES=n; module hosts are deferred')
+    _, profile, _, expected = read_profile(root=root)
+    active = Path(root) / HOST_LINK.relative_to('/')
+    if not active.is_symlink() or active.resolve() != profile.resolve():
+        raise RuntimeError('active kernel fragment does not match the selected profile; run agentoo kernel prepare')
+    check_expected(values, expected)
+    check_minimal_config(values, {'transport': transport})
+    check_expected(values, {'CONFIG_EFI_STUB': 'y', 'CONFIG_BLK_DEV_INITRD': 'y',
+                           'CONFIG_IKCONFIG': 'y', 'CONFIG_IKCONFIG_PROC': 'y',
+                           'CONFIG_CMDLINE_BOOL': 'y', 'CONFIG_CMDLINE_OVERRIDE': 'n',
+                           'CONFIG_INITRAMFS_ROOT_UID': '0', 'CONFIG_INITRAMFS_ROOT_GID': '0'})
+    archive = Path(json.loads(values['CONFIG_INITRAMFS_SOURCE']))
+    if not archive.is_file():
+        raise RuntimeError(f'embedded initramfs is missing: {archive}')
+    firmware = Path(json.loads(values['CONFIG_EXTRA_FIRMWARE_DIR']))
+    missing = [name for name in json.loads(values['CONFIG_EXTRA_FIRMWARE']).split()
+               if not (firmware / name).is_file()]
+    if missing:
+        raise RuntimeError('missing embedded firmware: ' + ', '.join(missing))
+    return values
+
+
+if __name__ == '__main__':
+    try:
+        validate_config(sys.argv[1], sys.argv[2], sys.argv[3])
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        print(f'agentoo kernel: {error}', file=sys.stderr)
+        sys.exit(1)

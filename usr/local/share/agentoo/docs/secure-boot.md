@@ -11,19 +11,12 @@ vary. Start with both Linux boot paths working and Secure Boot disabled.
 
 ## Module-enabled hosts
 
-Prepare signed external modules and establish their kernel trust before enabling
-Secure Boot when the kernel requires them. Bequiet's current custom and fallback
-configs enable `CONFIG_IMA_ARCH_POLICY=y` and `CONFIG_MODULE_SIG=y`; the native
-IMA EFI policy enables module-signature enforcement under Secure Boot even with
-`CONFIG_MODULE_SIG_FORCE` disabled.
-
-Use Gentoo's native `modules-sign` policy and signing inputs for NVIDIA, and
-verify trust in each kernel that needs those modules. Firmware enrollment of an
-EFI signing certificate does not by itself establish module-signing trust.
-Bequiet's custom kernel embeds its module-signing certificate; its packaged
-fallback is accepted as console/network recovery without NVIDIA. See the
-[kernel guide](kernel.md#bequiet-signed-candidate) for its native signing inputs
-and [host acceptance](hosts/bequiet.md#kernel-and-secure-boot-acceptance).
+The maintained source workflow currently requires built-in drivers and no modules.
+Bequiet/NVIDIA conversion is deferred. The installed Bequiet images have their
+own recorded [host acceptance](hosts/bequiet.md#kernel-and-secure-boot-acceptance);
+those results do not accept the new module-enabled source workflow. Firmware EFI
+trust and kernel module-signing trust are separate requirements. See the
+[kernel guide](kernel.md) for current supported scope.
 
 ## 1. Prepare Windows if present
 
@@ -113,8 +106,7 @@ agentoo kernel gen-efi-cmd --image "$custom_signed" --label 'Agentoo signed'
 ```
 
 Expected: `Signature verification OK`, followed by an EFI registration command.
-Run the printed command, replacing `--create` with `--create-only` to retain
-BootOrder. Select the new entry from the firmware boot menu and test root unlock
+Run the printed create-only command; it retains BootOrder. Select the new entry from the firmware boot menu and test root unlock
 and normal startup while Secure Boot is still disabled. Keep the original entry.
 If the signed path already exists, inspect it rather than overwriting it blindly.
 
@@ -306,12 +298,12 @@ the image signature and enrolled trust before retrying. Do not clear the TPM.
 
 ## Later updates
 
-`agentoo kernel install --label LABEL` signs automatically and fails if it
-cannot sign/verify, using the standard sbctl file key and certificate prepared
-above. The workspace's unsigned build image stays unchanged. `--unsigned`
-explicitly bypasses signing; such images normally cannot boot with Secure Boot
-enabled. See [kernel installation](kernel.md#install) for replacement and backup
-behavior. Existing workspaces can be installed without rebuilding just to sign.
+Native `sys-kernel/gentoo-kernel[secureboot]` signs the package image using the
+original sbctl db key/certificate configured in its package environment. Install
+the revised initramfs generator first and use the [native kernel workflow](kernel.md)
+for host preparation, source rebuilds and EFI guidance. A missing configured key
+fails setup; key creation/enrollment remain explicit operations. Inspect the
+installed signature and firmware trust after each new release.
 
 Portage/installkernel/dracut continue maintaining the fallback. Verify each new
 fallback against its packaged certificate; if its fingerprint changes, enroll

@@ -1,88 +1,43 @@
 #!/usr/bin/env python3
-"""Configure, rebuild and install a local custom EFI kernel."""
-import argparse
-import gzip
-import hashlib
+"""Prepare native kernel inputs, inspect firmware and print EFI guidance."""
 import json
 import os
 from pathlib import Path
-import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
-import time
+import tempfile
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'share/agentoo/lib'))
 from cli import ArgumentParser
 import kernel_host
 import kernel_firmware
-import kernel_modules
 
-WORKSPACES = Path('/dev/shm')
-RETAINED_WORKSPACES = Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local/state') / 'agentoo/kernel'
-MODULES_ROOT = Path('/lib/modules')
 DIST_CMDLINE = Path('/etc/kernel/cmdline')
-METADATA = 'agentoo-kernel.json'
-DEFAULT_FLAGS = '-march=native -O2 -pipe'
-INITRAMFS_BUILDER = Path('/usr/libexec/agentoo-initramfs/build')
-SIGNING_DIRECTORY = Path('/var/lib/sbctl/keys/db')
-SIGNING_HELP = ('See /usr/local/share/agentoo/docs/secure-boot.md for signing setup, '
-                'or explicitly use install --unsigned to skip signing.')
+LOCAL_INPUTS = Path('/etc/portage/env/kernel-local')
+INSTALL_CONF = Path('/etc/kernel/custom/install.conf')
+ESP_IDENTITY = Path('/etc/kernel/gentoo-dist-esp.uuid')
+SBCTL_HOOK = Path('/etc/kernel/install.d/91-sbctl.install')
 
 
 def build_parser():
-    parser = ArgumentParser(prog='agentoo kernel', description=__doc__, epilog=
-        'Build locally for this machine. Default workspaces persist under '
-        '$XDG_STATE_HOME/agentoo/kernel (normally ~/.local/state/agentoo/kernel); '
-        'compilation uses /dev/shm and retains results before installation. '
-        'Run without sudo; individual system operations use sudo. '
-        'Exit 0: success; 1: operation failed/cancelled; 2: invalid arguments.')
+    parser = ArgumentParser(prog='agentoo kernel', description=__doc__)
     sub = parser.add_subparsers(dest='operation')
-    descriptions = {
-        'config': 'Carry a running or supplied config to new kernel sources',
-        'build': 'Build the kernel, stage modules and embed a fresh initramfs',
-        'install': 'Sign and install the EFI image and staged modules; optionally register firmware',
-    }
-    for name, description in descriptions.items():
-        child = sub.add_parser(name, help=description, description=description)
-        child.add_argument('--label', required=True, metavar='LABEL', help='build label, e.g. agentoo-v0.4')
-        child.add_argument('--build-dir', metavar='DIR', help=
-            'workspace (default: user state directory/<release>); explicit paths build in place' if name == 'config' else
-            'workspace (default: find this label in user state); explicit paths build in place').completion = 'directories'
-        child.add_argument('--yes', action='store_true', help='accept displayed plans; does not answer Kconfig or sudo prompts')
-        if name == 'config':
-            child.add_argument('--cmdline', default='ro console=tty0 loglevel=5', metavar='TEXT', help='embedded kernel command line (default: %(default)s); supply storage arguments for custom archives')
-            child.add_argument('--target-host', metavar='NAME', help='host profile (default: selected Agentoo Portage profile); builds still target this machine')
-            child.add_argument('--config', metavar='FILE', help='starting config (default: /proc/config.gz); plain or gzip').completion = 'files'
-            child.add_argument('--sources', default='/usr/src/linux', metavar='DIR', help='kernel sources (default: /usr/src/linux)').completion = 'directories'
-            child.add_argument('--accept-defaults', action=argparse.BooleanOptionalAction, default=False,
-                               help='accept new Kconfig defaults instead of asking (default: no)')
-        elif name == 'build':
-            child.add_argument('-j', '--jobs', type=int, default=len(os.sched_getaffinity(0)), metavar='N', help='parallel jobs (default: available CPUs)')
-            child.add_argument('--initramfs', metavar='FILE', help='embed this archive instead of building the minimal initramfs').completion = 'files'
-        else:
-            child.add_argument('--unsigned', action='store_true',
-                               help='skip default image signing and verification (normally cannot boot with Secure Boot enabled)')
-            child.add_argument('--dest', default='/boot/EFI/Gentoo', metavar='DIR', help='EFI destination (default: /boot/EFI/Gentoo)').completion = 'directories'
-            child.add_argument('--efi-add-entry', action=argparse.BooleanOptionalAction, default=False,
-                               help='register the image and put its entry first (default: no)')
-    firmware = sub.add_parser('firmware', help='Show host firmware status or apply its native savedconfig',
-                              description='With no subcommand, show host policy, Portage savedconfigs, installed firmware and running kernel firmware.')
+    prepare = sub.add_parser('prepare', help='Inspect this host and activate native kernel inputs')
+    prepare.add_argument('--yes', action='store_true', help='accept the displayed local-input replacement plan')
+    firmware = sub.add_parser('firmware', help='Show host firmware status or apply its native savedconfig')
     actions = firmware.add_subparsers(dest='firmware_operation')
-    apply = actions.add_parser('apply', help='Back up overriding savedconfigs, install the host list and rebuild from source',
-                               description='Apply the current host list to the installed linux-firmware version. Back up overriding native savedconfigs and rebuild from source; keep custom kernel images unchanged.')
-    apply.add_argument('--yes', action='store_true', help='accept the displayed plan; sudo authentication may still be required')
-    apply.add_argument('--dry-run', action='store_true', help='show the apply plan without confirmation, sudo or changes')
-    efi = sub.add_parser('gen-efi-cmd', help='Print an EFI registration command for an installed image',
-                         description='Inspect a mounted ESP and print a shell-quoted efibootmgr command; no firmware changes.',
-                         epilog='Running the printed command creates a new entry and places it first in BootOrder. '
-                                'Firmware arguments supplement the embedded kernel command line.')
-    efi.add_argument('--image', required=True, metavar='FILE', help='installed EFI kernel image on a mounted ESP').completion = 'files'
-    efi.add_argument('--args', default='', metavar='TEXT', help='extra firmware-passed kernel arguments; distribution images also use /etc/kernel/cmdline and their matching initramfs')
-    efi.add_argument('--label', metavar='TEXT', help='boot entry display label (default: image filename without its extension)')
+    apply = actions.add_parser('apply', help='Install the host list and rebuild the installed linux-firmware package')
+    apply.add_argument('--yes', action='store_true', help='accept the displayed plan')
+    apply.add_argument('--dry-run', action='store_true', help='show the plan without changes')
+    efi = sub.add_parser('gen-efi-cmd', help='Print an EFI registration command without changing firmware',
+                        description='Inspect a mounted ESP and print a create-only efibootmgr command.')
+    efi.add_argument('--image', required=True, metavar='FILE', help='installed EFI kernel image').completion = 'files'
+    efi.add_argument('--args', default='', metavar='TEXT', help='extra firmware arguments; binary fallback also uses its native cmdline/initramfs')
+    efi.add_argument('--label', metavar='TEXT', help='boot entry label (default: image filename without extension)')
     return parser
 
 
@@ -145,357 +100,6 @@ def require_tools(*names):
         raise RuntimeError('required tools not found: ' + ', '.join(missing))
 
 
-def digest(path):
-    with path.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
-
-
-def read_config(path):
-    return parse_config(path.read_text())
-
-
-def parse_config(text):
-    values = {}
-    for line in text.splitlines():
-        match = re.fullmatch(r'(CONFIG_\w+)=(.*)', line)
-        disabled = re.fullmatch(r'# (CONFIG_\w+) is not set', line)
-        if match:
-            values[match[1]] = match[2]
-        elif disabled:
-            values[disabled[1]] = 'n'
-    return values
-
-
-def paths(work, data):
-    return work / 'kernel' / data['release'], work / 'modules' / data['release']
-
-
-def staged_modules(work, data):
-    _, staging = paths(work, data)
-    return staging / 'lib/modules' / data['release']
-
-
-def module_manifest(directory):
-    for name in ('modules.builtin', 'modules.builtin.modinfo'):
-        if not (directory / name).is_file():
-            raise RuntimeError(f'{directory}: missing {name}; run build again')
-    manifest = {}
-    for path in sorted(directory.rglob('*')):
-        relative = str(path.relative_to(directory))
-        if path.is_symlink():
-            manifest[relative] = {'symlink': os.readlink(path)}
-        elif path.is_file():
-            manifest[relative] = {'sha256': digest(path), 'mode': path.stat().st_mode & 0o777}
-        elif not path.is_dir():
-            raise RuntimeError(f'unexpected staged module file type: {path}')
-    return manifest
-
-
-def save(work, data):
-    temporary = work / (METADATA + '.tmp')
-    temporary.write_text(json.dumps(data, indent=2) + '\n')
-    temporary.replace(work / METADATA)
-
-
-def make(work, data, *arguments, capture=False, root=False, umask=-1):
-    output, _ = paths(work, data)
-    # Explicitly neutralize inherited LOCALVERSION, output and cross-build overrides.
-    env = os.environ.copy()
-    for key in ('KCONFIG_CONFIG', 'KBUILD_OUTPUT', 'KBUILD_EXTMOD', 'CROSS_COMPILE', 'ARCH', 'MAKEFLAGS', 'MFLAGS', 'LOCALVERSION'):
-        env.pop(key, None)
-    env['KCFLAGS'] = data['kcflags']
-    command = ['make', '--no-print-directory', '-C', data['sources'], f'O={output}', 'LOCALVERSION=']
-    if root:
-        command += [f'KCFLAGS={data["kcflags"]}']
-    return run([*command, *arguments], capture=capture, root=root, env=env, umask=umask)
-
-
-def edit_config(work, data, *arguments):
-    output, _ = paths(work, data)
-    run([Path(data['sources']) / 'scripts/config', '--file', output / '.config', *arguments])
-
-
-def check_config(work, data):
-    output, _ = paths(work, data)
-    values = read_config(output / '.config')
-    for key in ('CONFIG_EFI_STUB', 'CONFIG_BLK_DEV_INITRD', 'CONFIG_IKCONFIG', 'CONFIG_IKCONFIG_PROC'):
-        if values.get(key) != 'y':
-            raise RuntimeError(f'{output}/.config requires {key}=y')
-    if values.get('CONFIG_LOCALVERSION') != json.dumps('-' + data['label']):
-        raise RuntimeError('CONFIG_LOCALVERSION does not match --label; prepare a new workspace')
-    if 'host_settings' in data:
-        kernel_host.check_expected(values, data['host_settings'])
-    release = make(work, data, '-s', 'kernelrelease', capture=True)
-    if release != data['release']:
-        raise RuntimeError(f'kernel release mismatch: expected {data["release"]}, got {release}')
-    return values
-
-
-def validate_inputs(work, data):
-    output, _ = paths(work, data)
-    values = read_config(output / '.config')
-    firmware = values.get('CONFIG_EXTRA_FIRMWARE', '""').strip('"').split()
-    directory = Path(values.get('CONFIG_EXTRA_FIRMWARE_DIR', '"/lib/firmware"').strip('"'))
-    if not directory.is_absolute():
-        directory = output / directory
-    missing = [str(directory / name) for name in firmware if not (directory / name).is_file()]
-    if missing:
-        raise RuntimeError('embedded firmware inputs missing; update CONFIG_EXTRA_FIRMWARE_DIR/files using current system inputs:\n  ' + '\n  '.join(missing))
-
-
-def load(work, label, completed=False):
-    data = json.loads((work / METADATA).read_text())
-    if not isinstance(data, dict) or any(not isinstance(data.get(key), str) for key in
-                                        ('label', 'release', 'sources', 'kcflags', 'source_makefile_sha256')):
-        raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
-    if data.get('label') != label or not data.get('configured'):
-        raise RuntimeError(f'{work}: not a configured workspace for label {label}')
-    if (not isinstance(data.get('host_settings'), dict) or not isinstance(data.get('identity'), dict)
-            or 'transport' not in data['identity']):
-        raise RuntimeError(f'{work}: invalid workspace metadata; run config in a fresh directory')
-    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', data.get('release', '')):
-        raise RuntimeError(f'{work}: invalid recorded kernel release')
-    sources = Path(data['sources'])
-    if not sources.is_absolute() or (not completed and digest(sources / 'Makefile') != data['source_makefile_sha256']):
-        raise RuntimeError(f'{work}: source Makefile changed or source path is invalid; prepare a new workspace')
-    output, _ = paths(work, data)
-    if not (output / '.config').is_file():
-        raise RuntimeError(f'{work}: kernel .config is missing')
-    if completed:
-        image = output / 'arch/x86/boot/bzImage'
-        if not data.get('built') or digest(image) != data.get('image_sha256') or digest(output / '.config') != data.get('config_sha256'):
-            raise RuntimeError(f'{work}: image/config changed or build incomplete; run build again')
-        if module_manifest(staged_modules(work, data)) != data.get('modules_manifest'):
-            raise RuntimeError(f'{work}: staged modules changed or were not recorded; run build again')
-    return data
-
-
-def select_workspace(args):
-    if args.build_dir:
-        work = Path(args.build_dir).expanduser().resolve()
-        return work, load(work, args.label, args.operation == 'install')
-    matches, failures = [], []
-    for work in sorted(RETAINED_WORKSPACES.iterdir()) if RETAINED_WORKSPACES.exists() else []:
-        if not work.is_dir() or not work.name.endswith('-' + args.label):
-            continue
-        try:
-            matches.append((work, load(work, args.label, args.operation == 'install')))
-        except (OSError, ValueError, KeyError, RuntimeError) as error:
-            failures.append(f'{work}: {error}')
-    if len(matches) != 1:
-        detail = '\n'.join([str(work) for work, _ in matches] + failures)
-        raise RuntimeError(f'expected one viable workspace for {args.label} under {RETAINED_WORKSPACES}; found {len(matches)}. '
-                           'Use --build-dir to select explicitly.' + ('\n' + detail if detail else ''))
-    for failure in failures:
-        notice('Ignoring invalid workspace: ' + failure)
-    return matches[0]
-
-
-def check_build_storage(work):
-    ancestor = work
-    while not ancestor.exists():
-        ancestor = ancestor.parent
-    flags = os.statvfs(ancestor).f_flag
-    if flags & (os.ST_NOEXEC | os.ST_RDONLY):
-        raise RuntimeError(f'{ancestor}: build storage must be writable and executable; choose another --build-dir')
-
-
-def configure(args):
-    require_tools('make', 'findmnt', 'lsblk')
-    sources = Path(args.sources).expanduser().resolve()
-    if not (sources / 'scripts/config').is_file():
-        raise RuntimeError(f'{sources}: not a kernel source tree (scripts/config missing)')
-    text = (sources / 'Makefile').read_text()
-    fields = dict(re.findall(r'^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION)[ \t]*=[ \t]*([^\n]*)$', text, re.M))
-    if not all(fields.get(key, '').isdigit() for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL')):
-        raise RuntimeError(f'cannot read kernel version from {sources}/Makefile')
-    extra = fields.get('EXTRAVERSION', '').strip()
-    base = '.'.join(fields[key] for key in ('VERSION', 'PATCHLEVEL', 'SUBLEVEL'))
-    # Preserve the native source version so Portage's linux-info derives the same release.
-    release = base + extra + '-' + args.label
-    if len(release) > 64:
-        raise ValueError('kernel release must be at most 64 characters; use a shorter label')
-    work = Path(args.build_dir).expanduser().resolve() if args.build_dir else RETAINED_WORKSPACES / release
-    if work.exists() and (not work.is_dir() or any(work.iterdir())):
-        raise RuntimeError(f'{work}: config requires an empty or absent build directory')
-    check_build_storage(work)
-    origin = Path(args.config).expanduser().resolve() if args.config else Path('/proc/config.gz')
-    raw = origin.read_bytes()
-    text = (gzip.decompress(raw) if raw.startswith(b'\x1f\x8b') else raw).decode()
-    if not re.search(r'^CONFIG_\w+=', text, re.M):
-        raise ValueError(f'{origin}: no kernel configuration settings found')
-    if not args.accept_defaults and not sys.stdin.isatty():
-        raise RuntimeError('oldconfig needs a terminal; use --accept-defaults to accept new defaults')
-    host, profile, profile_text, host_values = kernel_host.read_profile(args.target_host)
-    identity = kernel_host.resolve_identity(run)
-    identity['cmdline'] = args.cmdline
-    expected = kernel_host.expectations(host_values, identity)
-    notice(f'Host profile:     {host} ({profile})\nKernel command line: {identity["cmdline"]}\n'
-           f'Encrypted root:   PARTUUID={identity["partuuid"]} -> {identity["mapper"]}\n'
-           f'Initramfs policy: LUKS2 / Btrfs @; keymap={identity["keymap"]}; allow discards')
-    notice(f'Old config:       {origin}\nKernel sources:   {sources}\nBuild directory:  {work}\nKernel version:   {release}')
-    confirm('Proceed', args.yes)
-    work.mkdir(parents=True, exist_ok=True)
-    data = dict(label=args.label, release=release, sources=str(sources), kcflags=os.environ.get('KCFLAGS', DEFAULT_FLAGS))
-    data.update(host=host, identity=identity, host_settings=expected,
-                config_origin=str(origin), config_input_sha256=hashlib.sha256(raw).hexdigest(),
-                profile_origin=str(profile), profile_sha256=hashlib.sha256(profile_text.encode()).hexdigest())
-    output, _ = paths(work, data)
-    output.mkdir(parents=True)
-    (work / 'config.original').write_text(text)
-    (work / 'host.config').write_text(profile_text)
-    # Merge native fragment entries without leaving duplicate assignments for Kconfig.
-    inherited = []
-    for line in text.splitlines():
-        match = re.match(r'(?:# )?(CONFIG_\w+)(?:=| is not set)', line)
-        if not match or match[1] not in expected:
-            inherited.append(line)
-    (output / '.config').write_text('\n'.join(inherited) + '\n' +
-                                  '\n'.join(f'{key}={value}' for key, value in expected.items()) + '\n')
-    placeholder = work / 'empty-initramfs'
-    placeholder.mkdir()
-    edit_config(work, data, '--set-str', 'LOCALVERSION', '-' + args.label,
-                '--disable', 'LOCALVERSION_AUTO', '--enable', 'EFI_STUB', '--enable', 'BLK_DEV_INITRD',
-                '--enable', 'IKCONFIG', '--enable', 'IKCONFIG_PROC',
-                '--set-str', 'INITRAMFS_SOURCE', str(placeholder))
-    notice('New Kconfig options:')
-    make(work, data, 'listnewconfig')
-    make(work, data, 'olddefconfig' if args.accept_defaults else 'oldconfig')
-    values = check_config(work, data)
-    validate_inputs(work, data)
-    before, after = read_config(work / 'config.original'), values
-    notice('Changes from starting config:')
-    changes = []
-    for key in sorted(before.keys() | after.keys()):
-        if before.get(key) == after.get(key):
-            continue
-        old, new = before.get(key, '<absent>'), after.get(key, '<absent>')
-        if key in ('CONFIG_CMDLINE', 'CONFIG_EXTRA_FIRMWARE'):
-            changes.append(f'  {key}:\n    before: {old}\n    after:  {new}')
-        else:
-            changes.append(f'  {key}: {old} -> {new}')
-    notice('\n'.join(changes) if changes else '  none')
-    data.update(configured=True, source_makefile_sha256=digest(sources / 'Makefile'))
-    save(work, data)
-    notice(f'Configured: {release}')
-    if not args.yes and sys.stdin.isatty():
-        notice('Save copy of config? [y/N]')
-        if sys.stdin.readline().strip().lower() in ('y', 'yes'):
-            notice(f'Destination path (suggested filename: {release}_config):')
-            destination = Path(sys.stdin.readline().strip()).expanduser()
-            if destination.exists():
-                raise RuntimeError(f'{destination} already exists; copy the config manually to replace it')
-            shutil.copyfile(output / '.config', destination)
-            notice(f'Saved {destination}')
-    print(work)
-
-
-def build(args):
-    require_tools('make', 'cp')
-    work, data = select_workspace(args)
-    data['kcflags'] = os.environ.get('KCFLAGS', data['kcflags'])
-    output, staging = paths(work, data)
-    custom = Path(args.initramfs).expanduser().resolve() if args.initramfs else None
-    if custom and not custom.is_file():
-        raise RuntimeError(f'initramfs not found: {custom}')
-    initramfs_work = work / 'initramfs' / data['release']
-    archive = initramfs_work / 'initramfs.cpio'
-    if custom and custom.is_relative_to(initramfs_work):
-        raise RuntimeError('custom initramfs must be outside the generated output path')
-    values = check_config(work, data)
-    if not custom:
-        kernel_host.check_minimal_config(values, data['identity'])
-    validate_inputs(work, data)
-    minimal_command = [INITRAMFS_BUILDER, '--work', initramfs_work, '--partuuid', data['identity']['partuuid'],
-                       '--mapper', data['identity']['mapper'], '--keymap', data['identity']['keymap']]
-    if not custom:
-        run([*minimal_command, '--check'])
-    check_build_storage(work)
-    if not args.build_dir:
-        check_build_storage(WORKSPACES)
-        if os.path.lexists(WORKSPACES / data['release']):
-            raise RuntimeError(f'RAM workspace already exists: {WORKSPACES / data["release"]}; '
-                               'inspect it before retrying, or use --build-dir to build in place')
-    notice(f'KCFLAGS:          {data["kcflags"]}\nKernel config:    {output}/.config\nKernel sources:   {data["sources"]}\nBuild directory:  {work}\nKernel version:   {data["release"]}')
-    notice(f'Host:             {data["host"]}\nKernel command line: {data["identity"]["cmdline"]}')
-    build_storage = work if args.build_dir else WORKSPACES
-    notice(f'Compile storage: {build_storage}\nAvailable space:  {shutil.disk_usage(build_storage).free // (1024 * 1024)} MiB\nInitramfs:        {custom or "fresh minimal image (recorded host LUKS2/Btrfs inputs)"}\nModules:          stage in workspace (also with CONFIG_MODULES=n)')
-    confirm('Proceed', args.yes)
-    data['built'] = False
-    save(work, data)
-    # Keep this small input at its authoritative path, including during RAM builds.
-    if initramfs_work.exists():
-        shutil.rmtree(initramfs_work)
-    if custom:
-        initramfs_work.mkdir(parents=True)
-        shutil.copyfile(custom, archive)
-    else:
-        run(minimal_command)
-    if not archive.is_file() or not archive.stat().st_size:
-        raise RuntimeError(f'initramfs was not produced: {archive}')
-    if args.build_dir:
-        compile_kernel(work, data, archive, args.jobs, minimal=not custom)
-    else:
-        # A stable path lets Kbuild reuse commands and objects on later RAM builds.
-        temporary = WORKSPACES / data['release']
-        temporary.mkdir()
-        notice(f'RAM workspace:   {temporary}')
-        try:
-            run(['cp', '-a', '--no-preserve=ownership', '--', str(work) + '/.', temporary])
-            compile_kernel(temporary, data, archive, args.jobs, minimal=not custom)
-            run(['cp', '-a', '--no-preserve=ownership', '--', str(temporary) + '/.', work])
-        except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
-            notice(f'RAM workspace retained for inspection: {temporary}')
-            raise
-        shutil.rmtree(temporary)
-        hashes = digest(output / '.config'), digest(output / 'arch/x86/boot/bzImage')
-        make(work, data, 'prepare')
-        if hashes != (digest(output / '.config'), digest(output / 'arch/x86/boot/bzImage')):
-            raise RuntimeError('retained preparation changed the completed config/image; run build again')
-    final = check_config(work, data)
-    # Remove stale modules when rebuilding with a different driver selection.
-    if staging.exists():
-        shutil.rmtree(staging)
-    make(work, data, 'modules_install', f'INSTALL_MOD_PATH={staging}', 'INSTALL_MOD_STRIP=1', umask=0o022)
-    if final.get('CONFIG_MODULES') != 'y':
-        # Kernel omits this list with no modules; depmod still needs it for indexing.
-        order = staged_modules(work, data) / 'modules.order'
-        order.write_bytes(b'')
-        order.chmod(0o644)
-    image = output / 'arch/x86/boot/bzImage'
-    if (output / 'include/config/kernel.release').read_text().strip() != data['release']:
-        raise RuntimeError('compiled kernel release differs from the planned release')
-    # Kernel copies generated metadata with its original (possibly private) mode.
-    # Normalize the deployable tree before recording its permission-aware manifest.
-    modules = staged_modules(work, data)
-    for path in [modules, *modules.rglob('*')]:
-        if not path.is_symlink():
-            path.chmod(0o755 if path.is_dir() else 0o644)
-    data.update(built=True, image_sha256=digest(image), config_sha256=digest(output / '.config'),
-                modules_manifest=module_manifest(staged_modules(work, data)))
-    save(work, data)
-    notice('Build complete. Boot and functional validation remain operator steps.')
-    print(image)
-
-
-def compile_kernel(work, data, archive, jobs, *, minimal):
-    output, _ = paths(work, data)
-    edit_config(work, data, '--set-str', 'INITRAMFS_SOURCE', str(archive))
-    make(work, data, 'olddefconfig')
-    final = check_config(work, data)
-    if minimal:
-        kernel_host.check_minimal_config(final, data['identity'])
-    if final.get('CONFIG_INITRAMFS_SOURCE') != json.dumps(str(archive)):
-        raise RuntimeError('resolved config does not embed the selected initramfs')
-    make(work, data, f'-j{jobs}')
-
-
-def efi_entries(report):
-    order = re.search(r'^BootOrder:[ \t]*([^\n]*)$', report, re.M)
-    entries = dict(re.findall(r'^Boot([0-9A-Fa-f]{4})\*?\s+(.*)$', report, re.M))
-    return (order[1].upper().split(',') if order and order[1].strip() else []), {key.upper(): value for key, value in entries.items()}
-
-
 def inspect_esp(destination):
     """Resolve an image's mounted ESP, partition identity and firmware loader path."""
     ancestor = destination
@@ -517,7 +121,7 @@ def inspect_esp(destination):
 
 
 def efi_create_command(device, loader, label, host):
-    command = ['efibootmgr', '--create', '--disk', device['pkname'], '--part', str(device['partn']),
+    command = ['efibootmgr', '--create-only', '--disk', device['pkname'], '--part', str(device['partn']),
                '--label', label, '--loader', loader]
     if host == 'startop':
         command.insert(2, '--full-dev-path')
@@ -545,133 +149,45 @@ def gen_efi_cmd(args):
                                  kernel_host.selected_host())
     if arguments:
         command.extend(['--unicode', '--', arguments])
-    notice('Running this command creates a new entry and places it first in BootOrder; existing entries remain.')
+    notice('Running this command creates an entry without changing BootOrder or BootNext.')
     notice('Firmware arguments supplement the embedded kernel command line; repeated parameters have parameter-specific behavior.')
     print(shlex.join(['sudo', *command]))
 
 
-def install(args):
-    require_tools('findmnt', 'lsblk', 'install', 'cp', 'mv', 'rm', 'mktemp', 'depmod', *(['efibootmgr'] if args.efi_add_entry else []))
-    if not args.unsigned:
-        try:
-            require_tools('sbsign', 'sbverify', 'chmod', 'test')
-        except RuntimeError as error:
-            raise RuntimeError(f'{error}. {SIGNING_HELP}') from error
-    work, data = select_workspace(args)
-    output, _ = paths(work, data)
-    package = kernel_modules.package() if read_config(output / '.config').get('CONFIG_MODULES') == 'y' else None
-    if package:
-        require_tools('make', 'emerge', 'modinfo')
-        if digest(Path(data['sources']) / 'Makefile') != data['source_makefile_sha256']:
-            raise RuntimeError('NVIDIA module sources changed; configure a fresh workspace')
-        check_config(work, data)
-        if digest(output / '.config') != data['config_sha256']:
-            raise RuntimeError('NVIDIA kernel configuration changed; run build again')
-    image = output / 'arch/x86/boot/bzImage'
-    modules = staged_modules(work, data)
-    modules_destination = MODULES_ROOT / data['release']
-    destination = Path(args.dest).expanduser().resolve() / f'kernel-{data["release"]}.efi'
-    notice(f'Build directory:  {work}\nKernel image:     {image}\nStaged modules:   {modules}\nInstall modules:  {modules_destination}\nDestination:      {destination}\nCreate EFI entry: {"yes" if args.efi_add_entry else "no"}')
-    key, certificate = SIGNING_DIRECTORY / 'db.key', SIGNING_DIRECTORY / 'db.pem'
-    notice('Image signing:   unsigned (explicit --unsigned)' if args.unsigned else
-           f'Image signing:   required\nCertificate:     {certificate}')
-    if package:
-        notice(f'NVIDIA modules:  rebuild {package["cpv"]} for {data["release"]} before image activation')
-    mount_boot = destination.is_relative_to('/boot') and not Path('/boot').is_mount()
-    if mount_boot:
-        notice('Mount /boot using its existing mount configuration.')
-    confirm('Proceed', args.yes)
-    if not args.unsigned:
-        for path in (key, certificate):
-            try:
-                run(['test', '-r', path], root=True, capture=True)
-            except RuntimeError as error:
-                raise RuntimeError(f'cannot read signing input {path}: {error}. {SIGNING_HELP}') from error
-    if mount_boot:
-        run(['mount', '/boot'], root=True)
-    device, loader = inspect_esp(destination)
-    stamp = time.time_ns()
-    backup = destination.with_name(destination.name + f'.{stamp}.bak') if destination.exists() else None
-    modules_backup = modules_destination.with_name(modules_destination.name + f'.{stamp}.bak') if os.path.lexists(modules_destination) else None
-    if backup or modules_backup:
-        if backup:
-            notice(f'Overwrite: {destination}\nBackup:    {backup}')
-        if modules_backup:
-            notice(f'Replace:   {modules_destination}\nBackup:    {modules_backup}')
-        confirm('Back up the existing installation and replace it', args.yes, default=False)
-
-    # Build indexes in an exact copy, away from the installed release. Native
-    # depmod strips --basedir from its paths, so they remain valid after moving.
-    run(['install', '-d', '-m', '0755', '--', MODULES_ROOT], root=True)
-    staging_root = Path(run(['mktemp', '--directory', str(MODULES_ROOT / '.agentoo-XXXXXXXX')], capture=True, root=True))
-    staged_tree = staging_root / 'lib/modules' / data['release']
-    staging = destination.with_name('.' + destination.name + f'.{stamp}.tmp')
-    notice(f'Staging modules:  {staging_root}\nStaging image:    {staging}')
-    try:
-        run(['install', '-d', '-m', '0755', '--', staged_tree], root=True)
-        run(['cp', '-a', '--no-preserve=ownership', '--', str(modules) + '/.', staged_tree], root=True)
-        run(['depmod', '--basedir', staging_root, '-a', data['release']], root=True, umask=0o022)
-        run(['install', '-D', '-m', '0644', '--', image, staging], root=True)
-        if not args.unsigned:
-            # Sign only the disposable ESP copy; workspace hashes remain valid.
-            # Both native tools finish before either live artifact is replaced.
-            run(['sbsign', '--key', key, '--cert', certificate, '--output', staging, staging], root=True)
-            run(['sbverify', '--cert', certificate, staging], root=True)
-            run(['chmod', '0644', '--', staging], root=True)
-        if backup:
-            run(['cp', '--preserve=mode', '--', destination, backup], root=True)
-        # Keep the old pair for recovery. Only complete trees/images become live;
-        # renames stay on their respective filesystems, never merge directories.
-        if modules_backup:
-            run(['mv', '-T', '--', modules_destination, modules_backup], root=True)
-        run(['mv', '-T', '--', staged_tree, modules_destination], root=True)
-        if package:
-            try:
-                kernel_modules.rebuild(package, Path(data['sources']), output, data['release'], MODULES_ROOT, run)
-            except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
-                run(['mv', '-T', '--', modules_destination, staging_root / 'failed-modules'], root=True)
-                if modules_backup:
-                    run(['mv', '-T', '--', modules_backup, modules_destination], root=True)
-                raise
-        run(['mv', '-T', '--', staging, destination], root=True)
-    except (OSError, RuntimeError, KeyboardInterrupt, EOFError):
-        notice('Installation stopped; backups and any remaining staging files are retained. '
-               'Inspect the paths above before retrying.')
-        raise
-    run(['rm', '-rf', '--', staging_root], root=True)
-    # Use the configured host, not a selector that may have changed since config.
-    # Match the standalone installer's physical-registration workaround.
-    command = efi_create_command(device, loader,
-                                 f'{data["label"]}-{data["release"].removesuffix("-" + data["label"])}', data['host'])
-    if args.efi_add_entry:
-        before = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
-        order, entries = efi_entries(before)
-        identity = f'HD({device["partn"]},GPT,{device["partuuid"]},'.lower()
-        # efibootmgr versions print either /File(\EFI\...) or /\EFI\....
-        loader_pattern = re.compile(r'(?:File\(' + re.escape(loader) + r'\)|/' + re.escape(loader) + r'(?:\s|$))', re.I)
-        matching = [key for key in [*order, *entries] if key in entries
-                    and identity in entries[key].lower()
-                    and loader_pattern.search(entries[key])]
-        if matching:
-            entry = matching[0]
-            notice(f'Reusing Boot{entry}')
-        else:
-            # efibootmgr requests 0644; don't let an inherited 0077 umask turn a
-            # new efivarfs entry into a root-only file.
-            run(command, root=True, umask=0o022)
-            after = run(['efibootmgr', '-v', '-u'], capture=True, root=True)
-            _, updated = efi_entries(after)
-            added = updated.keys() - entries.keys()
-            if len(added) != 1:
-                raise RuntimeError('cannot identify the created EFI entry; inspect sudo efibootmgr -u (creation may already have changed BootOrder)')
-            entry = added.pop()
-        run(['efibootmgr', '--bootorder', ','.join([entry, *(item for item in order if item != entry)])], root=True)
-        print(run(['efibootmgr', '-u'], capture=True, root=True))
-    else:
-        notice('Register manually (creates the entry and places it first in BootOrder):')
-        print(shlex.join(['sudo', *command]))
-    notice(f'Installed {destination}')
-    print(destination)
+def prepare(args):
+    require_tools('findmnt', 'lsblk', 'install', 'ln')
+    host, profile, _, values = kernel_host.read_profile()
+    if values.get('CONFIG_MODULES') == 'y':
+        raise RuntimeError('module-enabled host conversion is deferred; this workflow supports built-in drivers only')
+    identity = kernel_host.resolve_identity(run)
+    # Resolve the actual mounted ESP and require GPT identity before recording it.
+    device, _ = inspect_esp(Path('/boot/EFI/Gentoo'))
+    esp_uuid = run(['findmnt', '-n', '-o', 'UUID', '--mountpoint', '/boot'], capture=True)
+    if not esp_uuid:
+        raise RuntimeError('mount the target ESP at /boot before preparing kernel inputs')
+    inputs = {'AGENTOO_INITRAMFS_PARTUUID': identity['partuuid'],
+               'AGENTOO_INITRAMFS_MAPPER': identity['mapper'],
+               'AGENTOO_INITRAMFS_KEYMAP': identity['keymap'],
+               'AGENTOO_INITRAMFS_TRANSPORT': identity['transport']}
+    if identity['transport'] not in ('nvme', 'sata'):
+        raise RuntimeError('the embedded initramfs supports NVMe or AHCI SATA root only')
+    text = ''.join(f'{name}={shlex.quote(value)}\n' for name, value in inputs.items())
+    notice(f'Host: {host}; root mapping: {identity["mapper"]}; ESP: {device["path"]} ({esp_uuid})')
+    notice(f'Replace {LOCAL_INPUTS}:\n{text.rstrip()}')
+    notice(f'Activate {kernel_host.HOST_LINK} -> {profile}; {INSTALL_CONF} -> ../install.conf')
+    notice(f'Mask {SBCTL_HOOK}: native source signing and packaged fallback signatures own EFI trust.')
+    notice(f'Record target ESP UUID in {ESP_IDENTITY}; local config.d overrides are preserved.')
+    confirm('Apply these native kernel inputs?', args.yes)
+    with tempfile.TemporaryDirectory(prefix='agentoo-kernel-') as temporary:
+        for name, destination, contents in (('inputs', LOCAL_INPUTS, text),
+                                            ('esp', ESP_IDENTITY, esp_uuid + '\n')):
+            source = Path(temporary) / name
+            source.write_text(contents)
+            run(['install', '-D', '-m', '0644', source, destination], root=True)
+    for link, target in ((kernel_host.HOST_LINK, profile), (INSTALL_CONF, '../install.conf'), (SBCTL_HOOK, '/dev/null')):
+        run(['install', '-d', '-m', '0755', link.parent], root=True)
+        run(['ln', '-sfnT', target, link], root=True)
+    notice('Native inputs prepared. Build with emerge; no kernel or firmware entry was changed.')
 
 
 def main():
@@ -680,11 +196,6 @@ def main():
     if args.operation is None:
         parser.print_help()
         return 0
-    if args.operation in ('config', 'build', 'install') and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.label):
-        parser.error('--label must start with a letter/digit and contain only letters, digits, dots, underscores or hyphens')
-    if args.operation == 'build':
-        if args.jobs < 1:
-            parser.error('--jobs must be positive')
     try:
         if args.operation == 'firmware':
             state = kernel_firmware.inspect()
@@ -692,17 +203,16 @@ def main():
                 kernel_firmware.apply(args, state, run=run, confirm=confirm, notice=notice)
             else:
                 kernel_firmware.show_status(state)
-            return 0
-        if platform.machine() not in ('x86_64', 'amd64'):
-            raise RuntimeError('this workflow currently supports local x86_64 EFI kernels')
-        {'config': configure, 'build': build, 'install': install,
-         'gen-efi-cmd': gen_efi_cmd}[args.operation](args)
+        elif args.operation == 'prepare':
+            prepare(args)
+        else:
+            gen_efi_cmd(args)
         return 0
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         notice(f'agentoo kernel: {error}')
         return 1
     except (KeyboardInterrupt, EOFError):
-        notice('agentoo kernel: cancelled' + ('; workspace retained for inspection' if args.operation != 'firmware' else ''))
+        notice('agentoo kernel: cancelled')
         return 1
 
 

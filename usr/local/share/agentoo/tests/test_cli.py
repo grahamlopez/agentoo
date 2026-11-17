@@ -105,7 +105,7 @@ class CliTest(unittest.TestCase):
 
     def test_completion_usage_matches_actual_help(self):
         paths = [(), ('git',), ('repos',), ('term-colors',), ('theme',), ('kernel',),
-                 *(('kernel', action) for action in ('config', 'build', 'install', 'gen-efi-cmd', 'firmware')),
+                 *(('kernel', action) for action in ('prepare', 'gen-efi-cmd', 'firmware')),
                  ('kernel', 'firmware', 'apply'), ('permissions',), ('permissions', 'check'),
                  ('permissions', 'fix'), ('display', 'backlight'), ('display',), ('display', 'off'), ('screenshot',),
                  ('secrets',), ('secrets', 'install'), ('cloud-storage',), ('cloud-storage', 'pcloud'),
@@ -176,7 +176,7 @@ class CliTest(unittest.TestCase):
             (('display', 'backlight'), ('display', 'backlight'), 'required'),
             (('display', 'backlight', 'sideways'), ('display', 'backlight'), 'invalid choice'),
             (('display', 'backlight', 'up', '--unknown'), ('display', 'backlight'), 'unrecognized arguments'),
-            (('kernel', 'build', '--label'), ('kernel', 'build'), 'expected one argument'),
+            (('kernel', 'gen-efi-cmd', '--image'), ('kernel', 'gen-efi-cmd'), 'expected one argument'),
             (('display', 'external', 'brightness', '--bus', 'invalid'),
              ('display', 'external', 'brightness'), 'nonnegative decimal'),
             (('screenshot', 'region', '--no-input'), ('screenshot',), 'interactive selection'),
@@ -240,8 +240,8 @@ class CliTest(unittest.TestCase):
 
     def test_direct_and_grouped_commands_are_equivalent(self):
         for name, args in [('fonts', ('doctor', '--help')), ('fonts', ('set', '--no-input')),
-                           ('kernel', ('build', '--label', '--help')), ('kernel', ('build', '--lab', 'test')),
-                           ('kernel', ('build', '--label', 'test', '--jobs', '0')),
+                           ('kernel', ('prepare', '--help')), ('kernel', ('prepare', '--unknown')),
+                           ('kernel', ('gen-efi-cmd', '--image')),
                            ('permissions', ('check', '--help')), ('permissions', ('check', '--fix'))]:
             with self.subTest(name=name, args=args):
                 grouped = self.run_cli(name, *args)

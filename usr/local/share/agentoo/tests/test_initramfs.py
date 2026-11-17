@@ -34,14 +34,22 @@ class BuilderArgumentsTest(unittest.TestCase):
             busybox.chmod(0o755)
             tools = root / 'bin'
             tools.mkdir()
-            for name in ('cpio', 'loadkeys', 'strip', 'cryptsetup', 'ldd'):
+            for name in ('cpio', 'loadkeys', 'strip', 'cryptsetup', 'lddtree'):
                 tool = tools / name
-                # Only ldd and BusyBox should execute during preflight.
-                tool.write_text('#!/bin/sh\nexit ' + ('0' if name == 'ldd' else '99') + '\n')
+                # Only dependency inspection and BusyBox execute during preflight.
+                tool.write_text('#!/bin/sh\nexit ' + ('0' if name == 'lddtree' else '99') + '\n')
                 tool.chmod(0o755)
             result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PATH': str(tools)})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(work.exists())
+            dependency_tool = tools / 'lddtree'
+            dependency_tool.write_text('#!/bin/sh\nprintf "/installed/cryptsetup\\nlibmissing.so\\n"\n')
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    env={**os.environ, 'PATH': str(tools)})
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('unresolved cryptsetup library', result.stderr)
+            self.assertFalse(work.exists())
+            dependency_tool.write_text('#!/bin/sh\nexit 0\n')
             busybox.write_text('#!/bin/sh\necho sh\n')
             result = subprocess.run(command, capture_output=True, text=True,
                                     env={**os.environ, 'PATH': str(tools)})

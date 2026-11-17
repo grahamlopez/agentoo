@@ -36,9 +36,14 @@ __pycache__/
 /etc/fstab
 /etc/kernel/cmdline
 /etc/kernel/gentoo-dist-esp.uuid
-/etc/kernel/certs/
 /etc/portage/savedconfig/**/sys-kernel/linux-firmware
 /etc/portage/savedconfig/**/sys-kernel/linux-firmware-*
 
-# Persistent per-user kernel workspaces.
-.local/state/agentoo/kernel/
+
+# Native custom-kernel local activation and boot inputs.
+/etc/kernel/config.d/20-host.config
+/etc/kernel/config.d/80-local-boot.config
+/etc/kernel/config.d/90-local.config
+/etc/kernel/custom/install.conf
+/etc/portage/env/kernel-local
+/etc/kernel/install.d/91-sbctl.install

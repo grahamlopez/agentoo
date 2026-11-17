@@ -1,0 +1,5 @@
+# Native custom-kernel installation, independent of binary fallback generation.
+export KERNEL_INSTALL_CONF_ROOT="/etc/kernel/custom"
+export KERNEL_INSTALL_PLUGINS="/etc/kernel/install.d/04-agentoo-esp.install /usr/lib/kernel/install.d/05-check-config.install /usr/lib/kernel/install.d/85-check-diskspace.install /usr/lib/kernel/install.d/90-compat.install /etc/kernel/install.d/99-agentoo-boot-guidance.install"
+SECUREBOOT_SIGN_KEY="/var/lib/sbctl/keys/db/db.key"
+SECUREBOOT_SIGN_CERT="/var/lib/sbctl/keys/db/db.pem"

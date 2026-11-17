@@ -80,7 +80,7 @@ class ProfileTests(unittest.TestCase):
             with self.subTest(version=version):
                 self.assertTrue({'modules', 'modules-sign', 'tools', 'wayland', 'dist-kernel'} <= enabled)
                 self.assertEqual(settings['MODULES_SIGN_KEY'], '/var/lib/sbctl/keys/db/db.key')
-                self.assertEqual(settings['MODULES_SIGN_CERT'], '/etc/kernel/certs/db.pem')
+                self.assertEqual(settings['MODULES_SIGN_CERT'], '/var/lib/sbctl/keys/db/db.pem')
                 self.assertEqual('kernel-open' in enabled, version.startswith('580.'))
 
     def test_native_local_settings_override_profile_defaults(self):

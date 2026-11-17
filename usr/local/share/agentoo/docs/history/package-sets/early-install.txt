@@ -28,7 +28,6 @@ sys-boot/efibootmgr
 sys-fs/cryptsetup
 sys-fs/dosfstools
 sys-kernel/gentoo-kernel
-sys-kernel/gentoo-sources
 sys-kernel/linux-firmware
 sys-power/acpi
 sys-power/acpilight

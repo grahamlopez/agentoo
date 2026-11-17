@@ -23,6 +23,7 @@ DEPEND="
 "
 RDEPEND="${PYTHON_DEPS}
 	app-arch/cpio
+	app-misc/pax-utils
 	sys-apps/kbd
 	sys-devel/binutils
 	sys-fs/cryptsetup

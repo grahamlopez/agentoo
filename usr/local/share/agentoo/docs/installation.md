@@ -53,7 +53,8 @@ removed after repeated namespace-holder failures made its complexity excessive.
 Kernel policy is tracked in `/etc/portage/package.use/kernel`,
 `/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
 The stable binary distribution kernel remains the fallback; the custom
-image workflow uses `agentoo kernel config|build|install`. `/etc/kernel/cmdline` contains local
+source workflow uses `agentoo kernel prepare` followed by native `emerge` commands
+([kernel guide](kernel.md)). `/etc/kernel/cmdline` contains local
 boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
 data, not a permanently maintained running-kernel requirement.
 

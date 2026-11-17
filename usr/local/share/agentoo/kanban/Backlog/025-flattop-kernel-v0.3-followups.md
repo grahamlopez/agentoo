@@ -38,8 +38,8 @@ separate from that overall acceptance. See [shared follow-ups](027-shared-kernel
 ## Candidate build and validation
 
 - [x] Prepare tracked host specialization: `kernel/hosts/flattop.config` replaces
-  inherited thinktop embedded firmware/microcode; `agentoo kernel config` checks
-  local boot UUIDs and records the PARTUUID/mapping for the fresh initramfs.
+  inherited thinktop embedded firmware/microcode; `agentoo kernel prepare` checks
+  local boot UUIDs and records native local PARTUUID/mapping inputs for the fresh initramfs.
   The embedded list uses successful distribution-kernel firmware loads on
   2026-10-27 (6.18.57-gentoo-dist-bin): i915 ADLP DMC/GuC and TGL HuC, AX211
   so-a0-gf-a0 API 89/PNVM, Intel Bluetooth 0040-0041 and regulatory data.

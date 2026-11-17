@@ -71,18 +71,17 @@ checks reporting before selecting the Agentoo profile.
 
 Hyprland and Kitty load their native `/etc/xdg/{hypr,kitty}/hosts/<name>`
 fragments through that shared adapter. Dracut's early-i915 exception and the
-kernel-install EFI guidance also use it. Custom kernel commands select native
-Kconfig fragments under `/etc/agentoo/kernel/hosts/<name>.config` and reviewed
-firmware lists through the same profile. `agentoo kernel config --target-host NAME`
-is an explicit configuration-operation override; it does not change the selected
-Portage profile or turn the build into a cross-build. Generic and QEMU have
-Portage profiles but no reviewed custom-kernel fragments. Bequiet has a reviewed
-fragment and accepted signed NVIDIA build/install workflow. See its
-[host guide](../../usr/local/share/agentoo/docs/hosts/bequiet.md#kernel-and-secure-boot-acceptance).
+kernel-install EFI guidance also use it. `agentoo kernel prepare` validates the
+mounted root/ESP, activates `/etc/agentoo/kernel/hosts/<name>.config` through a
+local native config.d symlink, and records local initramfs inputs in Portage's
+native per-package environment. It does not select another host or build an image.
 
-Local `/etc/kernel/cmdline` and discovered storage identity supply boot
-identifiers; UUIDs are not tracked host policy. See the
-[kernel guide](../../usr/local/share/agentoo/docs/kernel.md#host-specialization).
+Shared kernel policy lives in `/etc/kernel/config.d/10-agentoo.config`; local
+config.d fragments provide overrides. Portage owns the source kernel lifecycle.
+The embedded-initramfs path is generated in each native build, not tracked policy.
+Binary fallback `/etc/kernel/cmdline` is separate. Module-enabled Bequiet/NVIDIA
+conversion is deferred; [native kernel guide](../../usr/local/share/agentoo/docs/kernel.md)
+describes current scope and acceptance.
 
 ## Related guides
 

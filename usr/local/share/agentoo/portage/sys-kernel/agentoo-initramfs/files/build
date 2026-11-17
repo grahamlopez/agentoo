@@ -29,14 +29,16 @@ if not a.busybox.is_file() or not os.access(a.busybox, os.X_OK):
             'or use --busybox with a staged binary')
 if not Path(a.keymap).is_file():
     p.error(f'console keymap missing: {a.keymap}')
-missing = [tool for tool in ('cpio', 'loadkeys', 'strip', 'cryptsetup', 'ldd')
+missing = [tool for tool in ('cpio', 'loadkeys', 'strip', 'cryptsetup', 'lddtree')
            if shutil.which(tool) is None]
 if missing:
     p.error('required tools not found: ' + ', '.join(missing))
 cryptsetup = Path(shutil.which('cryptsetup'))
-# Inspect only the trusted installed executable, never arbitrary source inputs.
-listing = subprocess.check_output(['ldd', str(cryptsetup)], text=True)
-if 'not found' in listing:
+# Read ELF dependencies without loading Portage's LD_PRELOAD sandbox library.
+# lddtree lists the executable first, followed by its interpreter and libraries.
+listing = subprocess.check_output(['lddtree', '-l', '-R', '/', str(cryptsetup)], text=True)
+libraries = {Path(name) for name in listing.splitlines()[1:]}
+if any(not library.is_absolute() or not library.is_file() for library in libraries):
     p.error('unresolved cryptsetup library')
 applets = subprocess.check_output([str(a.busybox.resolve()), '--list'], text=True).split()
 required = {'sh', 'mount', 'mkdir', 'sleep', 'switch_root', 'loadkmap', 'umount'}
@@ -54,10 +56,10 @@ shutil.copy2(a.busybox, root / 'bin/busybox')
 for applet in applets:
     (root / 'bin' / applet).symlink_to('busybox')
 shutil.copy2(cryptsetup, root / 'bin/cryptsetup')
-for library in sorted(set(re.findall(r'(/[^\s()]+)', listing))):
-    target = root / library.lstrip('/')
+for library in sorted(libraries):
+    target = root / library.relative_to('/')
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(Path(library).resolve(), target)
+    shutil.copy2(library.resolve(), target)
 shutil.copy2(HERE / 'init', root / 'init')
 shutil.copy2(HERE / 'udev-handoff', root / 'udev-handoff')
 (root / 'init').chmod(0o755)
