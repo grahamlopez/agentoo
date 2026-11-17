@@ -16,6 +16,12 @@ post_src_configure() {
         "${WORKDIR}/build/.config" "${AGENTOO_INITRAMFS_TRANSPORT:?set this input in /etc/portage/env/kernel-local}" "${ESYSROOT:-/}" || die
 }
 
+# No-module kernels still need kmod indexes so built-in drivers are recognized.
+post_src_install() {
+    touch "${ED}/lib/modules/${KV_FULL}/modules.order" || die
+    depmod --all --basedir "${ED}" "${KV_FULL}" || die
+}
+
 # Select this installed prepared tree once it exists; the binary package uses
 # its explicit release paths and leaves a valid custom-family selection intact.
 post_pkg_postinst() {

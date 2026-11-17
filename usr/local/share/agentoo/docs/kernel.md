@@ -7,8 +7,10 @@ EFI guidance. The custom gentoo-kernel build uses `sys-kernel/gentoo-kernel`; th
 binary fallback kernel uses `sys-kernel/gentoo-kernel-bin`.
 
 The custom gentoo-kernel build currently requires `CONFIG_MODULES=n`. Thinktop's
-disposable native builds and storage smoke test have passed; deployment, physical boot and
-normal-update acceptance remain open in [card 051](../kanban/Open/051-gentoo-kernel-native-workflow.md).
+`6.18.62-agentoo-v0.5` custom kernel was accepted by the operator on 2026-11-17
+following a successful Secure Boot startup and hardware checks. Binary fallback,
+maintenance validation and cleanup remain in
+[card 051](../kanban/Open/051-gentoo-kernel-native-workflow.md).
 Bequiet/NVIDIA and other module-enabled host acceptance are deferred. There is
 one supported build interface: native Portage commands.
 
@@ -116,6 +118,9 @@ version 6.18.62 produces release `6.18.62-agentoo-v0.5`. Binary fallback kernel 
 It generates no external initramfs and invokes neither dracut nor standalone
 microcode generation. The selected firmware/microcode is embedded in the kernel.
 Native results live under `/usr/src/linux-<release>` and `/lib/modules/<release>`.
+The source package's `post_src_install` hook generates kmod indexes with
+native depmod, including built-in driver indexes for CONFIG_MODULES=n. These
+files are package-owned; built-in drivers remain recognizable to userspace tools.
 After a custom package installation, its native Portage hook runs `eselect kernel
 set linux-<release>` so `/usr/src/linux` selects that installed prepared tree.
 Binary fallback installation uses its own release paths and preserves a valid

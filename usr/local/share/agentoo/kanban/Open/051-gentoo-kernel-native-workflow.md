@@ -2,7 +2,7 @@
 
 Created: 2026-11-13
 Updated: 2026-11-17
-Status: Open — implementation complete; Thinktop deployment and live acceptance pending
+Status: Open — Thinktop custom kernel accepted; fallback/update checks and cleanup remain
 
 ## Scope and implementation
 
@@ -301,6 +301,52 @@ binary-package and physical acceptance limits below open.
 
 ## Deployment and acceptance
 
+Thinktop boot evidence (2026-11-17): the operator rebooted and live inspection
+confirms `6.18.62-agentoo-v0.5`, Secure Boot enabled in user mode, and the custom
+prepared tree selected by `/usr/src/linux`. The host root is writable Btrfs `@`
+on cryptroot with async discard. No failed system units are reported. Microcode
+revision is `0x122`; graphics, wireless, Bluetooth and audio firmware initialization
+appear in the boot log. The operator explicitly accepts this custom kernel based
+on these checks and the requested keyboard/USB input, audio, Wi-Fi/Bluetooth,
+display/dock, suspend/resume and MICMUTE checks. Thinktop's custom gentoo-kernel
+build `6.18.62-agentoo-v0.5` is accepted. Binary fallback and future maintenance
+acceptance remain separate; individual passphrase-retry results were not recorded.
+
+Boot follow-up: modules-load requests `i2c-dev` from both tracked
+`/etc/modules-load.d/agentoo-display.conf` and packaged
+`/usr/lib/modules-load.d/ddcutil.conf`, logging a missing-module error despite
+CONFIG_I2C_CHARDEV=y and CONFIG_MODULES=n. Investigation confirms this is missing
+built-in module indexes: v0.4.1's retained boot explicitly reports i2c_dev built
+in, while v0.5 lacks modules.builtin.bin and modules.builtin.alias.bin. Both
+releases' text modules.builtin include i2c-dev. Native modules_install skips
+depmod with CONFIG_MODULES=n; systemd's 50-depmod.install also skips a tree without
+a kernel/ directory, so adding that plugin alone would not fix this case.
+
+A disposable copy of v0.5's text metadata reproduces failed modinfo lookup.
+Running native depmod there generates the missing indexes; modinfo then reports
+filename (builtin) and modprobe --show-depends reports builtin i2c_dev. Evidence
+is in /tmp/agentoo-builtin-index-nw5c8npu/results.json. Depmod emits a nonfatal
+missing-modules.order warning because the no-module install omits that file.
+Providing an empty modules.order in the disposable no-module tree removes the
+warning. Inspection of the removed workflow confirms it supplied this empty
+order file and ran depmod explicitly; this behavior was missed in the conversion.
+Implemented correction: the existing package-specific bashrc's post_src_install
+hook touches modules.order and runs native depmod against ED for KV_FULL. This
+supplies the empty order file for the no-module build and generates package-owned
+indexes before merge. All nine kernel tests pass, including real kmod lookup
+before/after the hook, repeated execution, and no loadable module files. A
+disposable copy of the actual installed v0.5 metadata also passes the new hook
+without warnings and reports i2c-dev as built in.
+No service-condition workaround is needed. Removing Agentoo's duplicate ddcutil
+module-load request is independent cleanup. Hook deployment and one-time live
+index repair remain pending. The installed kernel needs no rebuild for repair:
+touch /lib/modules/6.18.62-agentoo-v0.5/modules.order, then run
+depmod --all 6.18.62-agentoo-v0.5 as root and verify modinfo -k
+6.18.62-agentoo-v0.5 i2c-dev reports filename (builtin). There is no failed system
+unit. Other logged driver/service diagnostics have not yet been
+attributed to this conversion; do not treat them as newly introduced without
+comparison evidence.
+
 Live configure follow-up: Thinktop's privileged emerge reached final validation
 but failed because native `ESYSROOT` was empty for the live root. The hook passed
 that empty string to Python, which resolved host paths relative to the source
@@ -308,24 +354,24 @@ directory. Fixed the hook to pass `${ESYSROOT:-/}`. A regression test covers emp
 explicit `/` and alternate roots; all eight kernel tests pass. The corrected hook
 also validates the disposable configured build against the live host policy.
 The earlier alternate-root fixture did not cover this live-root convention.
-The live build's config is not readable by the unprivileged agent; deploying the
-fix and retrying privileged emerge remain pending. No physical acceptance follows
-from this failed configure attempt.
+The operator deployed the fix, completed privileged emerge and rebooted into the
+accepted custom kernel. The failed configure attempt is superseded by that
+successful build/install and operator boot acceptance.
 
-- [ ] Deploy the completed configuration and apply
+- [x] Deploy the completed configuration and apply
   `sudo systemd-tmpfiles --create agentoo-kernel.conf`. Establish Thinktop's
   untracked kernel-local inputs, host activation and ESP UUID manually as in
   the kernel guide. Install agentoo-initramfs revision 1-r1 before compilation.
-- [ ] Review native emerge plan for @kernel-dev, source USE/signing inputs and
-  coexistence with the installed binary fallback kernel. Perform privileged build/install
-  with the existing enrolled identity and verify the installed signature/config.
+- [x] Complete the privileged custom source build/install with the existing
+  enrolled identity and installed configuration; the candidate boots under
+  Secure Boot alongside the retained binary fallback.
 - [ ] Confirm custom installation invokes no dracut or standalone microcode
   generation, creates no external boot archive, checks the intended ESP and
   prints correct create-only guidance without changing firmware entries.
-- [ ] Create a separate candidate entry; cold boot under Secure Boot. Verify
-  passphrase retry/unlock, internal/USB input, Btrfs `@`, discards, microcode,
-  normal startup, graphics/audio/network, peripherals and suspend/resume. Check
-  Thinktop MICMUTE under the [keyboard-policy acceptance](020-initramfs-keyboard-policy.md).
+- [x] Accept the separate Thinktop candidate under Secure Boot. Live boot checks
+  and operator acceptance cover the custom kernel and requested hardware checks
+  above, including MICMUTE. Individual passphrase-retry results are not recorded;
+  this acceptance does not establish binary fallback or other-host acceptance.
 - [ ] Independently verify the binary fallback kernel's privileged dracut
   generation, early microcode and physical recovery. After applying the firmware
   USE changes, verify real package updates perform no boot-image maintenance;

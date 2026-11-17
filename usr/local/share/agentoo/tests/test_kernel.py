@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -157,6 +158,41 @@ WORKDIR="$2" AGENTOO_INITRAMFS_TRANSPORT=nvme ESYSROOT="$3" post_src_configure
                 self.assertEqual(result.stdout.splitlines(), [
                     '-B', '/usr/local/share/agentoo/lib/kernel_host.py',
                     str(self.root / 'build/.config'), 'nvme', expected])
+
+    @unittest.skipUnless(all(shutil.which(tool) for tool in ('depmod', 'modinfo', 'modprobe')),
+                         'native kmod tools are required')
+    def test_install_hook_indexes_builtins_without_loadable_modules(self):
+        release = '6.18.62-agentoo-test'
+        image = self.root / 'image'
+        modules = image / 'lib/modules' / release
+        modules.mkdir(parents=True)
+        (modules / 'modules.builtin').write_text('kernel/drivers/i2c/i2c-dev.ko\n')
+        (modules / 'modules.builtin.modinfo').write_bytes(b'i2c_dev.license=GPL\0')
+        lookup = ['modinfo', '--basedir', str(image), '--set-version', release, 'i2c-dev']
+        self.assertNotEqual(subprocess.run(lookup, capture_output=True).returncode, 0)
+        hook = SHARE.parents[3] / 'etc/portage/env/sys-kernel/gentoo-kernel'
+        script = '''
+source "$1"
+die() { exit 1; }
+ED="$2" KV_FULL="$3" post_src_install
+'''
+        for _ in range(2):
+            result = subprocess.run(['bash', '-c', script, 'install-hook',
+                                     str(hook), str(image), release],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, '')
+            self.assertEqual((modules / 'modules.order').read_bytes(), b'')
+            self.assertTrue((modules / 'modules.builtin.bin').is_file())
+            self.assertTrue((modules / 'modules.builtin.alias.bin').is_file())
+        result = subprocess.run(lookup, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('(builtin)', result.stdout)
+        result = subprocess.run(['modprobe', '--dirname', str(image), '--set-version', release,
+                                 '--show-depends', 'i2c-dev'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('builtin i2c_dev', result.stdout)
+        self.assertFalse(list(modules.rglob('*.ko')))
 
     def test_shared_esp_guard_checks_custom_and_binary_targets_before_copy(self):
         guard = SHARE.parents[3] / 'etc/kernel/install.d/04-agentoo-esp.install'
