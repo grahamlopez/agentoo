@@ -22,4 +22,4 @@ configuration, use the [target host configuration checklist](usr/local/share/age
 Find [further guides and configuration philosophy](usr/local/share/agentoo/docs/README.md)
 
 A [kanban development board](usr/local/share/agentoo/kanban/README.md) is
-haphazardly maintaned for capturing deferred and ongoing work.
+haphazardly maintained for capturing deferred and ongoing work.

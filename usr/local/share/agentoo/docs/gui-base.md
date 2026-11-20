@@ -463,10 +463,9 @@ Reload Hyprland after deployment. Other hosts use Print Screen,
 Shift+Print Screen or the standard region-capture symbol unless a demonstrated
 input quirk requires a host alias. Do not bind ordinary F10 universally.
 
-## Physical acceptance on thinktop
+## Physical acceptance
 
-Record hardware, kernel, graphics driver, audio firmware, package/overlay
-versions, commands, and outcomes in the open card. Complete all of the following:
+Verify the following on a real target host:
 
 1. Normal TTY login, parser check, launch, Kitty, window/workspace operations,
    volume keys, and no unexpected configuration errors.
@@ -492,8 +491,7 @@ versions, commands, and outcomes in the open card. Complete all of the following
    `journalctl --user -b`. Audio user services can persist for the TTY login;
    compositor/watchdog and closed graphical clients should not.
 
-Do not mark the card complete until these physical checks succeed. Repository
-syntax and pretend checks do not establish installability at build time or
+Repository syntax and pretend checks do not establish installability at build time or
 hardware correctness. The [archived package lists](history/package-sets/README.md) remain historical
 references pending review of their remaining requirements. They are not active
 Portage sets; do not install or depclean packages automatically from them.

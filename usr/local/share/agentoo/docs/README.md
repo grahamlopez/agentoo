@@ -11,7 +11,8 @@ System
 - [Host profiles and configuration policy](../../../../../etc/agentoo/README.md)
 - [Installation, first boot, and user setup](installation.md)
 - [Target host configuration checklist](host-onboarding.md)
-  with [Flattop](hosts/flattop.md) and [Bequiet](hosts/bequiet.md) hardware baselines
+  with [Flattop](hosts/flattop.md), [Startop](hosts/startop.md), and
+  [Bequiet](hosts/bequiet.md) hardware baselines
 - [Startop power after resume investigation](hosts/startop-power.md)
 - [System checkpoints and recovery](checkpoints.md)
 - [Git updates for the system repository](git.md)
@@ -38,11 +39,6 @@ User facing tools and configuration
 - [Theming and light/dark appearance](theming.md)
 - [Font diagnostics and selection](fonts.md)
 - [Repository status and terminal color tests](terminal-tools.md)
-
-Misc
-
-- [Installation runbook for QEMU VMs](../installer/QEMU-NBD-INSTALL.md)
-- [Agent skills for QEMU/NBD target operations and recovery](skills/qemu-nbd/SKILL.md)
 
 ## Configuration philosophy
 
@@ -71,13 +67,32 @@ When an application requires a file in `$HOME/.config`, prefer a small real
 entry file that includes system defaults and optional local overrides. If it
 cannot include system defaults, decide explicitly whether its real user
 configuration is tracked or local; do not duplicate defaults through a
-deployment step. Whether tracked user files share this repository or use a
-separate home work tree remains open. Secrets and generated runtime state stay
-outside Git.
+deployment step. User dotfiles stay outside this system repository—either as
+untracked local overrides or tracked in a separate `$HOME` bare work-tree
+repository (supported by `agentoo repos` and guarded by `/etc/agentoo/gitignore`).
+Live CLI-managed desktop preferences (such as `appearance.json` and `wallpaper`)
+live in untracked `$XDG_STATE_HOME/agentoo/` and are read directly by native
+Hyprland/Kitty integrations, keeping mutable user state separate from authored
+configuration without generating config copies. Secrets and generated runtime
+state stay outside Git.
 
 See [host selection and configuration policy](../../../../../etc/agentoo/README.md#host-selection)
 for native profile selection during installation and how shared and
 host-specific configuration is loaded.
+
+## Security and convenience boundaries
+
+Agentoo pairs hardened system foundations—LUKS2 full-disk encryption, custom
+Secure Boot keys, enforced module signatures on Bequiet, strict tracked
+permissions enforcement, key-only SSH login, and ephemeral `/run`-backed
+secrets provisioning—with explicit single-user conveniences:
+
+- `tty1` autologin into Hyprland (which leaves the tty1 recovery shell unlocked
+  if the compositor exits; see [screen locking](gui-base.md#screen-locking))
+- `ACCEPT_LICENSE="*"` in the common Portage profile
+- A root-owned `0600` GitHub token file for `agentoo git push`
+
+Treat these conveniences as intentional policy rather than accidental omissions.
 
 ## Checks and verification
 

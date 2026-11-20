@@ -8,7 +8,7 @@ Use `agentoo --help` for the unified CLI:
 - repos        Check system and home Git repositories
 - term-colors  Show visual terminal color tests
 - checkpoint   Create, list, inspect, restore, and remove system checkpoints
-- kernel       Build custom EFI kernels and manage host firmware
+- kernel       Manage host firmware and print EFI boot guidance
 - permissions  Check or repair managed ownership and permissions
 - secrets      Install secret files from Proton Pass
 - cloud-storage Start, stop, and inspect cloud storage clients
@@ -167,14 +167,17 @@ for temporary inspection effects and the exact recovery boundaries.
 
 ## Displays and screenshots
 
-Backlight controls are under `agentoo display backlight up|down [CONTROLLER]`.
+`agentoo display off` turns off all displays through DPMS without locking or
+suspending. Backlight controls are under
+`agentoo display backlight up|down [CONTROLLER]`.
 The Dell U5226KW is the only supported external monitor. Its controls are under
 `agentoo display external`: `list`,
 `capabilities`, `brightness [0..100|up|down]`, `volume [0..100|up|down]`,
-`mute [on|off]`, `input [VALUE]`, and explicit VCP `get`/`set`.
+`mute [on|off]`, `input [VALUE]` (alias `left`), and explicit VCP `get`/`set`.
 Mapped Dell U5226KW controls include `layout [MODE]`, `pip-position next`,
-`sub-input [thunderbolt|hdmi1]`, `audio-source [window1|window2]`,
-`speakers [on|off]`, and `usb [next|thunderbolt|hdmi1]`. Its volume control
+`sub-input [thunderbolt|hdmi1|hdmi2|dp1|dp2]` (alias `right`),
+`audio-source [window1|window2]`, `speakers [on|off]`, and
+`usb [next|thunderbolt|dp1|hdmi1]` (alias `kvm`). Its volume control
 decodes the mute flag and retains the speaker state.
 See [display control and setup](displays.md#external-monitor-controls-ddcci)
 for dependencies, selectors, and current Dell investigation limits.

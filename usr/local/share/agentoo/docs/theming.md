@@ -33,11 +33,11 @@ palette updates, native reloads, or an explicit restart/resume step.
 These are well-established themes that have light/dark variants and wide
 application support, so should be good candidates for built-in agentoo support.
 
-- Catpuccin (Mocha/Latte)
+- Catppuccin (Mocha/Latte)
 - Nord
 - Solarized
 - Tokyo Night
-- Grubbox
+- Gruvbox
 - Kanagawa
 
 ### Generated themes

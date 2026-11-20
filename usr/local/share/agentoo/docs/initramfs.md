@@ -190,7 +190,6 @@ attachment. The test does not open or modify the real encrypted partition.
 Full PID 1 handoff, physical keyboard behavior and graphics require boot testing.
 Retain a working EFI image. Check internal/USB keyboards, incorrect then correct
 passphrase, Btrfs `@`, active discards, normal systemd startup and firmware.
-On Thinktop, inspect MICMUTE behavior before retiring its real-root workaround.
 Record boot results against the tested host and image; packaging success and
 storage smoke tests alone do not establish boot acceptance.
 

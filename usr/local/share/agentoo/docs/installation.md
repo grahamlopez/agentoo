@@ -1,8 +1,7 @@
 # Installation, first boot, and user setup
 
 The installer is `usr/local/share/agentoo/installer/gentoo-install.sh`; its
-source and `--verbose` output describe each phase. For QEMU targets, follow the
-[QEMU/NBD runbook](../installer/QEMU-NBD-INSTALL.md).
+source and `--verbose` output describe each phase.
 
 ## Installer policy
 
@@ -14,9 +13,10 @@ only persistent host selector. Stage3's base system already supplies
 reporting before selecting the destination profile. Later phases reject a target
 that differs from the selected profile. See [host selection](../../../../../etc/agentoo/README.md#host-selection).
 
-Bequiet uses the binary fallback kernel and packaged NVIDIA open modules; see its
-[hardware baseline and acceptance checks](hosts/bequiet.md). Its custom-kernel
-onboarding is deferred.
+Bequiet installation configures the binary fallback kernel and packaged NVIDIA
+open modules; its custom native `gentoo-kernel` workflow is documented in the
+[kernel guide](kernel.md#bequiet-conversion) and its
+[hardware baseline and acceptance checks](hosts/bequiet.md).
 
 The initial world update excludes NVIDIA drivers to defer their kernel dependency
 until boot inputs exist. The kernel phase includes `@profile` alongside the
@@ -65,8 +65,10 @@ boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
 data, not a permanently maintained running-kernel requirement.
 
 Physical firmware registration remains manual. QEMU installation retains offline
-registration in its explicitly selected VM variable store. See the installation
-runbook for copy/paste registration after kernel updates. A small kernel-install
+registration in its explicitly selected VM variable store. Use
+`agentoo kernel gen-efi-cmd` (see the
+[kernel guide](kernel.md#generate-an-efi-registration-command)) for copy/paste
+registration after kernel updates. A small kernel-install
 hook prints the populated command on the booted target; it never runs firmware
 commands or changes BootOrder. Automatic registration during updates is deferred.
 

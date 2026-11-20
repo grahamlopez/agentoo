@@ -26,7 +26,7 @@ it should print `/usr/local/share/agentoo/portage`.
 
 ## Host profiles
 
-The overlay supplies `agentoo:hosts/{generic,qemu,flattop,startop,thinktop}`.
+The overlay supplies `agentoo:hosts/{generic,qemu,flattop,startop,thinktop,bequiet}`.
 Native `profiles.desc` exposes them to `eselect profile list` and
 `eselect profile set`. They inherit Gentoo's AMD64 23.0 desktop/systemd baseline,
 shared Agentoo defaults, and hardware parents where needed. `profile-set` in
@@ -307,13 +307,12 @@ SSH sessions, and hardware-key authentication were not exercised.
 
 ## User-managed AI clients
 
-`dev-util/codex-cli-deps`, `dev-util/claude-code-deps`, and
-`dev-util/antigravity-cli-deps` supply prerequisites for user-owned upstream
-installations, with testing keywords accepted in agentoo's common configuration.
-Select them explicitly; the former `early_install` package list is now
+`dev-util/codex-cli-deps`, `dev-util/claude-code-deps`,
+`dev-util/antigravity-cli-deps`, and `dev-util/pi-coding-agent-deps` supply
+prerequisites for user-owned upstream installations, with testing keywords
+accepted in agentoo's common configuration. Select them explicitly; the former
+`early_install` package list is now
 [historical reference](../docs/history/package-sets/early-install.txt).
-`dev-util/pi-coding-agent-deps` supplies the same model for Pi and can be selected
-separately (accept its testing keyword on your system first).
 
 ```sh
 emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps dev-util/antigravity-cli-deps
@@ -413,23 +412,6 @@ Runtime prerequisites were checked against both official Linux 0.1.13 archives
 and their publisher SHA-256 hashes: glibc 2.35, GCC runtime, XCB, xkbcommon with
 X11 support, fontconfig, FreeType, Wayland, and Vulkan. Future upstream updates
 can require newer dependencies; this recipe does not pin the user installation.
-
-### Migrate existing Portage installations
-
-Install the new dependency packages first, then remove the old binaries through
-Portage before running the user installers:
-
-```sh
-emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps
-emerge --ask --unmerge dev-util/codex-cli-bin dev-util/claude-code-bin
-```
-
-Unmerge only the old packages you actually installed. Their removal deletes the
-Portage-owned binaries and Claude's update-disabling wrapper, leaving user data
-intact. Removing ebuilds from the overlay does not uninstall existing packages.
-No automatic package move is declared: a rename would not create a user-owned
-installation. Remove any separately configured `DISABLE_UPDATES` or
-`DISABLE_AUTOUPDATER` setting if you want Claude updates enabled.
 
 ### Prerequisites and tradeoffs
 
@@ -744,6 +726,21 @@ these animations. `csakura` and `lavat` document options with `-h`.
 
 `app-misc/no-more-secrets` remains supplied by Gentoo; install it separately
 and accept its testing keyword if needed. This overlay does not duplicate it.
+
+`app-misc/ttfx` builds Omarchy's Rust port of TerminalTextEffects from its
+pinned release archive (`~amd64` and `~arm64`, accepted in common keywords).
+It is optional and not selected by a package set.
+
+## Prisma Access Browser
+
+`www-client/prisma-browser-bin` repackages Palo Alto Networks' official amd64
+Debian package for enterprise use. It is optional, with its `~amd64` testing
+keyword accepted in Agentoo's common configuration; no package set selects it.
+Portage owns upgrades, omits Debian/APT cron integration, and preserves user
+profiles on removal. Optional `USE=protection` installs the eBPF protection
+service without enabling it. See
+[README.gentoo](www-client/prisma-browser-bin/files/README.gentoo) for launch,
+sandboxing, kernel BPF requirements, and validation status.
 
 All ten overlay recipes passed Portage build and staged-install phases on
 amd64 with Python 3.14 on 2026-10-21. Dependency resolution succeeded for all

@@ -133,8 +133,8 @@ path.
 After each manual or lid-triggered suspend/resume, repeat `wpctl status`, the
 speaker test, and microphone record/replay. Verify that the intended devices
 return and controls still work. Also verify startup after a fresh normal login.
-Record the results in the open card; hearing a startup sound alone does not
-establish microphone or resume correctness.
+Hearing a startup sound alone does not establish microphone or resume
+correctness.
 
 For connection failures, inspect the user services and session checks above.
 For missing devices, inspect ALSA discovery and user-service logs:

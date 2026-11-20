@@ -20,7 +20,8 @@ agentoo help desktop wallpaper
 its absolute path, without copying the image. With no subcommand, `wallpaper`
 prints the remembered path, or nothing when none is selected. The system-owned
 collection lives at `/usr/local/share/agentoo/wallpapers/`, grouped into ordinary
-subdirectories as useful. No images or default selection are bundled yet.
+subdirectories as useful (see [wallpapers](../wallpapers/README.md)). No default
+selection is active.
 Personal images can live anywhere readable.
 
 The selection is a text file at `$XDG_STATE_HOME/agentoo/wallpaper`, defaulting to

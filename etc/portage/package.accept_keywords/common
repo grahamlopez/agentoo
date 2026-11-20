@@ -47,7 +47,7 @@ net-misc/amazon-dcv-client-bin::agentoo ~amd64
 net-misc/teleport-tsh-bin::agentoo ~amd64 ~arm64
 
 # Other agentoo ebuilds
-app-misc/ttfx ~amd64
+app-misc/ttfx::agentoo ~amd64 ~arm64
 
 # Optional terminal animations; classic and enhanced variants coexist.
 games-misc/cbonsai::agentoo ~amd64 ~arm64

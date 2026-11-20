@@ -95,4 +95,5 @@ describes current scope and acceptance.
 - [Checkpoints and subvolume boundaries](../../usr/local/share/agentoo/docs/checkpoints.md)
 - [Target host checklist](../../usr/local/share/agentoo/docs/host-onboarding.md)
 - [Flattop hardware baseline](../../usr/local/share/agentoo/docs/hosts/flattop.md)
+- [Startop hardware baseline](../../usr/local/share/agentoo/docs/hosts/startop.md)
 - [Bequiet hardware baseline](../../usr/local/share/agentoo/docs/hosts/bequiet.md)

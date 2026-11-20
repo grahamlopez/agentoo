@@ -495,7 +495,7 @@ validate_arguments() {
   fi
   if [[ $TARGET_HOST == qemu ]]; then
     if is_selected kernel-foundation && [[ -z $QEMU_VARS ]]; then
-      errors+=("--target-host qemu needs --qemu-vars FILE for kernel-foundation. Choose a new path in your VM directory, such as /path/to/VM/OVMF_VARS.4m.fd; the installer creates it from the OVMF template. See usr/local/share/agentoo/installer/QEMU-NBD-INSTALL.md.")
+      errors+=("--target-host qemu needs --qemu-vars FILE for kernel-foundation. Choose a new path in your VM directory, such as /path/to/VM/OVMF_VARS.4m.fd; the installer creates it from the OVMF template.")
     fi
     if [[ -n $QEMU_VARS ]]; then
       [[ $QEMU_VARS != *$'\n'* && $QEMU_VARS != *$'\r'* && ! -L $QEMU_VARS && ( ! -e $QEMU_VARS || -f $QEMU_VARS ) ]] \
@@ -2743,7 +2743,6 @@ COMMANDS
   printf '\nIn the VM: unlock LUKS, log in as root, then run:\n/root/001-firstboot-verify-and-checkpoint.sh\n'
   printf 'After verification/checkpointing: /root/002-agentoo-setup-user.sh\n'
   printf 'Ctrl-a c switches between the serial console and QEMU monitor.\n'
-  printf 'Reference: usr/local/share/agentoo/installer/QEMU-NBD-INSTALL.md\n'
 }
 
 # Handoff deliberately leaves teardown to the user. Automatic unmount/LUKS close
@@ -2787,7 +2786,7 @@ PLAN
     printf '\nManual cleanup before booting (leave any chroot and change to a directory outside the target first):\n'
     printf 'sudo umount --recursive %q && sudo cryptsetup close %q\n' "$MOUNT_ROOT" "$LUKS_NAME"
   fi
-  printf '\nIf cleanup reports a busy filesystem or mapping, stop and inspect holders; see the documented namespace-recovery procedure.\n'
+  printf '\nIf cleanup reports a busy filesystem or mapping, stop and inspect holders (including other mount namespaces with lsns -t mnt) before retrying.\n'
   printf 'Unlock LUKS, log in with the target root password, and verify mounts, networking and failed services.\n'
 }
 

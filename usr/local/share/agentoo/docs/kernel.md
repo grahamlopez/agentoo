@@ -78,31 +78,13 @@ sudo systemd-tmpfiles --create agentoo-kernel.conf
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
 ```
 
-For the one-off Thinktop conversion, first inspect `eselect --brief --colour=no
-profile show`, `findmnt --target /`, `findmnt --mountpoint /boot` and
-`lsblk -o NAME,TYPE,FSTYPE,PARTUUID,TRAN`.
-Require the intended Thinktop profile, Btrfs `@` directly on LUKS2/NVMe and the
-mounted target FAT GPT ESP. Record the encrypted partition's **PARTUUID**, not
-its LUKS UUID, with `sudoedit /etc/portage/env/kernel-local`:
-
-```sh
-AGENTOO_INITRAMFS_PARTUUID=ENCRYPTED_PARTITION_PARTUUID
-AGENTOO_INITRAMFS_MAPPER=cryptroot
-AGENTOO_INITRAMFS_TRANSPORT=nvme
-```
-
-Activate the host fragment and record the mounted ESP's filesystem UUID:
-
-```sh
-sudo ln -sfnT /etc/agentoo/kernel/hosts/thinktop.config /etc/kernel/config.d/20-host.config
-findmnt -n -o UUID --mountpoint /boot
-sudoedit /etc/kernel/gentoo-dist-esp.uuid
-```
-
-The ESP file contains only that UUID. Review existing values before replacing
-any local setup. The installer establishes these inputs on new supported targets;
-there is no recurring preparation or migration command. Once the local inputs
-are established, review and build the native development set:
+The installer establishes `/etc/portage/env/kernel-local`, the
+`/etc/kernel/config.d/20-host.config` symlink, and
+`/etc/kernel/gentoo-dist-esp.uuid` on new supported targets; there is no
+recurring preparation or migration command. For existing hosts still migrating
+from `gentoo-sources`, establish those local inputs with the
+[migration steps](#gentoo-sources-to-gentoo-kernel-migration) below. Once the
+local inputs are established, review and build the native development set:
 
 ```sh
 sudo emerge --ask --pretend --verbose --usepkg=n @kernel-dev
@@ -368,12 +350,13 @@ module dispatcher or workspace lifecycle is used.
 
 ## gentoo-sources to gentoo-kernel migration
 
-These are one-time steps to migrate an already-installed system to the new
-gentoo-kernel based custom kernel workflow. This configuration is established
+These are temporary one-time steps to migrate remaining already-installed hosts
+(such as Flattop and Startop; Thinktop and Bequiet are already converted) to the
+native `gentoo-kernel` custom kernel workflow. This configuration is established
 by the installer on new systems.
 
 Use the same sequence on each target host itself. Step 2 requires that host’s
-storage values; don’t reuse Thinktop’s.
+storage values; don’t reuse another host’s.
 
 ### 1. Deploy configuration and shared policy
 
