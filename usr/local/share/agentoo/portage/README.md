@@ -740,12 +740,4 @@ Portage owns upgrades, omits Debian/APT cron integration, and preserves user
 profiles on removal. Optional `USE=protection` installs the eBPF protection
 service without enabling it. See
 [README.gentoo](www-client/prisma-browser-bin/files/README.gentoo) for launch,
-sandboxing, kernel BPF requirements, and validation status.
-
-All ten overlay recipes passed Portage build and staged-install phases on
-amd64 with Python 3.14 on 2026-10-21. Dependency resolution succeeded for all
-seven applications together. Each application rendered in a pseudo-terminal
-and exited successfully with `q`; staged file checks found no collisions.
-The asciimatics upstream suite also passed (199 tests, 40 skipped).
-The checks used isolated build and dependency images, without merging packages
-into the running system. Arm64 and the optional Tk GUI were not runtime-tested.
+sandboxing, and kernel BPF requirements.

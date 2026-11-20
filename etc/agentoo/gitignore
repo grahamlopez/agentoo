@@ -1,6 +1,5 @@
 # Global excludes (git core.excludesFile).
-# Also guards the $HOME-as-work-tree dotfile repos (dgit/ggit/agit) against
-# accidentally committing secrets via `add -A`.
+# Guards Git repositories against accidentally committing secrets or local state.
 
 # Generated Python bytecode
 __pycache__/

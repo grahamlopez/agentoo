@@ -66,7 +66,7 @@ be checked when adding configuration.
   application requires a file in `$HOME/.config`, keep it a minimal untracked
   local override or include—never duplicate system defaults into `$HOME`.
 - **Interactive state (4th layer):** Settings adjusted live during a session
-  (such as appearance, wallpaper, display/audio toggles, or font size) live in
+  (such as appearance, wallpaper, or display/audio toggles) live in
   untracked `$XDG_STATE_HOME/agentoo/` or native user stores (e.g., GSettings).
   - *Live-only gate:* If a setting is not tweaked interactively in-session, put
     it in a static config file—do not build a CLI state manager for it.
