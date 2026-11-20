@@ -18,7 +18,7 @@ mapfile -t f < <(
       (.vcs.branch // .git_branch // ""),
       (if .vcs.dirty == true then "1" else "0" end),
       (.conversation_title // .session_name // .session.name // .conversation.title // .session_id // ""),
-      (.context_window.remaining_percentage | if . == null then "" else (round | tostring) end),
+      (.context_window.used_percentage | if . == null then "" else (round | tostring) end),
       (
         (
           $q5h.remaining_fraction
@@ -104,12 +104,12 @@ if [[ -n "$branch" ]]; then
 fi
 [[ -n "$loc" ]] && line1+=("$loc")
 
-# Line 2: session name, context remaining, 5h quota remaining + reset countdown
+# Line 2: session name, context used, 5h quota remaining + reset countdown
 [[ -n "$session" ]] && line2+=("${DIM}${session}${R}")
 
 if [[ -n "$ctx_pct" ]]; then
   c=$GREEN
-  (( ctx_pct <= 15 )) && c=$RED || { (( ctx_pct <= 40 )) && c=$YELLOW; }
+  (( ctx_pct >= 85 )) && c=$RED || { (( ctx_pct >= 60 )) && c=$YELLOW; }
   line2+=("${DIM}ctx${R} ${c}${ctx_pct}%${R}")
 else
   line2+=("${DIM}ctx --${R}")
