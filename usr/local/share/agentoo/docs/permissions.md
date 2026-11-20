@@ -121,9 +121,3 @@ that bypass `agentoo git` still have only the post-operation permission hooks;
 they cannot pause reload before files change. SIGINT and SIGTERM run cleanup;
 SIGKILL or a power failure cannot, and may require restoring automatic reload
 manually or restarting the desktop session.
-
-Run the focused checks from a development checkout with:
-
-```sh
-python3 -m unittest discover -s usr/local/share/agentoo/tests
-```

@@ -66,8 +66,7 @@ the same parser as help.
 After deployment and installation, test set, replacement, query, clear, logout,
 and startup restoration in a real Hyprland session. Confirm ordinary config
 reloads do not create another swaybg process, images appear on connected and
-newly attached monitors, and clients exit on session shutdown. Repository tests
-use a fake client and do not establish physical rendering correctness.
+newly attached monitors, and clients exit on session shutdown.
 
 ## Window transparency
 
@@ -164,13 +163,6 @@ rule, remains available with conflicting authored rules or a malformed
 transparency section. Malformed JSON requires repairing the shared file.
 Separate sessions share the saved choice; a different
 already-running Hyprland session picks it up on its next configuration reload.
-
-Verification: run `python3 -m unittest discover -s usr/local/share/agentoo/tests
--p test_transparency.py`, `lua usr/local/share/agentoo/tests/test_hypr_transparency.lua`,
-and the CLI/wallpaper tests. Before deployment is considered visually validated,
-check focus changes, existing/new Kitty windows, browser dialogs, fullscreen,
-the dropdown, personal defaults after reset, and logout/login in a real session.
-Parser and mocked API tests do not establish actual rendering correctness.
 
 Implementation references: [Hyprland 0.56.2 opacity parser](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/desktop/rule/windowRule/WindowRule.cpp),
 [window rules](https://wiki.hypr.land/configuring/core/rules/window-rules/),
@@ -288,22 +280,6 @@ decision. The public diagnostic API does not expose those regions, so diagnostic
 explain this limitation rather than claiming that appearance is verified. Kitty
 needs no external remote-control access for compositor blur. Application-specific
 blur requests may require reloading that application's own configuration.
-
-Checks:
-
-```sh
-python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_blur.py
-lua usr/local/share/agentoo/tests/test_hypr_blur.lua
-```
-
-The tests include native Hyprland parser checks for independent focus states,
-strength-only changes, engine shutdown, and preservation of authored defaults.
-They also check persistence, corrupt-state recovery, failed-reload rollback,
-diagnostic read-only behavior, and help/completion. After deployment, visually
-check existing/new Kitty and browser windows, focus transitions, fullscreen,
-dropdowns, reset to personal defaults, and startup restoration. Compare actual
-power at idle and during scrolling/resizing with blur off/on, including after
-display sleep; parser checks do not establish rendering or power correctness.
 
 References: [Hyprland 0.56.2 blur eligibility](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/render/Renderer.cpp),
 [upstream configuration guidance](https://github.com/hyprwm/hyprland-wiki/blob/main/content/configuring/core/config-options.md#blur),
@@ -429,18 +405,6 @@ section without discarding other effects; malformed JSON itself requires repairi
 the file. Operational summaries/errors go to stderr, queries/help to stdout.
 Exit codes: 0 success, 1 operational failure, 2 invalid arguments.
 
-Verification:
-
-```sh
-python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_effects.py
-```
-
-Tests cover parser/completion behavior, independent updates, scoped reset,
-failed-reload recovery, portable animation inheritance, and isolated
-`Hyprland --verify-config` checks for settings, colors, every exposed style, and
-reset-to-authored defaults. They do not change a live desktop or verify rendered
-appearance; those checks remain part of installed-session validation.
-
 
 ### Importing a desktop appearance
 
@@ -508,14 +472,3 @@ and layout repair use the internal helper.
 
 Only `appearance.json` is read for appearance preferences. Wallpaper retains its
 separate selection file. Queries do not create or change state.
-
-Additional verification:
-
-```sh
-python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_desktop_state.py
-```
-
-These checks cover all-section and selected-section imports, validation before
-writes, partial merges, one reload per import, rollback of the entire saved
-appearance, and using one portable animation file with different
-authored animation settings in native Hyprland config verification.

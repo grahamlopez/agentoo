@@ -341,10 +341,6 @@ backward. Releasing the last Alt key commits the actual focused window. Closed,
 hidden and moved windows are skipped; new windows join the next gesture.
 Reloading seeds history from Hyprland's current focus order. This fragment uses
 the standard evdev left/right Alt keycodes, matching Agentoo's US keyboard layout.
-Run `lua usr/local/share/agentoo/tests/test_hypr_alt_tab.lua` from the checkout
-for the mocked switching checks. On a live session, check two-window bouncing,
-held-Alt multi-window cycling, reverse cycling, mouse focus, closing a candidate,
-and cycling with the dropdown shown and hidden.
 
 The terminal overlay uses a named special workspace and launches Kitty on demand.
 It requests 160 columns by 45 rows, centered horizontally with its top edge
@@ -491,41 +487,6 @@ Verify the following on a real target host:
    `journalctl --user -b`. Audio user services can persist for the TTY login;
    compositor/watchdog and closed graphical clients should not.
 
-Repository syntax and pretend checks do not establish installability at build time or
-hardware correctness. The [archived package lists](history/package-sets/README.md) remain historical
-references pending review of their remaining requirements. They are not active
-Portage sets; do not install or depclean packages automatically from them.
-
-## Packaging evidence and keyword review
-
-Repository preparation on 2026-10-14 used Gentoo commit
-`9ef593f1a819cdc0465b29afb11d03bac79ad5f8` and hyproverlay commit
-`b2e7344722289a04ec5ccab6957a83597cd13048`. A pretend check with the desktop/systemd
-profile, Intel video selection, and isolated configuration/cache selected
-Hyprland 0.56.2, Kitty 0.48.2, PipeWire 1.6.8, and WirePlumber 0.5.15.
-Ten exact overlay keyword exceptions sufficed for that initial check; no shared
-Gentoo library needed testing acceptance. These exceptions now apply across
-release versions of the same overlay packages. Re-run the plan on thinktop
-after sync: installed packages,
-local overrides, and repository updates can change it.
-
-All previous keyword exceptions were reviewed. The four retained original common
-exceptions are repository-scoped Agentoo secret/AI packages with testing keywords.
-Independently added scoped keyd/group exceptions are preserved; neither package
-is selected by `@gui-base`. Removed exceptions
-cover obsolete broad Hyprland/glaze acceptance, unselected hyprpaper,
-GUI utilities/toolkit, unscoped legacy keyd acceptance, cliphist, and stable
-Wayland libraries/scanner.
-Removing acceptance does not uninstall packages. Inspect any existing testing
-installations and subsequent world update plan separately.
-
-Sources inspected for the selected release:
-
-- [Hyproverlay packaging](https://codeberg.org/hyproverlay/hyproverlay/src/commit/b2e7344722289a04ec5ccab6957a83597cd13048/gui-wm/hyprland/hyprland-0.56.2.ebuild)
-- [Hyprland 0.56.2 source and example](https://github.com/hyprwm/Hyprland/tree/v0.56.2)
-- [Hyprutils 0.14.2 configuration discovery](https://github.com/hyprwm/hyprutils/blob/v0.14.2/src/path/Path.cpp)
-- [Gentoo PipeWire ebuild and user-service guidance](https://github.com/gentoo/gentoo/blob/9ef593f1a819cdc0465b29afb11d03bac79ad5f8/media-video/pipewire/pipewire-1.6.8.ebuild)
-
 ## Desktop preferences
 
 See [wallpapers, transparency, blur, and desktop appearance](desktop.md).
@@ -594,8 +555,7 @@ then correct account password, repeated lock requests, and an already-locked
 session going to sleep. Test manual suspend and undocked lid-close suspend on
 battery, including repeated cycles and external-display hotplug while locked.
 Check every display stays covered and resume does not show the desktop before
-authentication. Verify password login on tty2 remains available. Repository
-checks cannot establish PAM, compositor, display, or physical suspend behavior.
+authentication. Verify password login on tty2 remains available.
 
 The existing tty1 autologin and recovery shell are still available when
 Hyprland exits, including after a crash. A screen lock does not secure that

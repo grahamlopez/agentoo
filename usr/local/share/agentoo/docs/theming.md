@@ -210,18 +210,10 @@ does not apply source patches. Rebuild the installed version after deployment:
 sudo emerge --ask --oneshot =dev-qt/qtbase-6.11.3
 ```
 
-Then close PCManFM-Qt completely and restart it. The patched portal plugin was
-built separately and verified with an isolated Settings portal: a Qt Widgets
-probe on Wayland switched its palette dark → light → dark → light while
-running, including with `QProxyStyle`, which PCManFM-Qt uses. The unpatched
-plugin received the same signals but kept its dark palette. PCManFM-Qt 2.4.1
-was reported to pick up the initial mode but not live changes before this fix.
-After a Portage rebuild on 2026-11-09, the user confirmed PCManFM-Qt starts
-dark and switches live to light and back to dark with the plugin selected.
-Portage applies the patch on subsequent Qt builds, including version updates,
-and stops with an error if it cannot apply it. Successful application does not
-prove compatibility: retest live switching when updating Qt and remove the
-patch once upstream handles palette invalidation.
+Then close PCManFM-Qt completely and restart it. Portage applies the patch on
+subsequent Qt builds, including version updates, and stops with an error if it
+cannot apply it. Retest live switching when updating Qt and remove the patch
+once upstream handles palette invalidation.
 
 After deploying this default, log out and back in so terminals and applications
 inherit it. For an immediate check, close PCManFM-Qt completely and launch:
@@ -255,7 +247,5 @@ gdbus call --session --dest org.freedesktop.portal.Desktop \
 The returned unsigned value is 0 for no preference, 1 for dark, and 2 for light.
 Switch both directions with applications already open, directly in Kitty and
 inside tmux, then check newly launched applications and persistence after login.
-The checkout tests exercise command errors, help/completion, and isolated native
-GSettings persistence; they do not establish live portal or application behavior.
 
 

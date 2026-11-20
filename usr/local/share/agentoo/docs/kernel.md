@@ -8,21 +8,12 @@ binary fallback kernel uses `sys-kernel/gentoo-kernel-bin`.
 
 Custom gentoo-kernel builds require `CONFIG_MODULES=n` except on Bequiet, which
 requires signed modules with signature enforcement. All hosts retain built-in
-early-boot drivers. Thinktop's
-`6.18.62-agentoo-v0.5` custom kernel was accepted by the operator on 2026-11-17
-following a successful Secure Boot startup and hardware checks. Its same-version
-rebuild passed, including package-owned built-in driver indexes. The binary
-fallback `6.18.62-gentoo-dist-bin` also booted under Secure Boot into encrypted
-Btrfs root with network recovery; `/usr/src/linux` retained the custom selection.
-Future update validation, configuration reduction and optional development work
-are tracked in [card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
-Older Thinktop boot/power/service findings remain in
-[card 023](../kanban/Backlog/023-thinktop-kernel-v0.3-followups.md).
-Bequiet's native Secure Boot/NVIDIA, hardware and refreshed binary recovery
-acceptance passed on 2026-11-17; remaining rebuild acceptance is recorded in its
-[host guide](hosts/bequiet.md#native-conversion-status). Other hosts cannot enable
-modules. See [Bequiet conversion](#bequiet-conversion). There is
-one supported build interface: native Portage commands.
+early-boot drivers. Deferred maintenance, configuration reduction, and optional
+development work are tracked in
+[card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
+See [Bequiet modules and NVIDIA](#bequiet-modules-and-nvidia) for Bequiet's
+external-module workflow. There is one supported build interface: native
+Portage commands.
 
 ## Host specialization
 
@@ -82,9 +73,9 @@ The installer establishes `/etc/portage/env/kernel-local`, the
 `/etc/kernel/config.d/20-host.config` symlink, and
 `/etc/kernel/gentoo-dist-esp.uuid` on new supported targets; there is no
 recurring preparation or migration command. For existing hosts still migrating
-from `gentoo-sources`, establish those local inputs with the
-[migration steps](#gentoo-sources-to-gentoo-kernel-migration) below. Once the
-local inputs are established, review and build the native development set:
+from `gentoo-sources`, follow the temporary fleet transition card
+[053-gentoo-kernel-fleet-migration.md](../kanban/Open/053-gentoo-kernel-fleet-migration.md).
+Once the local inputs are established, review and build the native development set:
 
 ```sh
 sudo emerge --ask --pretend --verbose --usepkg=n @kernel-dev
@@ -169,15 +160,7 @@ sudo sbverify --cert /var/lib/sbctl/keys/db/db.pem \
 A matching signature does not establish firmware trust or physical boot success.
 Check selected release, passphrase retries, internal/USB keyboards, Btrfs `@`,
 discards, microcode, systemd startup, networking, displays/audio and suspend/resume.
-Include Thinktop’s microphone mute button in input checks. Preserve binary recovery.
-
-On 2026-11-17, the operator confirmed that Thinktop’s microphone mute button
-worked after a full shutdown and power-on into `6.18.62-agentoo-v0.5` with
-`90-thinktop-micmute.rules` disabled. Inspection confirmed that the rename
-preceded boot, no active udev rule supplied the correction, and the live
-ThinkPad input device had no `KEYBOARD_KEY_1a` property. The legacy genkernel
-workaround was retired on this evidence (card 020). Raw keycode 248 was not
-separately captured.
+Preserve binary recovery.
 
 ## Updates and rebuilds
 
@@ -281,24 +264,17 @@ systemd.mask=getty@tty1.service'`; tty2 retains password login. NVIDIA support i
 outside the binary recovery requirement; it is required for Bequiet's custom
 kernel acceptance.
 
-## Bequiet conversion
+## Bequiet modules and NVIDIA
 
-The native Bequiet conversion passed Secure Boot/NVIDIA, hardware and refreshed
-binary recovery acceptance; see the
-[host evidence](hosts/bequiet.md#native-conversion-status) for pending maintenance
-checks. Keep the accepted
-`6.18.62-gentoo-bequiet-secure` image/entry and binary console/network recovery.
-Reuse the existing enrolled sbctl identity; this conversion does not require new
-keys or reenrollment.
+Bequiet is the only host permitted to enable loadable modules, paired with
+mandatory module signing and signature enforcement (`MODULE_SIG_FORCE=y`).
+Bequiet reuses its enrolled sbctl db key and certificate for both EFI and module
+signing. The embedded initramfs does not load modules; NVIDIA loads after
+real-root handoff, with its package-owned GSP firmware and graphics
+configuration.
 
-Follow the migration steps below on Bequiet, using its own root partition,
-mapping and transport. Confirm the selected profile is Bequiet and activate
-`/etc/agentoo/kernel/hosts/bequiet.config`. Review existing local overrides so
-they do not replace the new release or native signing policy. The embedded
-initramfs does not load modules; NVIDIA loads after real-root handoff, with its
-package-owned GSP firmware and graphics configuration.
-
-After building the source kernel in step 4, inspect its resolved configuration:
+After building the source kernel on Bequiet, inspect its resolved configuration
+and certificate fingerprint:
 
 ```sh
 release=6.18.62-agentoo-v0.5
@@ -331,134 +307,12 @@ modprobe --set-version "$release" --show-depends nvidia_drm
 Check the build log names the candidate release, module paths/version magic match
 it and dependency indexes resolve the modules. Signer metadata requires kmod's
 OpenSSL support; without it, empty signer fields and an unknown hash are
-inconclusive. Bequiet's first conversion independently verified the module PKCS#7
-signatures against the embedded certificate. These are preboot checks; module loading with signature
-enforcement establishes kernel trust. Continue step 4's EFI verification and
-manual registration, then boot the candidate under Secure Boot. Check
-`sbctl status`, `uname -r`, `/sys/module/module/parameters/sig_enforce`, both GPUs
-with `nvidia-smi`, Hyprland, USB unlock, normal peripherals and suspend/resume.
-Test GPU compute workloads separately if required. Independently test recovery.
+inconclusive. Module loading with signature enforcement establishes kernel trust
+at boot; verify `sbctl status`, `uname -r`,
+`/sys/module/module/parameters/sig_enforce`, `nvidia-smi`, and Hyprland after
+booting under Secure Boot.
 
-After custom kernel rebuilds, rebuild NVIDIA with the same emerge command above
-before booting. A same-version rebuild or conversion does not change
-`virtual/dist-kernel`'s subslot and does not automatically trigger its dependent
-rebuilds. Native `dist-kernel` dependency handling supports version updates; its
-behavior with both kernel providers still needs Bequiet acceptance. Repeat boot
-checks after a same-version rebuild and a subsequent version update, inspecting
-the resulting modules before boot. Record evidence in the Bequiet host guide. No custom
-module dispatcher or workspace lifecycle is used.
-
-## gentoo-sources to gentoo-kernel migration
-
-These are temporary one-time steps to migrate remaining already-installed hosts
-(such as Flattop and Startop; Thinktop and Bequiet are already converted) to the
-native `gentoo-kernel` custom kernel workflow. This configuration is established
-by the installer on new systems.
-
-Use the same sequence on each target host itself. Step 2 requires that host’s
-storage values; don’t reuse another host’s.
-
-### 1. Deploy configuration and shared policy
-
-sudo agentoo git pull
-sudo systemd-tmpfiles --create agentoo-kernel.conf
-
-target_host=$(python3 -B /usr/local/share/agentoo/lib/host_selection.py)
-printf 'Selected host: %s\n' "$target_host"
-
-Confirm this prints flattop, startop or bequiet, as appropriate. For Bequiet,
-also follow [Bequiet conversion](#bequiet-conversion) before registering or booting
-the candidate.
-
-### 2. Establish local kernel inputs
-
-Inspect the root mapping, encrypted partition and ESP:
-
-findmnt -n -o SOURCE,FSTYPE,FSROOT --target /
-lsblk -o NAME,TYPE,FSTYPE,PARTUUID,TRAN
-findmnt -n -o SOURCE,FSTYPE,UUID --mountpoint /boot
-
-Edit the native environment file:
-
-sudoedit /etc/portage/env/kernel-local
-
-Enter these settings, substituting the values from that host’s inventory:
-
-AGENTOO_INITRAMFS_PARTUUID=ENCRYPTED_PARTITION_PARTUUID
-AGENTOO_INITRAMFS_MAPPER=ROOT_MAPPING_NAME
-AGENTOO_INITRAMFS_TRANSPORT=nvme
-
-Use the partition’s PARTUUID, and the mapping name without /dev/mapper/.
-Flattop previously used crypt_root; confirm its current value. Use sata instead
-of nvme if the root disk’s transport is SATA.
-
-Then activate the host fragment and record the mounted ESP’s filesystem UUID:
-
-sudo chmod 0644 /etc/portage/env/kernel-local
-
-sudo ln -sfnT \
-  "/etc/agentoo/kernel/hosts/$target_host.config" \
-  /etc/kernel/config.d/20-host.config
-
-findmnt -n -o UUID --mountpoint /boot
-sudoedit /etc/kernel/gentoo-dist-esp.uuid
-sudo chmod 0644 /etc/kernel/gentoo-dist-esp.uuid
-
-The ESP file should contain only the UUID printed immediately above.
-
-Review any existing local kernel overrides before building:
-
-ls -l /etc/kernel/config.d
-rg -n 'CONFIG_(LOCALVERSION|INITRAMFS_SOURCE|CMDLINE)' /etc/kernel/config.d
-
-Remove obsolete local overrides deliberately; the intended shared localversion
-is -agentoo-v0.5.
-
-### 3. Install prerequisites and apply firmware policy
-
-Keep the currently installed firmware versions while applying the USE changes:
-
-firmware_atom=$(portageq best_version / sys-kernel/linux-firmware)
-microcode_atom=$(portageq best_version / sys-firmware/intel-microcode)
-
-sudo emerge --ask --oneshot --newuse --usepkg=n "=$firmware_atom"
-if [ -n "$microcode_atom" ]; then
-  sudo emerge --ask --oneshot --newuse --usepkg=n "=$microcode_atom"
-fi
-
-sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
-sudo emerge --ask --noreplace sys-fs/dosfstools
-sudo systemctl daemon-reload
-
-Bequiet gets AMD microcode from linux-firmware and does not need intel-microcode.
-Preserve the existing firmware savedconfig selection. Flattop firmware trimming
-can remain separate.
-
-### 4. Refresh the fallback, build and validate
-
-Refresh whichever binary fallback version is installed on that host:
-
-fallback_atom=$(portageq best_version / sys-kernel/gentoo-kernel-bin)
-sudo emerge --config "=$fallback_atom"
-
-Build the same source version evaluated on Thinktop:
-
-sudo emerge --ask --oneshot --usepkg=n \
-  '=sys-kernel/gentoo-kernel-6.18.62'
-
-Check the result:
-
-eselect kernel show
-modinfo -k 6.18.62-agentoo-v0.5 i2c-dev
-
-sudo sbverify --cert /var/lib/sbctl/keys/db/db.pem \
-  /boot/EFI/Gentoo/kernel-6.18.62-agentoo-v0.5.efi
-
-agentoo kernel gen-efi-cmd \
-  --image /boot/EFI/Gentoo/kernel-6.18.62-agentoo-v0.5.efi
-
-Review and execute the printed EFI command. On Startop, confirm it includes --full-dev-path.
-
-Boot the custom kernel through the firmware menu, test the host’s hardware and
-suspend/resume, then independently boot-test the refreshed binary fallback.
-Stop at any failed command and send its output.
+After same-version custom kernel rebuilds, rebuild `x11-drivers/nvidia-drivers`
+with the command above before booting: a same-version rebuild does not change
+`virtual/dist-kernel`'s subslot and does not trigger dependent rebuilds
+automatically. No custom module dispatcher or workspace lifecycle is used.

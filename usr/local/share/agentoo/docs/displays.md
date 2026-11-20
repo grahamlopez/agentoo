@@ -475,8 +475,6 @@ power even if the Dell temporarily disconnects while switching input or PiP/PbP
 mode. This also keeps it awake on an ordinary charger without an external
 display. On battery, undocked lid-close suspend remains enabled; docked behavior
 retains logind's default ignore policy. Manual suspend remains available.
-This follows the previously tested fix in
-[the historical Omarchy notes](history/omarchy-configuration-changes.md#1-keep-the-closed-laptop-awake-during-monitor-inputpbp-switching).
 If monitor reconfiguration also removes external power, the battery lid policy
 can still suspend the laptop; this rule adds no timed disconnect grace period.
 USB-C power readings can settle after logind's last display/USB hotplug event.

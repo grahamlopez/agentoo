@@ -68,11 +68,7 @@ functions already loaded in an existing shell retain their old definitions.
 Future source builds apply the patch automatically. A prebuilt binary package
 does not run `src_prepare`; use `--usepkg=n` when rebuilding to apply this patch.
 Review or remove the patch when upstream fixes the issue or changes the source
-enough that it no longer applies. Validation reproduced the
-original behavior in a clean zsh pseudo-terminal, checked prefix completion and
-the second-Tab package list after patching, and staged the patched package with
-Portage using Gentoo's unmodified ebuild and the user-patch directory. The source
-archive matches Gentoo's Manifest.
+enough that it no longer applies.
 
 ## Softlock Neovim plugin
 
@@ -201,18 +197,6 @@ bytes. Find a new release link through the [Linux release notes](https://www.pcl
 do not substitute the rotating latest-download URL. Reinspect runtime libraries,
 the launcher, and the updater on every bump. Keep downloaded artifacts outside Git.
 
-Initial validation on 2026-10-23 checked publisher hashes for both Proton
-architectures and the pCloud AppImage; two independent pCloud ZIP downloads were
-byte-identical. Both ebuilds passed unpack through install in an isolated Portage
-configuration, including staging Proton's arm64 binary on the amd64 build host;
-the latter reports expected missing arm64 system libraries on this host. The
-menu entry passed desktop-file validation, and the amd64 runtime dependencies
-resolved with Agentoo's keyword and USE fragments.
-Proton's amd64 version/help commands passed with an isolated home. This does not
-establish arm64 runtime operation or authenticated transfers. pCloud GUI login,
-sync, FUSE operation, autostart, and update notifications require a user-session
-check on the target desktop; they were not exercised during packaging.
-
 ## Amazon DCV remote desktop client
 
 `net-misc/amazon-dcv-client-bin` installs the official amd64 Amazon DCV viewer
@@ -248,11 +232,6 @@ verify the artifact against Amazon's published SHA-256 checksum, inspect all ELF
 dependencies and plugins again, review the EULA, and regenerate the Manifest.
 Keep downloaded artifacts outside Git. Recheck the omitted ICU bridge and all
 launcher paths whenever upstream changes its bundle.
-
-Initial validation checked the upstream checksum, Portage unpack through staged
-installation, dependency resolution, shell syntax, and desktop-file validation.
-The host lacks several declared runtime dependencies, so GUI startup and remote
-connections remain to be checked after installation.
 
 ## Teleport tsh client
 
@@ -299,20 +278,13 @@ Committing the generated scripts
 lets the ebuild stage either architecture without running its binary.
 Keep downloaded archives outside Git.
 
-Initial validation verified both publisher checksums and staged both architectures
-through Portage. The amd64 version command, ELF loading, Bash completion helper,
-and interactive zsh completion were checked with an isolated Teleport home and
-managed updates disabled. Arm64 was staged but not executed. Cluster login,
-SSH sessions, and hardware-key authentication were not exercised.
-
 ## User-managed AI clients
 
 `dev-util/codex-cli-deps`, `dev-util/claude-code-deps`,
 `dev-util/antigravity-cli-deps`, and `dev-util/pi-coding-agent-deps` supply
 prerequisites for user-owned upstream installations, with testing keywords
-accepted in agentoo's common configuration. Select them explicitly; the former
-`early_install` package list is now
-[historical reference](../docs/history/package-sets/early-install.txt).
+accepted in agentoo's common configuration. Select them explicitly; no package
+set installs them automatically.
 
 ```sh
 emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps dev-util/antigravity-cli-deps
@@ -475,13 +447,6 @@ provide optional deletion commands for user data, including credentials and
 session history. Review custom paths and other clients sharing those directories
 before deleting data. Project-local configuration is preserved.
 
-### Validation
-
-Check shell syntax, Portage dependency metadata, and install/removal messages,
-including suppression during replacement. On Gentoo, run package QA and emerge
-the dependency packages, then install upstream clients as a normal user and check
-versions and sandbox operation. Do not run upstream installers from Portage phases.
-
 ## Antigravity desktop
 
 `dev-util/antigravity-bin` repackages the official Linux `.deb` for amd64. It is
@@ -572,7 +537,7 @@ app-misc/chatgpt-desktop-bin -notifications -portal -qt6
 
 These flags control optional runtime dependencies (and, for Qt6, its shim).
 They do not rebuild the proprietary application or forcibly disable features;
-already-installed libraries and desktop services may still be used. The minimal configuration was tested on Thinktop as recorded below. NSS/NSPR and the TPM
+already-installed libraries and desktop services may still be used. NSS/NSPR and the TPM
 libraries remain mandatory because bundled binaries link to them directly. TPM
 libraries do not imply a requirement for TPM hardware.
 
@@ -594,40 +559,23 @@ sudo emerge --ask --unmerge app-misc/chatgpt-desktop-bin
 Sandboxing needs unprivileged user namespaces; the dependency list supplies
 bubblewrap for the bundled agent. Do not work around launch failures with
 `--no-sandbox`. The default Wayland-session behavior uses XWayland when
-available (install `x11-base/xwayland` for that path). For experimental native
-Wayland, fully quit the app and run `chatgpt --ozone-platform=wayland`.
+available (install `x11-base/xwayland` for that path). For experimental native Wayland, fully quit the app and run
+`chatgpt --ozone-platform=wayland` (note upstream Wayland limitations around
+focus, floating windows, positioning, and shortcuts).
 Use a running Secret Service provider if the app needs keyring storage; installing
 `app-crypt/libsecret` alone does not start a provider. Hyprland file/screen
 integration also needs a working desktop portal backend.
 
-### Packaging validation and version bumps
+### Version bumps
 
-The initial package is amd64 only. Its `.deb` SHA-256 was compared with the
-publisher's `deb/dists/stable/main/binary-amd64/Packages` index, and its versioned
-URL was checked. The Portage Manifest records BLAKE2B and SHA512 hashes. Downloads
-remain in the local distfile cache, outside Git. For a new release, inspect the
-control metadata, maintainer scripts, launcher, desktop entries, and ELF runtime
-dependencies again; preserve bundled resources and license notices, and
-regenerate the Manifest from the new artifact. Never use a mutable `latest` URL
-in an ebuild. Do not add arm64 keywords without inspecting that artifact too.
-
-The ebuild unpack, prepare, and install phases were checked in an isolated
-Portage configuration, alongside dependency resolution and desktop-entry
-validation. Install-phase QA reports the TPM libraries as absent on the build
-host; `app-crypt/tpm2-tss` is an explicit runtime dependency supplying them.
-On 2026-10-19, the user confirmed installation and desktop operation on Thinktop
-with `-notifications -portal -qt6`: app launch, chat, opening a local project,
-running a sandboxed agent command, and restarting with sign-in preserved.
-This validates the core workflow with those USE flags disabled; it does not
-establish that optional libraries or services were absent from the system.
-
-Further desktop checks include launch from both a terminal and application
-menu, browser sign-in callbacks, file dialogs, notifications, and screen sharing
-when those optional features are enabled.
-Test XWayland and native Wayland separately. Confirm that a separate user can
-sign in independently and that unmerge removes package files while preserving
-user data. Native Wayland has upstream limitations around focus, floating
-windows, positioning, and shortcuts.
+The package is amd64 only. Verify the `.deb` SHA-256 against the publisher's
+`deb/dists/stable/main/binary-amd64/Packages` index and use a versioned URL.
+Downloads remain in the local distfile cache, outside Git. For a new release,
+inspect the control metadata, maintainer scripts, launcher, desktop entries,
+and ELF runtime dependencies again; preserve bundled resources and license
+notices, and regenerate the Manifest from the new artifact. Never use a mutable
+`latest` URL in an ebuild. Do not add arm64 keywords without inspecting that
+artifact too.
 
 ## ThinkRail
 
@@ -655,14 +603,6 @@ verify both against `SHA256SUMS`, inspect ELF and dynamically loaded library
 requirements, and regenerate the Manifest. Never run the vendor installer.
 Recheck the launcher, desktop identity, embedded Bun version and license,
 and update enablement before changing the recipe.
-
-Initial 0.3.0 validation checked publisher SHA-256 hashes for both architectures,
-Portage unpack through staged installation, amd64 dependency resolution,
-desktop-entry validation, and the disabled update feed. Install-phase QA reports
-the declared WebKitGTK/AppIndicator libraries absent on the build host, and
-arm64 libraries absent when staging that payload on amd64. Desktop launch,
-provider sign-in, terminal operation, and arm64 runtime operation still need
-testing on a target system.
 
 ## Nerd Fonts
 

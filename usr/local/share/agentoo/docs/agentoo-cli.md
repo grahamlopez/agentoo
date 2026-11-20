@@ -106,8 +106,7 @@ parser and joined into one logical line (which the terminal may wrap).
 `agentoo git` delegates to zsh's Git completion using the system repository.
 Checkpoint names must be entered explicitly; completion does not mount storage or
 request privileges. When changing subcommands or options, update the relevant
-argument parser; the zsh file needs no corresponding command or option edits. Run
-`python3 -m unittest discover -s usr/local/share/agentoo/tests -p test_completion.py`.
+argument parser; the zsh file needs no corresponding command or option edits.
 
 The internal completion protocol accepts a one-based current argument index,
 followed by the arguments after `agentoo`, including an empty current argument:
@@ -183,17 +182,6 @@ See [display control and setup](displays.md#external-monitor-controls-ddcci)
 for dependencies, selectors, and current Dell investigation limits.
 Screenshots use `agentoo screenshot full|region` or the standalone
 `agentoo-screenshot` command. Files go to `~/Downloads/Screenshots`.
-
-## Verification
-
-Run the Python and Lua repository checks together:
-
-```sh
-python3 usr/local/share/agentoo/tests/run_tests.py
-```
-
-The unified Python suite includes font selection tests. Lua regression tests
-are reported as skipped when the Lua interpreter is unavailable.
 
 ## Kernel target selection
 

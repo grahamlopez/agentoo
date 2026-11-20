@@ -49,8 +49,8 @@ acceptance. See the [kernel guide](../../docs/kernel.md).
   built-in index generation; masking module loading is not the indexing fix.
 
 Bequiet's native conversion passed Secure Boot/NVIDIA, hardware and refreshed
-binary recovery acceptance on 2026-11-17; see its
-[host evidence](../../docs/hosts/bequiet.md#native-conversion-status). Validate a
+binary recovery acceptance on 2026-11-17; see
+[hosts/bequiet.md](../../docs/hosts/bequiet.md#kernel-and-secure-boot). Validate a
 same-version custom rebuild followed by NVIDIA rebuilding and reboot, then a
 subsequent version update including native external-module dependency handling.
 Other module-enabled conversions remain deferred; shared/fleet

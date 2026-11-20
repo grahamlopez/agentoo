@@ -137,15 +137,10 @@ Repeat with a fresh output directory after editing scripts. The checkout
 are exercised directly. Rebuild the staged package when BusyBox configuration
 or its source version changes.
 
-Run repository regression checks from the checkout:
-
-```sh
-python3 usr/local/share/agentoo/tests/run_tests.py
-```
-
-Then run the disposable storage test described below. It checks the generated
-archive independently of a kernel build. For boot testing, install the revised generator and rebuild the native kernel;
-the preparation hook generates/selects the archive in that build's WORKDIR.
+Run the disposable storage smoke test described below to check the generated
+archive independently of a kernel build. For boot testing, install the revised
+generator and rebuild the native kernel; the preparation hook generates/selects
+the archive in that build's WORKDIR.
 
 Before validating the packaged default path, reinstall the package from source
 so changed local files are used even if a binary package is available:
@@ -209,6 +204,3 @@ the active mapping's exact device and LUKS mapping UUID and non-suspended state.
 This lets real-root udev coldplug recognize a mapping created without an
 initramfs udev database. The rule disappears at reboot and adds no initramfs
 daemon or hardware database.
-
-See [the original bring-up investigations](history/initramfs-bringup.md) for
-dated validation and the root-device handoff failure that motivated this rule.

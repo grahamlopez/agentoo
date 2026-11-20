@@ -72,44 +72,24 @@ Ethernet ports, Wi-Fi/Bluetooth, NVMe/SATA data access, audio, USB/input devices
 and intended suspend/resume behavior. Display layout retains shared defaults.
 Normal-use hardware and suspend/resume acceptance are complete for this host.
 
-## Kernel and Secure Boot acceptance
+## Kernel and Secure Boot
 
-Custom-kernel onboarding completed on 2026-11-16 with:
+Bequiet is the only host permitted to enable loadable modules in the native
+`gentoo-kernel` workflow, paired with mandatory module signing and signature
+enforcement (`MODULE_SIG_FORCE=y`) using its enrolled sbctl db key and
+certificate. Early-boot drivers remain built in; NVIDIA open modules load after
+real-root handoff.
 
-- `6.18.62-gentoo-bequiet-secure`: Secure Boot enabled, Setup Mode disabled,
-  module-signature enforcement active, NVIDIA `595.104.02` on both GPUs and a
-  working Hyprland desktop. USB root unlock, normal-use hardware and trimmed
-  firmware are accepted.
-- `6.18.62-gentoo-dist-bin`: packaged console/network recovery under Secure Boot,
-  with read/write encrypted Btrfs root, password login, Ethernet, DNS and HTTPS,
-  and no failed systemd units. Desktop graphics and NVIDIA compute are outside
-  the recovery requirement. Its boot arguments are documented in the
+- **Custom kernel (`gentoo-kernel`):** Secure Boot enabled, enforced module
+  signatures, NVIDIA open modules on both GPUs, and Hyprland desktop.
+- **Binary fallback (`gentoo-kernel-bin`):** Console/network recovery under
+  Secure Boot (`systemd.unit=multi-user.target systemd.mask=getty@tty1.service`;
+  NVIDIA/desktop are outside the recovery requirement). See the
   [kernel guide](../kernel.md#binary-fallback).
-- Windows: direct firmware boot with Secure Boot enabled and normal unlock
-  confirmed by the operator.
+- **Windows:** Direct firmware boot on its separate drive with Secure Boot enabled.
 
-### Native conversion status
-
-The accepted boot/hardware results above describe the installed images. The
-maintained source workflow is now native `gentoo-kernel` with an embedded custom
-archive, accepted on Thinktop. Bequiet alone may enable modules in this workflow;
-validation requires module signing and enforcement as well as built-in early-boot
-drivers. Installer input setup includes Bequiet on supported storage. Native
-Bequiet first boot passed on 2026-11-17 with `6.18.62-agentoo-v0.5`: Secure Boot
-enabled, Setup Mode disabled, module-signature enforcement `Y`, NVIDIA
-`595.104.02` recognizing both GPUs and Hyprland running. Before reboot, all four
-NVIDIA module PKCS#7 signatures were independently verified against the candidate
-kernel's embedded certificate. kmod 34.2 was built without OpenSSL, so its empty
-signer fields and unknown signature hash did not indicate unsigned modules.
-The operator subsequently confirmed USB root unlock, normal peripherals,
-networking, audio and suspend/resume on this release, console login, encrypted
-root and network recovery on the refreshed `6.18.62-gentoo-dist-bin`, and return
-to the custom kernel. Native conversion boot/hardware acceptance is complete.
-Same-version rebuild and version-update acceptance remain pending.
-Follow the [conversion procedure](../kernel.md#bequiet-conversion), including
-certificate matching and candidate-specific NVIDIA builds before booting.
-
-Native NVIDIA package policy references sbctl's original db key and certificate.
-There is no manually published certificate copy or retained custom workspace
-procedure. Preserve tested recovery entries during maintenance. See the
-[kernel guide](../kernel.md) and [Secure Boot guide](../secure-boot.md).
+After same-version custom kernel rebuilds, rebuild `x11-drivers/nvidia-drivers`
+explicitly before booting. Pending rebuild/update maintenance checks are tracked
+in [card 052](../../kanban/Backlog/052-native-kernel-maintenance-followups.md).
+See [Bequiet modules and NVIDIA](../kernel.md#bequiet-modules-and-nvidia) and
+the [Secure Boot guide](../secure-boot.md).

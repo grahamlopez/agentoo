@@ -15,8 +15,8 @@ that differs from the selected profile. See [host selection](../../../../../etc/
 
 Bequiet installation configures the binary fallback kernel and packaged NVIDIA
 open modules; its custom native `gentoo-kernel` workflow is documented in the
-[kernel guide](kernel.md#bequiet-conversion) and its
-[hardware baseline and acceptance checks](hosts/bequiet.md).
+[kernel guide](kernel.md#bequiet-modules-and-nvidia) and its
+[hardware baseline](hosts/bequiet.md).
 
 The initial world update excludes NVIDIA drivers to defer their kernel dependency
 until boot inputs exist. The kernel phase includes `@profile` alongside the

@@ -274,11 +274,3 @@ and codepoint-table switches are not needed.
 Console configuration, Firefox preference editing, and the custom font downloader
 have been removed. Existing console/browser settings and old user-installed font
 files are left untouched; inspect old installations before removing them manually.
-
-## Development checks
-
-```sh
-python3 -m unittest discover -s usr/local/share/agentoo/tests -p 'test_fonts*.py' -v
-python3 usr/local/bin/agentoo-fonts doctor --json
-python3 usr/local/bin/agentoo-fonts test --target firefox --no-open --output /tmp/fonts.html
-```

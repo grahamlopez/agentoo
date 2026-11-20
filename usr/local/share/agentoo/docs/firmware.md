@@ -12,10 +12,7 @@ CPU microcode follows the installer's `--microcode` choice. The rest of this gui
 covers installed linux-firmware trimming.
 
 Thinktop, Flattop, Startop and Bequiet have reviewed native savedconfig lists under
-`/etc/agentoo/firmware/`. Bequiet's trimmed selection is installed and accepted on
-both boot paths, including operator peripheral and suspend/resume confirmation.
-Startop has operator acceptance on both 6.18.60
-boot paths after trimming; see its [acceptance record](hosts/startop.md#installed-firmware-acceptance).
+`/etc/agentoo/firmware/`.
 The Intel laptop profile enables the native `savedconfig` USE flag through
 `package.use`; Bequiet enables it in its host profile. The common profile defaults
 to `-savedconfig`. Native `/etc/portage/package.use` settings override these
@@ -167,30 +164,10 @@ built-in firmware availability; changing savedconfig alone does not embed it.
 The [Bequiet list](../../../../../etc/agentoo/firmware/bequiet.list) retains AMD
 family-17h microcode, AX200 Wi-Fi API 77 and its root alias, Intel 8087:0029
 Bluetooth SFI/DDC, onboard RTL8125A and monitor/KVM RTL8156B Ethernet firmware.
-Both 6.18.62 kernels load those network firmware names; the custom kernel's AX200
-driver supports only API 77. Older packaged AX200 APIs are not selected.
-The optional `iwl-debug-yoyo.bin` is absent from the broad installed package too.
 NVIDIA's versioned GSP firmware and regulatory data remain separately package-owned.
-The inventoried camera, microphone, keyboards, YubiKey and hubs establish no
-additional linux-firmware requirement.
-
-The seven selected paths contain six regular payloads totaling 2,200,953 bytes,
-compared with 2,087,238,841 bytes in the broad linux-firmware-20261019 installation:
-a measured 99.9% reduction after rebuilding linux-firmware-20261019. Installed
-paths, durable input and active versioned snapshot all match the host list. The
-Portage-protected snapshot was reviewed and accepted at its native versioned path.
-Both custom and binary fallback kernels boot after trimming, with both GPUs,
-Wi-Fi/Bluetooth firmware initialization and onboard 2.5 Gb/s Ethernet confirmed.
-The fallback embeds no extra firmware. The operator confirms cold-start,
-functional peripheral and suspend/resume acceptance on both kernels.
-
-Bequiet's native source/module-enabled boot, hardware and refreshed binary
-recovery acceptance passed; same-version rebuild and version-update acceptance
-remain pending. See the [host evidence](hosts/bequiet.md#native-conversion-status);
-the [native kernel workflow](kernel.md#bequiet-conversion) permits enforced,
-signed modules only on Bequiet.
-Do not infer Bequiet update acceptance from Thinktop trials. Refresh its binary
-fallback explicitly and recompile embedded inputs in the native custom kernel.
+The [native kernel workflow](kernel.md#bequiet-modules-and-nvidia) permits enforced,
+signed modules only on Bequiet; refresh its binary fallback explicitly and
+recompile embedded inputs in the native custom kernel after firmware updates.
 
 ## Startop application follow-up
 
