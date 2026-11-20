@@ -153,6 +153,7 @@ agentoo display external speakers on
 agentoo display external volume               # e.g. 50/100 (speakers off)
 agentoo display external volume up
 agentoo display external usb                  # Read the active USB target
+agentoo display external usb dp1
 agentoo display external usb hdmi1
 agentoo display external usb thunderbolt
 agentoo display external usb next
@@ -172,7 +173,7 @@ host currently using the keyboard and mouse. With `--input thunderbolt` or
 `--input hdmi1`, the command first disables PiP/PbP and confirms settled readback,
 then selects and confirms the requested main video input. `--input active_kvm`
 reads the current USB/KVM target **before any writes** and selects its mapped
-video input (Thunderbolt or HDMI1); an unknown target fails without changing
+video input (Thunderbolt, DP1, or HDMI1); an unknown target fails without changing
 the monitor. This means the KVM target, not necessarily the host running the
 command. USB assignments are not rewritten.
 
@@ -182,10 +183,11 @@ checks the target again and restores it if the monitor moved it. A successful
 command prints `kvm NAME (preserved)`. Unknown initial targets or failed initial
 reads stop before video writes. Restoring a changed target uses the same
 single-cycle action and settled verification as `kvm`; it is never retried.
-This is limited to an active Thunderbolt/HDMI1 two-window configuration. If the
-target changes when disabling PbP or using another input pair, restoration is
-unsupported and the command reports that video changes completed but KVM
-preservation failed. Video-step failures stop immediately; KVM preservation is
+This is limited to an active two-window configuration with two distinct mapped
+USB targets (Thunderbolt, DP1, HDMI1) containing both the current and original
+targets. If the target changes when disabling PbP or using an unmapped input
+pair, restoration is unsupported and the command reports that video changes
+completed but KVM preservation failed. Video-step failures stop immediately; KVM preservation is
 then unconfirmed. Peripherals may briefly move to the other host while video
 inputs are changing. Preservation is covered by mocked tests; the combined
 layout/KVM restoration still requires physical confirmation.
@@ -219,8 +221,8 @@ secondary mappings are validated before writes. The sequence is layout,
 main input (if requested), then secondary input (if requested), with settled
 readback between steps. A failure stops the sequence without rollback or
 repeating writes. Intermediate source duplication can occur, as changing the
-main input does not swap the secondary. KVM mappings remain limited to the
-previously verified Thunderbolt/HDMI1 pair.
+main input does not swap the secondary. KVM mappings support the observed
+Thunderbolt, DP1, and HDMI1 targets.
 
 `pip-position next` requires small or large PiP. It advances clockwise through
 top left, top right, bottom right, bottom left. The current position is not
@@ -250,15 +252,17 @@ be treated as a simple scalar setting.
 `kvm` is a synonym for `usb`, including all arguments and options (for example,
 `agentoo display external kvm next`).
 
-`usb` reads the active target. `usb thunderbolt` / `usb hdmi1` select a target
-using its existing OSD USB assignment; they do not rewrite assignments.
-Switching currently requires a mapped active two-window layout containing
-Thunderbolt and HDMI1. A target already selected is a no-op. Otherwise the CLI
-sends one cycle action and waits for the target status to match; it never
-repeats the action on readback failure. `usb next` cycles that same mapped pair.
-Other input pairs, duplicate video inputs, unmapped target status, and unmapped
-layouts are rejected before switching. Peripherals may take several seconds
-to re-enumerate after target status changes.
+`usb` reads the active target. `usb thunderbolt` / `usb dp1` / `usb hdmi1`
+select a target using its existing OSD USB assignment; they do not rewrite
+assignments. Switching currently requires a mapped active two-window layout
+with two distinct mapped USB targets containing the current and requested
+targets. A target already selected is a no-op. Otherwise the CLI sends one
+cycle action and waits for the target status to match; it never repeats the
+action on readback failure. `usb next` cycles between the two active mapped
+windows. Unmapped inputs, targets outside the active two-window pair, duplicate
+video inputs, unmapped target status, and unmapped layouts are rejected before
+switching. Peripherals may take several seconds to re-enumerate after target
+status changes.
 
 For checkout testing, prefix commands with `./usr/local/bin/agentoo` from the
 repository root. The checkout implementation and its helper modules are used
@@ -414,8 +418,10 @@ just disappearance from Thunderbolt. The named `usb thunderbolt` restoration the
 `thunderbolt (status 0x01)`.
 
 The named USB targets map those observed status values, not physical port
-numbers: status `4` denotes the HDMI1 selection in this setup, whose USB
-assignment is USB-C 3. It must not be labelled USB-C 4. A
+numbers: status `1` denotes Thunderbolt, status `2` denotes DP1 (confirmed
+2026-11-19 when DP1 owned the shared USB devices), and status `4` denotes
+HDMI1 in this setup, whose USB assignment is USB-C 3. It must not be labelled
+USB-C 4. A
 [report for another Dell](https://github.com/ekamil/dell-ddc-documentation)
 provided the E7 cycle action and assignment-packing hypothesis; assignment
 `0x1640` decodes HDMI1 to USB3 consistently with the local OSD observation.

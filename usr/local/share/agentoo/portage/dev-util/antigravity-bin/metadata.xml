@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <use>
+    <flag name="notifications">Pull in libnotify and its notification daemon dependency for desktop notifications</flag>
+    <flag name="portal">Pull in xdg-desktop-portal for screen sharing and other portal integration; a desktop backend is also needed</flag>
+  </use>
+  <longdescription>
+    Official Google Antigravity agentic desktop application repackaged from the
+    upstream Linux Debian archive. Portage manages application files and
+    updates; sign-in credentials, projects, and user settings remain
+    user-managed.
+  </longdescription>
+</pkgmetadata>

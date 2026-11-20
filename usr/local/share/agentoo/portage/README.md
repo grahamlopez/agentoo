@@ -307,15 +307,16 @@ SSH sessions, and hardware-key authentication were not exercised.
 
 ## User-managed AI clients
 
-`dev-util/codex-cli-deps` and `dev-util/claude-code-deps` supply prerequisites
-for user-owned upstream installations, with testing keywords accepted in
-agentoo's common configuration. Select them explicitly; the former
-`early_install` package list is now [historical reference](../docs/history/package-sets/early-install.txt).
+`dev-util/codex-cli-deps`, `dev-util/claude-code-deps`, and
+`dev-util/antigravity-cli-deps` supply prerequisites for user-owned upstream
+installations, with testing keywords accepted in agentoo's common configuration.
+Select them explicitly; the former `early_install` package list is now
+[historical reference](../docs/history/package-sets/early-install.txt).
 `dev-util/pi-coding-agent-deps` supplies the same model for Pi and can be selected
 separately (accept its testing keyword on your system first).
 
 ```sh
-emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps
+emerge --ask dev-util/codex-cli-deps dev-util/claude-code-deps dev-util/antigravity-cli-deps
 ```
 
 These dependency-only packages install no client binaries or launchers. They
@@ -356,11 +357,29 @@ pins its dependencies and supports `pi update`:
 curl -fsSL https://pi.dev/install.sh | sh
 ```
 
+For Google Antigravity CLI (`agy`), use the official bootstrap installer:
+
+```sh
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
+
+The installer verifies the release archive's SHA-512 checksum and installs
+`~/.local/bin/agy` (or a custom directory passed via `--dir`). The native binary
+auto-updates in the background; `agy update` performs a manual update. Linux
+terminal sandboxing (`--sandbox`) uses kernel user namespaces and Landlock
+directly rather than an external `bwrap` binary. To enable Agentoo's shared
+statusline script (tracked in Git, with `app-misc/jq` supplied by
+`dev-util/antigravity-cli-deps`), run
+`/statusline /usr/local/share/agentoo/agents/antigravity-statusline.sh` inside
+`agy`. See the
+[Antigravity CLI reference](https://antigravity.google/docs/cli/reference).
+
 Follow each installer's PATH instructions. Run `command -v codex`,
-`command -v claude`, and the appropriate `--version` commands to verify the
-user-owned installations. Each user installs and signs in separately. Codex
-state lives in `~/.codex` (or `CODEX_HOME`); Claude uses `~/.claude` and
-`~/.claude.json` (or its `CLAUDE_CONFIG_DIR` override).
+`command -v claude`, `command -v agy`, and the appropriate `--version` commands
+to verify the user-owned installations. Each user installs and signs in
+separately. Codex state lives in `~/.codex` (or `CODEX_HOME`); Claude uses
+`~/.claude` and `~/.claude.json` (or its `CLAUDE_CONFIG_DIR` override);
+Antigravity CLI uses `~/.gemini/antigravity-cli` and `~/.cache/antigravity`.
 
 ### Herdr desktop app
 
@@ -460,6 +479,15 @@ rm -rf -- "$HOME/.local/share/claude"
 For Pi, rerun its installer and choose **Uninstall Pi**. For npm installations,
 use the corresponding `npm uninstall -g` command in the original npm environment.
 
+For the default Antigravity CLI installation:
+
+```sh
+rm -f -- "$HOME/.local/bin/agy"
+rm -rf -- "$HOME/.cache/antigravity"
+```
+
+If `--dir` was customized during installation, remove that `agy` binary instead.
+
 These commands preserve settings and sessions. The ebuild messages separately
 provide optional deletion commands for user data, including credentials and
 session history. Review custom paths and other clients sharing those directories
@@ -471,6 +499,52 @@ Check shell syntax, Portage dependency metadata, and install/removal messages,
 including suppression during replacement. On Gentoo, run package QA and emerge
 the dependency packages, then install upstream clients as a normal user and check
 versions and sandbox operation. Do not run upstream installers from Portage phases.
+
+## Antigravity desktop
+
+`dev-util/antigravity-bin` repackages the official Linux `.deb` for amd64. It is
+optional, with its testing keyword accepted in Agentoo's common keyword
+configuration; no package set selects it. Gentoo is not supported upstream.
+
+```sh
+sudo emerge --ask dev-util/antigravity-bin
+antigravity
+```
+
+On systems without Agentoo's keyword configuration, accept
+`dev-util/antigravity-bin::agentoo ~amd64` first. The proprietary application
+uses Gentoo's `all-rights-reserved` license identifier; accept that license for
+this package if your local license policy requires it.
+
+Portage owns `/opt/antigravity`, `/usr/bin/antigravity`, the `antigravity.desktop`
+application-menu and `antigravity://` URI handler entry, and the 512px icon.
+The payload keeps its bundled `language_server` and `chrome-devtools-mcp`
+resources intact. Debian maintainer scripts are not executed, the Debian-specific
+AppArmor profile is omitted, and `resources/app-update.yml` is removed so
+Portage owns updates instead of Electron's built-in self-updater.
+
+| USE flag | Ebuild default | Dependency and tradeoff |
+| --- | --- | --- |
+| `notifications` | Enabled (disabled in Agentoo's common `package.use`) | Supplies `libnotify` and its notification daemon dependency. |
+| `portal` | Disabled | Supplies `xdg-desktop-portal` for Wayland screen sharing and portal integration; install and configure a suitable backend too. |
+
+Update the Agentoo overlay, then update through Portage:
+
+```sh
+sudo emerge --ask --update dev-util/antigravity-bin
+```
+
+Removing the package preserves user settings, credentials, and projects under
+`~/.gemini` and `~/.config/Antigravity`. Sandboxing needs unprivileged user
+namespaces; do not use `--no-sandbox`. Run `antigravity --ozone-platform=wayland`
+to opt into native Wayland instead of XWayland.
+
+For version bumps, check the publisher's `latest-x64-linux.yml` manifest under
+`https://antigravity-hub-auto-updater-974169037036.us-central1.run.app/manifest/`,
+verify the versioned `linux-x64/Antigravity.deb` SHA-512 against that manifest,
+update `PV` and `MY_BUILD`, recheck ELF dependencies and `app-update.yml`, and
+regenerate the `Manifest`. Do not add `~arm64` without verifying and inspecting
+the corresponding arm64 artifact.
 
 ## ChatGPT desktop
 

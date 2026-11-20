@@ -21,11 +21,10 @@ DDC_TIMEOUT = 5
 DELL_PIP_CYCLE = 0x02
 DELL_USB_SWITCH = 0xFF00
 DELL_MAIN_INPUTS = {'thunderbolt': 0x19, 'hdmi1': 0x11, 'hdmi2': 0x12, 'dp1': 0x0F, 'dp2': 0x13}
-DELL_KVM_INPUTS = {'thunderbolt', 'hdmi1'}
 DELL_SECONDARY_INPUTS = {'thunderbolt': 0x6739, 'hdmi1': 0x6731, 'hdmi2': 0x6732,
                          'dp1': 0x672F, 'dp2': 0x6733}
 DELL_AUDIO_SOURCES = {'window1': 0xF1, 'window2': 0xF2}
-DELL_USB_TARGETS = {'thunderbolt': 1, 'hdmi1': 4}
+DELL_USB_TARGETS = {'thunderbolt': 1, 'dp1': 2, 'hdmi1': 4}
 # VCP 8D names the mute state: 1=mute on, 2=mute off. The Dell OSD
 # names the inverse state, Speaker: on=2, off=1.
 MUTE_VALUES = {'on': 1, 'off': 2}
@@ -117,8 +116,8 @@ def configure_parser(parser):
         if name == 'usb':
             child.add_argument('value', nargs='?', choices=('next', *DELL_USB_TARGETS), help='Omit to read the active USB target')
             child.epilog = ('Uses existing OSD USB assignments. Switching requires a mapped active two-window '
-                            'layout with Thunderbolt and HDMI1. Shared USB devices move to the selected host; '
-                            'the switch action is sent at most once.')
+                            'layout with two distinct mapped USB targets (Thunderbolt, DP1, HDMI1). '
+                            'Shared USB devices move to the selected host; the switch action is sent at most once.')
         elif name == 'audio-source':
             child.add_argument('value', nargs='?', choices=tuple(DELL_AUDIO_SOURCES), help='Omit to read the selected audio window')
         elif name == 'speakers':
@@ -258,29 +257,34 @@ def wait_for_feature(command, code, expected, *, maximum=False):
 
 def select_dell_usb(command, value):
     # E7 current bytes hold the USB/video assignment table. Its MH status byte
-    # identifies the active input; observed 1=Thunderbolt and 4=HDMI1.
+    # identifies the active input; observed 1=Thunderbolt, 2=DP1, and 4=HDMI1.
     status = read_feature(command, 'E7', maximum=True)
     active = status >> 8
+    active_name = next((name for name, code in DELL_USB_TARGETS.items() if code == active), None)
     if value is not None:
-        if active not in DELL_USB_TARGETS.values():
+        if active_name is None:
             raise RuntimeError(f'Unmapped active USB target 0x{active:02X}; no switch sent')
-        # This toggle is deliberately restricted to the two mapped hosts.
-        target = (next(value for value in DELL_USB_TARGETS.values() if value != active)
-                  if value == 'next' else DELL_USB_TARGETS[value])
-        if target != active:
+        if value != active_name:
             layout = read_feature(command, 'E9')
-            main = read_feature(command, '60')
+            main_raw = read_feature(command, '60')
             secondary_raw = read_feature(command, 'E8')
-            secondary = next((DELL_MAIN_INPUTS[name] for name, raw in DELL_SECONDARY_INPUTS.items()
-                              if raw == secondary_raw), None)
-            if layout == 0 or layout not in DELL_LAYOUTS.values() or {main, secondary} != {DELL_MAIN_INPUTS[name] for name in DELL_KVM_INPUTS}:
+            main_name = next((name for name, raw in DELL_MAIN_INPUTS.items() if raw == main_raw), None)
+            secondary_name = next((name for name, raw in DELL_SECONDARY_INPUTS.items()
+                                   if raw == secondary_raw), None)
+            windows = {main_name, secondary_name}
+            if (layout == 0 or layout not in DELL_LAYOUTS.values()
+                    or len(windows) != 2 or not windows <= DELL_USB_TARGETS.keys()
+                    or active_name not in windows):
                 raise RuntimeError('USB switching requires a mapped active two-window layout with '
-                                   'Thunderbolt and HDMI1; no switch sent')
+                                   'two distinct mapped USB targets; no switch sent')
+            target_name = next(name for name in windows if name != active_name)
+            if value != 'next' and value != target_name:
+                raise RuntimeError(f'USB target {value} is not the other active window ({target_name}); no switch sent')
+            target = DELL_USB_TARGETS[target_name]
             write_switch(command, 'E7', DELL_USB_SWITCH)
             wait_for_feature(command, 'E7', (target << 8) | (status & 0xFF), maximum=True)
-            active = target
-    name = next((name for name, value in DELL_USB_TARGETS.items() if value == active), 'unknown')
-    return name, active
+            active, active_name = target, target_name
+    return active_name or 'unknown', active
 
 
 def run_layout(command, value, *, target=None, secondary=None):

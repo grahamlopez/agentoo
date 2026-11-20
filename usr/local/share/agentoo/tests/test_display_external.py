@@ -34,6 +34,8 @@ class ExternalDisplay(unittest.TestCase):
         for original, after, main, secondary in [
                 (0x0100, 0x0400, 'hdmi1', 'thunderbolt'),
                 (0x0400, 0x0100, 'thunderbolt', 'hdmi1'),
+                (0x0200, 0x0400, 'hdmi1', 'dp1'),
+                (0x0200, 0x0200, 'dp1', 'thunderbolt'),
                 (0x0100, 0x0100, 'hdmi1', 'thunderbolt')]:
             args = parser.parse_args(['external', 'layout', '33-67', '--left', main, '--right', secondary])
             events = []
@@ -69,13 +71,17 @@ class ExternalDisplay(unittest.TestCase):
         self.assertEqual([call.args[1] for call in write.call_args_list], ['E9', 'E7'])
 
     def test_layout_kvm_restore_rejects_unsupported_pair(self):
-        args = DISPLAY.build_parser().parse_args(['external', 'layout', '33-67', '--left', 'dp1'])
-        with patch.object(EXTERNAL, 'read_feature', side_effect=[0x0100, 0x0400, 0x2D, 0x0F, 0x6731]), \
-                patch.object(EXTERNAL, 'write_switch') as write, \
-                patch.object(EXTERNAL, 'wait_for_feature'):
-            with self.assertRaisesRegex(RuntimeError, 'could not be preserved.*requires a mapped'):
-                EXTERNAL.run(args, None)
-        self.assertEqual([call.args[1] for call in write.call_args_list], ['E9', '60'])
+        for left, main_raw, pattern in [
+                ('dp2', 0x13, 'could not be preserved.*requires a mapped'),
+                ('dp1', 0x0F, 'could not be preserved.*not the other active window')]:
+            args = DISPLAY.build_parser().parse_args(['external', 'layout', '33-67', '--left', left])
+            with self.subTest(left=left), \
+                    patch.object(EXTERNAL, 'read_feature', side_effect=[0x0100, 0x0400, 0x2D, main_raw, 0x6731]), \
+                    patch.object(EXTERNAL, 'write_switch') as write, \
+                    patch.object(EXTERNAL, 'wait_for_feature'):
+                with self.assertRaisesRegex(RuntimeError, pattern):
+                    EXTERNAL.run(args, None)
+            self.assertEqual([call.args[1] for call in write.call_args_list], ['E9', '60'])
 
     def test_input_aliases_and_case(self):
         parser = DISPLAY.build_parser()
@@ -431,18 +437,30 @@ class ExternalDisplay(unittest.TestCase):
             write.assert_not_called()
 
     def test_usb_target_switch_writes_once_then_polls_status(self):
-        args = DISPLAY.build_parser().parse_args(['external', 'usb', 'hdmi1', '--bus', '13'])
-        with patch.object(EXTERNAL, 'read_feature', side_effect=[
-                0x0105, 0x2D, 0x11, 0x6739, 0x0105, 0x0405]), \
-                patch.object(EXTERNAL.time, 'sleep'), \
-                patch.object(EXTERNAL, 'write_switch') as write, patch('sys.stdout'):
-            EXTERNAL.run(args, None)
-            write.assert_called_once_with(['ddcutil', '--bus', '13'], 'E7', 0xFF00)
+        for requested, readings, expected in [
+                ('hdmi1', [0x0105, 0x2D, 0x11, 0x6739, 0x0105, 0x0405], 'hdmi1 (status 0x04)\n'),
+                ('dp1', [0x0405, 0x29, 0x0F, 0x6731, 0x0405, 0x0205], 'dp1 (status 0x02)\n'),
+                ('next', [0x0205, 0x29, 0x0F, 0x6731, 0x0205, 0x0405], 'hdmi1 (status 0x04)\n')]:
+            args = DISPLAY.build_parser().parse_args(['external', 'usb', requested, '--bus', '13'])
+            with self.subTest(requested=requested), \
+                    patch.object(EXTERNAL, 'read_feature', side_effect=readings), \
+                    patch.object(EXTERNAL.time, 'sleep'), \
+                    patch.object(EXTERNAL, 'write_switch') as write, \
+                    patch('sys.stdout', new_callable=io.StringIO) as output:
+                EXTERNAL.run(args, None)
+                write.assert_called_once_with(['ddcutil', '--bus', '13'], 'E7', 0xFF00)
+                self.assertEqual(output.getvalue(), expected)
 
     def test_usb_unmapped_layout_or_target_never_switches(self):
-        args = DISPLAY.build_parser().parse_args(['external', 'usb', 'next', '--bus', '13'])
-        for values in ([0x0205], [0x0105, 0, 0x11, 0x6739], [0x0105, 0x24, 0x19, 0x6739]):
-            with self.subTest(values=values), patch.object(EXTERNAL, 'read_feature', side_effect=values), \
+        for requested, values in [
+                ('next', [0x0305]),
+                ('next', [0x0105, 0, 0x11, 0x6739]),
+                ('next', [0x0105, 0x24, 0x19, 0x6739]),
+                ('next', [0x0205, 0x29, 0x0F, 0x6733]),
+                ('thunderbolt', [0x0205, 0x29, 0x0F, 0x6731])]:
+            args = DISPLAY.build_parser().parse_args(['external', 'usb', requested, '--bus', '13'])
+            with self.subTest(requested=requested, values=values), \
+                    patch.object(EXTERNAL, 'read_feature', side_effect=values), \
                     patch.object(EXTERNAL, 'write_switch') as write:
                 with self.assertRaisesRegex(RuntimeError, 'no switch sent'):
                     EXTERNAL.run(args, None)
