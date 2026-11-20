@@ -11,8 +11,12 @@ already provides it.
 Configuration design
 
 - Use application-native layers: shared defaults → selected host fragments →
-  local user overrides. Keep settings easy to find; avoid custom loaders and
-  generated or copied configuration when native mechanisms suffice.
+  local user overrides, plus interactive state (`$XDG_STATE_HOME` / native
+  store) only for live in-session preferences without rewriting authored config.
+  Keep settings easy to find; avoid custom loaders and generated or copied
+  configuration when native mechanisms suffice.
+- Scope hardware exceptions narrowly to host fragments or hardware IDs without
+  weakening shared defaults.
 - Keep one authoritative definition of each setting or policy; reuse it rather
   than maintaining parallel representations.
 
@@ -25,14 +29,19 @@ Code design
   operations whose names make the caller easier to follow. Avoid trivial
   forwarding wrappers and abstractions for hypothetical needs.
 - Add features, validation, and error handling for concrete requirements or failure
-  risks, not speculative edge cases. Preserve checks that prevent data loss or
-  changes to the wrong target.
+  risks, not speculative edge cases. Enforce safety and authority boundaries in
+  code rather than prose, and preserve checks that prevent data loss or changes
+  to the wrong target.
 - Prefer a few consistent, composable mechanisms over special cases and new
   concepts. Prefer the simplest coherent solution over the smallest diff.
 - Agentoo is pre-alpha; backward compatibility is not a requirement. Change
   interfaces directly and remove superseded code, aliases, and configuration.
   Update in-repository callers, tests, and documentation together; do not add
   compatibility layers or migration paths unless explicitly requested.
+- Minimize Markdown: put explanations in code/config comments and tool usage in
+  CLI output; reserve `docs/` for manual runbooks and host baselines. Keep
+  verification logs, progress checkpoints, and migration notes in Kanban cards
+  or commits—never in durable docs.
 
-See [configuration philosophy and guides](usr/local/share/agentoo/docs/README.md)
+See [philosophy, principles, and guides](usr/local/share/agentoo/docs/README.md)
 for project details.

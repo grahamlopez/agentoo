@@ -1,22 +1,17 @@
 # Gentoo configuration layout
 
-This repository is designed to be checked out with `/` as its Git work tree on
-every managed host. Files at their normal system paths are therefore both live
-configuration and ordinary tracked files; there is no separate deployment or
-synchronization step. The installed repository uses Git's non-cone sparse checkout
-to omit the root `README.md` and `AGENTS.md`; ordinary development clones include
-both files.
+This repository is checked out with `/` as its Git work tree on every managed
+host; installed repositories use Git's non-cone sparse checkout to omit root
+`README.md` and `AGENTS.md`, while development clones include both. See
+[philosophy and principles](../../usr/local/share/agentoo/docs/README.md#philosophy-and-principles)
+for layering, `$HOME`, state, and hardware-exception policy.
 
-Universal policy belongs in native common fragments. Host-specific policy
-belongs in a native fragment named for the host and is selected by the native
-Agentoo Portage profile. Do not copy a complete common file into a host variant,
-and do not make a common file silently depend on the machine where it was edited.
-
-Prefer native fragment, include, matching, and drop-in mechanisms. If a future
-configuration format cannot express a common layer plus a selected host layer,
-document that limitation and choose an explicit configuration ownership model.
-User dotfiles must be real tracked files or local overrides, never deployed
-copies or symlinks. See `/usr/local/share/agentoo/docs/README.md` for the configuration philosophy.
+Universal policy belongs in native common fragments, and host-specific policy
+belongs in a native fragment selected by the Agentoo Portage profile. Do not
+copy a complete common file into a host variant, and do not make a common file
+silently depend on the machine where it was edited. If a future configuration
+format cannot express a common layer plus a selected host layer, document that
+limitation and choose an explicit configuration ownership model.
 
 ## Host selection
 
@@ -79,11 +74,11 @@ native per-package environment. It does not select another host or build a custo
 Shared kernel policy lives in `/etc/kernel/config.d/10-agentoo.config`; local
 config.d fragments provide overrides. Portage owns the custom gentoo-kernel build lifecycle.
 The embedded-initramfs path is generated in each native build, not tracked policy.
-The binary fallback kernel's `/etc/kernel/cmdline` is separate. Only Bequiet may
-enable modules, with signing and enforcement. Its native boot/hardware and
-refreshed binary recovery acceptance passed; rebuild acceptance is pending. The
+The binary fallback kernel's `/etc/kernel/cmdline` is separate. Only Bequiet
+enables loadable modules, paired with mandatory module signing
+(`MODULE_SIG_FORCE=y`). See the
 [native kernel guide](../../usr/local/share/agentoo/docs/kernel.md)
-describes current scope and acceptance.
+for the build and recovery workflow.
 
 ## Related guides
 

@@ -19,7 +19,7 @@ that many preferences are hardcoded for simplicity over user-choice
 flexibility. Support is hardware and use-case specific, so for a new host
 configuration, use the [target host configuration checklist](usr/local/share/agentoo/docs/host-onboarding.md).
 
-Find [further guides and configuration philosophy](usr/local/share/agentoo/docs/README.md)
+Find [philosophy, principles, and guides](usr/local/share/agentoo/docs/README.md)
 
 A [kanban development board](usr/local/share/agentoo/kanban/README.md) is
 haphazardly maintained for capturing deferred and ongoing work.

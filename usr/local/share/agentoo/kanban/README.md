@@ -1,9 +1,12 @@
 # Development Kanban
 
 This board records deferred project work. Cards live in `Backlog` until work
-starts, then in `Open`. When a card is complete, record its implementation and
-validation notes in the commit that finishes it, delete the card, and add one
-line to the completed index below. Full card text stays in Git history.
+starts, then in `Open`. Use `Open` cards for active work, open acceptance
+checklists, and temporary in-place fleet transitions (with a per-host checklist)
+rather than putting work-in-progress status or migration notes in durable
+documentation. When a card is complete, record its implementation and validation
+notes in the commit that finishes it, delete the card, and add one line to the
+completed index below. Full card text stays in Git history.
 
 This repository uses `/` as its work tree on managed installations. The board
 therefore lives under `/usr/local/share/agentoo/kanban` as
