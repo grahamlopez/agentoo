@@ -68,8 +68,10 @@ class ReposTests(unittest.TestCase):
         self.assertEqual(repos.SYSTEM_GIT_DIR.relative_to(repos.SYSTEM_WORK_TREE),
                          Path('var/lib/agentoo/repository.git'))
         share = BIN.parent / 'share/agentoo'
-        for path in [*(share / 'git-hooks').iterdir(), share / 'shell/_agentoo',
-                     share / 'installer/gentoo-install.sh']:
+        repo_root = BIN.parents[2]
+        for path in [share / 'lib/git_permissions_hook.sh', share / 'shell/_agentoo',
+                     share / 'installer/gentoo-install.sh', repo_root / 'etc/gitconfig',
+                     repo_root / 'etc/agentoo/gitconfig']:
             text = path.read_text()
             self.assertIn(str(repos.SYSTEM_GIT_DIR), text, str(path))
             self.assertIn('lib/paths.py', text, str(path))

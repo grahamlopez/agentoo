@@ -177,9 +177,8 @@ def complete(current, words):
     if name == 'git':
         emit_usage(python_parser('git'))
         if not tokens:
-            emit('command', 'setup-hooks', 'Enable permission hooks')
             emit('command', 'enable-write', 'Switch origin to SSH')
-        if tokens and tokens[0] in ('setup-hooks', 'enable-write'):
+        if tokens and tokens[0] == 'enable-write':
             parser = python_parser('git')._subparsers._group_actions[0].choices[tokens[0]]
             emit_usage(parser)
             for action in parser._actions:

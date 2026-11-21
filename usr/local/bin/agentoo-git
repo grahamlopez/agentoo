@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run Git against Agentoo's system repository, preserving Git arguments verbatim.
 
-Only enable-write/setup-hooks are Agentoo operations. Their options are never
-interpreted in forwarded Git arguments; an initial `git` explicitly forwards.
+Only enable-write is an Agentoo operation. Its options are never interpreted in
+forwarded Git arguments; an initial `git` explicitly forwards.
 """
 import os
 from pathlib import Path
@@ -17,7 +17,6 @@ sys.path.insert(0, str(SHARE / 'lib'))
 from cli import ArgumentParser
 from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE
 
-HOOKS = '/usr/local/share/agentoo/git-hooks'
 SSH_REMOTE = 'git@github.com:grahamlopez/agentoo.git'
 GUARD_BYPASS = {'status', 'diff', 'log', 'show', 'blame', 'grep', 'ls-files', 'ls-tree',
                 'rev-parse', 'rev-list', 'describe', 'config', 'remote', 'fetch', 'push',
@@ -47,10 +46,9 @@ def build_parser():
                             epilog='Other arguments are passed unchanged to Git. Use `agentoo git git ...` '
                                    'to explicitly forward an Agentoo operation name to Git.')
     sub = parser.add_subparsers(dest='operation', required=True)
-    for name, description in [('enable-write', 'Switch origin fetch/push URL to SSH'),
-                              ('setup-hooks', 'Install managed permission hooks and readable repo metadata')]:
-        child = sub.add_parser(name, help=description, description=description)
-        child.add_argument('--no-input', action='store_true', help='Use sudo without prompting (sudo -n)')
+    child = sub.add_parser('enable-write', help='Switch origin fetch/push URL to SSH',
+                           description='Switch origin fetch/push URL to SSH')
+    child.add_argument('--no-input', action='store_true', help='Use sudo without prompting (sudo -n)')
     return parser
 
 
@@ -221,22 +219,6 @@ def unreadable_metadata_path(git_dir):
     return None
 
 
-def make_git_dir_readable(git_dir):
-    """Ensure repository metadata is world-readable without adding write bits."""
-    for root, _dirs, files in os.walk(git_dir):
-        root_path = Path(root)
-        mode = stat.S_IMODE(root_path.lstat().st_mode)
-        if (mode & 0o555) != 0o555:
-            os.chmod(root_path, mode | 0o555)
-        for name in files:
-            path = root_path / name
-            st = path.lstat()
-            if stat.S_ISREG(st.st_mode):
-                file_mode = stat.S_IMODE(st.st_mode)
-                if (file_mode & 0o444) != 0o444:
-                    os.chmod(path, file_mode | 0o444)
-
-
 def git_command(args):
     if os.geteuid() != 0 and SYSTEM_GIT_DIR.is_dir():
         if not os.access(SYSTEM_GIT_DIR, os.W_OK) and not is_read_only_command(args):
@@ -249,7 +231,7 @@ def git_command(args):
             if unreadable is not None:
                 raise RuntimeError(
                     f'cannot read {unreadable}; system repository metadata requires root.\n'
-                    'Run with sudo agentoo git ..., or make metadata world-readable with sudo agentoo git setup-hooks.')
+                    f'Run with sudo agentoo git ..., or fix metadata readability with: sudo chmod -R a+rX {SYSTEM_GIT_DIR}')
     command = ['git', f'--git-dir={SYSTEM_GIT_DIR}', f'--work-tree={SYSTEM_WORK_TREE}', *args]
     if os.geteuid() == 0 and (not args or args[0] not in GUARD_BYPASS):
         command = [sys.executable, str(SHARE / 'lib/git_transaction.py'), *command]
@@ -261,7 +243,7 @@ def main():
     if not args or args[0] in ('-h', '--help'):
         build_parser().print_help()
         return 0
-    if args[0] not in ('enable-write', 'setup-hooks'):
+    if args[0] != 'enable-write':
         if args[0] == 'git':
             args = args[1:]
         command = git_command(args)
@@ -273,34 +255,13 @@ def main():
         print(f'agentoo: git {parsed.operation} requires root; requesting sudo authorization.', file=sys.stderr)
         os.execvp('sudo', ['sudo', *(['-n'] if parsed.no_input else []), '--', sys.executable,
                           str(Path(__file__).resolve()), *args])
-    if parsed.operation == 'enable-write':
-        subprocess.run(git_command(['remote', 'set-url', 'origin', SSH_REMOTE]), check=True)
-        # Secrets may have installed a separate HTTPS push URL. Remove it so
-        # native Git inherits the SSH fetch URL for pushes too.
-        result = subprocess.run(git_command(['config', '--unset-all', 'remote.origin.pushurl']))
-        if result.returncode not in (0, 5):  # 5: no push override was present.
-            raise subprocess.CalledProcessError(result.returncode, result.args)
-        print(f'origin now uses SSH for fetch and push: {SSH_REMOTE}', file=sys.stderr)
-    else:
-        top = subprocess.run(git_command(['rev-parse', '--show-toplevel']), check=True,
-                             stdout=subprocess.PIPE, text=True).stdout.strip()
-        if top != str(SYSTEM_WORK_TREE):
-            raise RuntimeError('system repository work tree must be /')
-        for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
-            if not os.access(f'{HOOKS}/{name}', os.X_OK):
-                raise RuntimeError(f'missing hook: {HOOKS}/{name}')
-        result = subprocess.run(git_command(['config', '--get', 'core.hooksPath']),
-                                stdout=subprocess.PIPE, text=True)
-        if result.returncode not in (0, 1):
-            raise RuntimeError('could not read core.hooksPath')
-        existing = result.stdout.strip()
-        if existing and existing != HOOKS:
-            raise RuntimeError(f'refusing to replace existing hooksPath: {existing}')
-        subprocess.run([str(Path(__file__).resolve().parent / 'agentoo-permissions'), 'fix', *(['--no-input'] if parsed.no_input else [])], check=True)
-        subprocess.run(git_command(['config', 'core.hooksPath', HOOKS]), check=True)
-        subprocess.run(git_command(['config', 'core.sharedRepository', '0644']), check=True)
-        make_git_dir_readable(SYSTEM_GIT_DIR)
-        print('agentoo permission hooks enabled and repository metadata set world-readable.', file=sys.stderr)
+    subprocess.run(git_command(['remote', 'set-url', 'origin', SSH_REMOTE]), check=True)
+    # Secrets may have installed a separate HTTPS push URL. Remove it so
+    # native Git inherits the SSH fetch URL for pushes too.
+    result = subprocess.run(git_command(['config', '--unset-all', 'remote.origin.pushurl']))
+    if result.returncode not in (0, 5):  # 5: no push override was present.
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+    print(f'origin now uses SSH for fetch and push: {SSH_REMOTE}', file=sys.stderr)
     return 0
 
 

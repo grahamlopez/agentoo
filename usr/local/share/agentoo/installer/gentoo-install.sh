@@ -1596,8 +1596,6 @@ EOF
   printf '%s\n' "$esp_uuid" | run_privileged tee "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid" >/dev/null
   run_privileged chmod 644 "$MOUNT_ROOT/etc/kernel/gentoo-dist-esp.uuid"
   apply_optional_systemd_policy
-  # Enable only after first checkout: hooks use the target's absolute live paths.
-  run_privileged git --git-dir="$config_git_dir" config core.hooksPath /usr/local/share/agentoo/git-hooks
 
   run_privileged install -d -m 755 "$MOUNT_ROOT/etc/agentoo"
   printf '%s\n' "$CONFIG_SOURCE" | run_privileged tee "$MOUNT_ROOT/etc/agentoo/source" >/dev/null

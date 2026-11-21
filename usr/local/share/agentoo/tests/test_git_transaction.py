@@ -18,7 +18,7 @@ SPEC.loader.exec_module(GUARD)
 
 class GitTransactionTest(unittest.TestCase):
     def test_hooks_use_canonical_permission_operations(self):
-        hooks = PATH.parent.parent / 'git-hooks'
+        source = PATH.parent / 'git_permissions_hook.sh'
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             git = directory / 'git'
@@ -33,18 +33,18 @@ class GitTransactionTest(unittest.TestCase):
                                'exit "${HOOK_TEST_STATUS:-0}"\n')
             agentoo.chmod(0o755)
             env = dict(os.environ, PATH=f'{directory}:' + os.environ['PATH'], HOOK_TEST_LOG=str(log))
-            for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
+            for mode in ('check', 'fix'):
                 for uid in (0, 1000):
-                    with self.subTest(hook=name, uid=uid):
-                        hook = directory / name
+                    with self.subTest(mode=mode, uid=uid):
+                        hook = directory / 'git_permissions_hook.sh'
                         # Exercise both root/nonroot branches without privileges.
-                        hook.write_text((hooks / name).read_text().replace(
+                        hook.write_text(source.read_text().replace(
                             '/usr/local/bin/agentoo', str(agentoo)).replace('$EUID == 0', f'{uid} == 0'))
-                        result = subprocess.run(['bash', str(hook)], env=env, text=True, capture_output=True)
+                        result = subprocess.run(['bash', str(hook), mode], env=env, text=True, capture_output=True)
                         self.assertEqual(result.returncode, 0, result.stderr)
-                        operation = 'fix' if uid == 0 and name != 'pre-commit' else 'check'
+                        operation = 'fix' if uid == 0 and mode == 'fix' else 'check'
                         self.assertEqual(log.read_text().splitlines(), ['permissions', operation])
-                result = subprocess.run(['bash', str(hook)], env=dict(env, HOOK_TEST_STATUS='1'),
+                result = subprocess.run(['bash', str(hook), mode], env=dict(env, HOOK_TEST_STATUS='1'),
                                         text=True, capture_output=True)
                 self.assertEqual(result.returncode, 1)
                 self.assertIn('permissions need attention', result.stderr)

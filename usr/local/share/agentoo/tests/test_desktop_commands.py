@@ -38,7 +38,7 @@ class DesktopCommands(unittest.TestCase):
                 delay.assert_not_called()
 
     def test_help_is_safe_at_leaf(self):
-        for command, leaf in [('display', 'backlight'), ('screenshot', 'region'), ('git', 'enable-write'), ('git', 'setup-hooks')]:
+        for command, leaf in [('display', 'backlight'), ('screenshot', 'region'), ('git', 'enable-write')]:
             for prefix in [[str(BIN / 'agentoo'), command], [str(BIN / ('agentoo-' + command))]]:
                 result = subprocess.run([*prefix, leaf, '--help'], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)

@@ -5,7 +5,6 @@ import importlib.util
 import io
 import os
 from pathlib import Path
-import stat
 import subprocess
 import tempfile
 import unittest
@@ -77,7 +76,6 @@ class GitTests(unittest.TestCase):
                                   ('please', 'push --force-with-lease'), ('shell', '!echo hi')]:
                 subprocess.run(['git', f'--git-dir={repository}', 'config', f'alias.{alias}', target],
                                check=True, env=env)
-            git.make_git_dir_readable(repository)
             # Simulate a root-owned read-only system repository.
             os.chmod(repository, 0o555)
             try:
@@ -118,7 +116,6 @@ class GitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             repository, work_tree, env = self._init_repo_with_commit(root)
-            git.make_git_dir_readable(repository)
             ref = repository / 'refs/heads/main'
             index = repository / 'index'
             for restricted in (ref, index):
@@ -136,51 +133,54 @@ class GitTests(unittest.TestCase):
                     finally:
                         os.chmod(restricted, 0o644)
 
-    def test_setup_hooks_configures_shared_repository_and_repairs_metadata_modes(self):
+    def test_system_repo_config_hooks_activate_only_for_system_gitdir(self):
+        repo_root = Path(__file__).resolve().parents[5]
+        system_cfg = repo_root / 'etc/agentoo/gitconfig'
+        global_template = (repo_root / 'etc/gitconfig').read_text()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             repository, work_tree, env = self._init_repo_with_commit(root)
-            hooks = root / 'hooks'
-            hooks.mkdir()
-            for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
-                hook = hooks / name
-                hook.write_text('#!/bin/sh\nexit 0\n')
-                hook.chmod(0o755)
-            # Simulate drifted root-only modes written under umask 077.
-            os.chmod(repository / 'refs/heads/main', 0o600)
-            os.chmod(repository / 'index', 0o600)
-            pack_dir = repository / 'objects/pack'
-            sample_pack = pack_dir / 'pack-sample.pack'
-            sample_pack.write_bytes(b'pack')
-            os.chmod(sample_pack, 0o400)
-            os.chmod(repository / 'refs/heads', 0o700)
-
-            real_run = subprocess.run
-
-            def run_without_system_permissions(command, *args, **kwargs):
-                if command and str(command[0]).endswith('agentoo-permissions'):
-                    return subprocess.CompletedProcess(command, 0)
-                return real_run(command, *args, **kwargs)
-
-            with patch.dict(os.environ, env, clear=True), \
-                 patch.object(git, 'SYSTEM_GIT_DIR', repository), \
-                 patch.object(git, 'SYSTEM_WORK_TREE', work_tree), \
-                 patch.object(git, 'HOOKS', str(hooks)), \
-                 patch.object(git.os, 'geteuid', return_value=0), \
-                 patch.object(git.subprocess, 'run', side_effect=run_without_system_permissions), \
-                 patch.object(git.sys, 'argv', ['agentoo-git', 'setup-hooks']), \
-                 redirect_stderr(io.StringIO()):
-                self.assertEqual(git.main(), 0)
-
-            shared = subprocess.run(
-                ['git', f'--git-dir={repository}', 'config', '--get', 'core.sharedRepository'],
-                check=True, env=env, text=True, capture_output=True,
-            ).stdout.strip()
+            cfg = root / 'gitconfig'
+            cfg.write_text(
+                global_template.replace(
+                    '/var/lib/agentoo/repository.git', str(repository)
+                ).replace(
+                    '/etc/agentoo/gitconfig', str(system_cfg)
+                )
+            )
+            env = {**env, 'GIT_CONFIG_GLOBAL': str(cfg)}
+            base = ['git', f'--git-dir={repository}', f'--work-tree={work_tree}']
+            shared = subprocess.run([*base, 'config', '--get', 'core.sharedRepository'],
+                                    check=True, env=env, text=True, capture_output=True).stdout.strip()
             self.assertEqual(shared, '0644')
-            self.assertEqual(stat.S_IMODE((repository / 'refs/heads').stat().st_mode), 0o755)
-            self.assertEqual(stat.S_IMODE((repository / 'refs/heads/main').stat().st_mode), 0o644)
-            self.assertEqual(stat.S_IMODE((repository / 'index').stat().st_mode), 0o644)
-            self.assertEqual(stat.S_IMODE(sample_pack.stat().st_mode), 0o444)
+            for event, expected in [
+                ('pre-commit', 'agentoo-permissions-check'),
+                ('post-checkout', 'agentoo-permissions-fix'),
+                ('post-merge', 'agentoo-permissions-fix'),
+                ('post-rewrite', 'agentoo-permissions-fix'),
+                ('commit-msg', 'wrap-commit-msg'),
+            ]:
+                with self.subTest(event=event):
+                    listed = subprocess.run([*base, 'hook', 'list', event],
+                                            check=True, env=env, text=True, capture_output=True).stdout.splitlines()
+                    self.assertIn(expected, listed)
+
+            # Repo-local override disables a config hook cleanly.
+            subprocess.run([*base, 'config', 'hook.agentoo-permissions-check.enabled', 'false'],
+                           check=True, env=env)
+            disabled = subprocess.run([*base, 'hook', 'list', 'pre-commit'],
+                                      env=env, text=True, capture_output=True)
+            self.assertIn('disabled\tagentoo-permissions-check', disabled.stdout.splitlines())
+
+            # Dev clones get wrap-commit-msg, not system-repo permission hooks.
+            dev = root / 'dev'
+            subprocess.run(['git', 'init', '-q', str(dev)], check=True, env=env)
+            dev_pre = subprocess.run(['git', '-C', str(dev), 'hook', 'list', 'pre-commit'],
+                                     env=env, text=True, capture_output=True)
+            self.assertNotIn('agentoo-permissions-check', dev_pre.stdout)
+            dev_msg = subprocess.run(['git', '-C', str(dev), 'hook', 'list', 'commit-msg'],
+                                     check=True, env=env, text=True, capture_output=True).stdout.splitlines()
+            self.assertIn('wrap-commit-msg', dev_msg)
 
 
 class WrapCommitMessageTests(unittest.TestCase):

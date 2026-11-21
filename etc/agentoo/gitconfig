@@ -1,0 +1,15 @@
+# Native Git settings and hooks scoped to the installed system repository
+# via [includeIf "gitdir:/var/lib/agentoo/repository.git"] in /etc/gitconfig.
+# Canonical path: usr/local/share/agentoo/lib/paths.py (SYSTEM_GIT_DIR).
+[core]
+    sharedRepository = 0644
+
+[hook "agentoo-permissions-check"]
+    event = pre-commit
+    command = /usr/local/share/agentoo/lib/git_permissions_hook.sh check
+
+[hook "agentoo-permissions-fix"]
+    event = post-checkout
+    event = post-merge
+    event = post-rewrite
+    command = /usr/local/share/agentoo/lib/git_permissions_hook.sh fix

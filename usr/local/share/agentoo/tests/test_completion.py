@@ -95,7 +95,7 @@ class CompletionTests(unittest.TestCase):
                     'agentoo secrets install --us': 'agentoo secrets install --user ',
                     f'agentoo secrets install --profile {shlex.quote(str(profile))} custom-':
                         f'agentoo secrets install --profile {shlex.quote(str(profile))} custom-category ',
-                    'agentoo git setup-h': 'agentoo git setup-hooks ',
+                    'agentoo git enable-w': 'agentoo git enable-write ',
                     'agentoo git stat': 'agentoo git status ',
                 }
                 for text, expected in cases.items():

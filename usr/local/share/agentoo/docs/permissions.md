@@ -24,7 +24,6 @@ permission bits are rejected. Comments occupy their own lines.
 ```conf
 # kind path uid gid file-mode directory-mode
 tree usr/local/share/agentoo/ 0 0 0644 0755
-tree usr/local/share/agentoo/git-hooks/ 0 0 0755 0755
 
 # kind path uid gid mode
 file usr/local/share/agentoo/installer/gentoo-install.sh 0 0 0755
@@ -81,20 +80,23 @@ parent symlinks, and fixes recheck the opened object's type and identity.
 Concurrent filesystem changes can still interrupt a repair; stop other writers
 while repairing and rerun the checker if interrupted.
 
-The installer applies the policy after checkout, then configures the live
-repository's `core.hooksPath` to `/usr/local/share/agentoo/git-hooks`:
+System-repository permission hooks are configured natively through `/etc/gitconfig`
+via `[includeIf "gitdir:/var/lib/agentoo/repository.git"]`, which loads
+`/etc/agentoo/gitconfig` and runs `/usr/local/share/agentoo/lib/git_permissions_hook.sh`:
 
-- After checkout, merge, or rewrite/rebase: fix when running as root; otherwise check.
-- Before commit: check and block the commit if permissions or policy coverage fail.
+- `agentoo-permissions-fix` (`post-checkout`, `post-merge`, `post-rewrite`): fix
+  when running as root; otherwise check.
+- `agentoo-permissions-check` (`pre-commit`): check and block the commit if
+  permissions or policy coverage fail.
 
-To apply the policy and enable the hooks manually, run `agentoo git setup-hooks`
-as root. It refuses to replace a different configured
-hooks directory. Hooks guard both the `/` work tree and the installed Git
-database path, and are not enabled in development clones. Post-operation
-failures report problems but do not roll back Git changes. Run the checker after
-manual recovery; reset/restore and manual edits are not all covered by hooks.
-No background service or automatic privilege prompt is installed. To disable
-these hooks, use `agentoo git config --unset core.hooksPath`.
+Both the `includeIf` path and the hook script guard the `/` work tree and the
+installed Git database path, so these hooks never activate in development clones
+or during `/mnt/gentoo` installation. Post-operation failures report problems
+but do not roll back Git changes. Run the checker after manual recovery;
+reset/restore and manual edits are not all covered by hooks. No background
+service or automatic privilege prompt is installed. To disable a hook locally,
+use `sudo agentoo git config hook.<name>.enabled false` (for example,
+`hook.agentoo-permissions-check.enabled`).
 
 ## Live Hyprland configuration updates
 
