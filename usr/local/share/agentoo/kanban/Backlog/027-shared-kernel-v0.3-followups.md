@@ -22,9 +22,9 @@ firmware and minimal initramfs; the operator confirmed everything works before
 and after suspend. Its host card records boot-log evidence and remaining scope.
 
 Host cards: [thinktop](023-thinktop-kernel-v0.3-followups.md),
-[Startop acceptance](../../docs/hosts/startop.md#installed-firmware-acceptance),
+[Startop](../../docs/hosts/startop.md),
 [flattop](025-flattop-kernel-v0.3-followups.md),
-[Bequiet](../../docs/hosts/bequiet.md#kernel-and-secure-boot).
+[Bequiet](../../docs/hosts/bequiet.md).
 Record per-host results there.
 
 ## Common validation, where used

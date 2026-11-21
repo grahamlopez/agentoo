@@ -14,7 +14,7 @@ vary. Start with both Linux boot paths working and Secure Boot disabled.
 The maintained source workflow permits signed, enforced modules only on Bequiet;
 all other targets require no modules. Early-boot drivers remain built in on every
 host. Follow [Bequiet modules and NVIDIA](kernel.md#bequiet-modules-and-nvidia)
-and [hosts/bequiet.md](hosts/bequiet.md#kernel-and-secure-boot). Firmware EFI
+and [hosts/bequiet.md](hosts/bequiet.md). Firmware EFI
 trust and kernel module-signing trust are separate requirements. See the
 [kernel guide](kernel.md) for current supported scope.
 

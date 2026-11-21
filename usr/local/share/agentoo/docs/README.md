@@ -11,8 +11,8 @@ System
 - [Host profiles and configuration policy](../../../../../etc/agentoo/README.md)
 - [Installation, first boot, and user setup](installation.md)
 - [Target host configuration checklist](host-onboarding.md)
-  with [Flattop](hosts/flattop.md), [Startop](hosts/startop.md), and
-  [Bequiet](hosts/bequiet.md) hardware baselines
+  with [Thinktop](hosts/thinktop.md), [Flattop](hosts/flattop.md),
+  [Startop](hosts/startop.md), and [Bequiet](hosts/bequiet.md) hardware baselines
 - [Startop power after resume investigation](hosts/startop-power.md)
 - [System checkpoints and recovery](checkpoints.md)
 - [Git updates for the system repository](git.md)

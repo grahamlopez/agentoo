@@ -50,7 +50,7 @@ acceptance. See the [kernel guide](../../docs/kernel.md).
 
 Bequiet's native conversion passed Secure Boot/NVIDIA, hardware and refreshed
 binary recovery acceptance on 2026-11-17; see
-[hosts/bequiet.md](../../docs/hosts/bequiet.md#kernel-and-secure-boot). Validate a
+[hosts/bequiet.md](../../docs/hosts/bequiet.md). Validate a
 same-version custom rebuild followed by NVIDIA rebuilding and reboot, then a
 subsequent version update including native external-module dependency handling.
 Other module-enabled conversions remain deferred; shared/fleet

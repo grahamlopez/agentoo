@@ -89,6 +89,7 @@ for the build and recovery workflow.
 - [Firmware ownership and maintenance](../../usr/local/share/agentoo/docs/firmware.md)
 - [Checkpoints and subvolume boundaries](../../usr/local/share/agentoo/docs/checkpoints.md)
 - [Target host checklist](../../usr/local/share/agentoo/docs/host-onboarding.md)
+- [Thinktop hardware baseline](../../usr/local/share/agentoo/docs/hosts/thinktop.md)
 - [Flattop hardware baseline](../../usr/local/share/agentoo/docs/hosts/flattop.md)
 - [Startop hardware baseline](../../usr/local/share/agentoo/docs/hosts/startop.md)
 - [Bequiet hardware baseline](../../usr/local/share/agentoo/docs/hosts/bequiet.md)

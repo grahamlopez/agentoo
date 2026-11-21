@@ -1,55 +1,53 @@
 # Flattop hardware baseline
 
-Flattop is a Framework Laptop (13th Gen Intel Core), board FRANMCCP06 A6,
-with an Intel Core i7-1360P (12 cores, 16 logical CPUs), Intel Raptor Lake-P
-integrated graphics, AX211 Wi-Fi, Intel USB Bluetooth, and WD NVMe storage.
-This baseline comes from `kernel-inventory-flattop-20261024T135738Z.tar.gz`,
-collected on 2026-10-24 while running `6.12.21-gentoo-lopez64`.
+## Hardware identity
 
-The host Portage profile selects Intel graphics, GCC `-march=raptorlake`,
-Rust `-C target-cpu=raptorlake`, and Thinktop's operator-selected build policy:
-`PORTAGE_TMPDIR="/dev/shm"` and `MAKEOPTS="-j12"`. The inventory does not report
-RAM capacity. Installer transactions also default to RAM-backed builds;
-`--no-ram-builds` selects disk-backed storage for an installer invocation.
+Framework Laptop 13 (13th Gen Intel Core, board FRANMCCP06 A6), Intel Core
+i7-1360P (12 cores / 16 logical CPUs), Intel Raptor Lake-P integrated graphics
+(`i915`), Intel AX211 Wi-Fi (`iwlwifi`), Intel USB Bluetooth (`8087:0033`), IDT
+92HD95 HDA audio (`snd_hda_intel`), Realtek UVC camera (`0bda:5634`), WD NVMe
+storage, and internal 2880×1920 (3:2) panel.
 
-The profile accepts the testing keyword for `app-laptop/framework_tool`.
-Install the Framework hardware control utility with
-`emerge --ask app-laptop/framework_tool` after selecting flattop's profile.
+## Scoped exceptions
 
-The captured boot used i915, iwlwifi, btusb, nvme, and snd_hda_intel, with an
-IDT 92HD95 audio codec. Flattop's profile does not select SOF firmware; a DSP-detected
-log line alone does not establish that SOF was used. Subsequent distribution
-and custom-kernel boot evidence supports the reviewed Flattop savedconfig list,
-`/etc/agentoo/firmware/flattop.list` (see [firmware](../firmware.md)). Applying
-the list and validating after trimming are separate steps.
+- **Portage profile (`agentoo:hosts/flattop`, inherits `hardware/intel-laptop`):**
+  Selects `-march=raptorlake`, Rust `-C target-cpu=raptorlake`,
+  `VIDEO_CARDS="-* intel"`, `/dev/shm` build storage, `MAKEOPTS="-j12"`,
+  `linux-firmware` `savedconfig`, and `~amd64` keyword acceptance for
+  `app-laptop/framework_tool`.
+- **Custom kernel (`/etc/agentoo/kernel/hosts/flattop.config`):** Retains
+  shared `CONFIG_MODULES=n`; embeds ADLP/TGL graphics, AX211 Wi-Fi/PNVM,
+  Bluetooth `ibt-0040-0041`, regulatory data, and `intel-ucode/06-ba-02`.
+  Disables absent AMD KVM/CCP, IT87 GPIO, IBM ACPI PCI hotplug, and
+  `CONFIG_CHARGER_CROS_USBPD` while retaining `CROS_EC`.
+- **Installed firmware (`/etc/agentoo/firmware/flattop.list`):** Trimmed
+  `linux-firmware` selection covering ADLP/TGL graphics, AX211, Intel Bluetooth,
+  and RTL8156 dock Ethernet.
+- **Desktop (`/etc/xdg/hypr/hosts/flattop.lua`):** Sets internal `eDP-1` to
+  `preferred` at scale `1`. Kitty uses shared defaults.
 
-UEFI is evidenced by mounted efivarfs and EFI devices. System Secure Boot status
-was not collected (the Bluetooth controller's secure-boot message is unrelated).
-No host-specific EFI registration workaround is established. The previous
-kernel config is evidence, not an Agentoo kernel configuration to install.
+## Hardware quirks and negative findings
 
-Before installation, confirm Secure Boot status, RAM capacity, the disk to erase,
-and normal peripherals. Validate display, Wi-Fi, Bluetooth, speakers/headphones,
-microphone, touchpad, and suspend/resume on the new kernel. The inventory reports
-s2idle and deep sleep availability but does not exercise either. Display scaling,
-fingerprint setup, and other desktop preferences remain unconfigured.
+- **Audio:** Uses legacy HDA/IDT (`snd_hda_intel`); no SOF firmware is needed.
+  The AVS alternative requests `intel/avs/adl/dsp_basefw.bin`, which is absent
+  even from broad `linux-firmware`.
+- **Charging & EC (`CHARGER_CROS_USBPD` / `cros_charge-control`):** Framework
+  uses ACPI battery/mains reporting; `CHARGER_CROS_USBPD` fails with `-71` and
+  is intentionally disabled. `cros_charge-control` intentionally declines load
+  when Framework's custom charge-limit command (`0x3E03`) is present—do not
+  force-load it or it resets the configured 90% ceiling to 0–100%.
+- **Secure Boot enrollment:** On Insyde BIOS 03.16, delete PK under
+  *Administer Secure Boot → PK Options* to enter Setup Mode, then enroll with
+  `sbctl enroll-keys --microsoft --firmware-builtin --custom --ignore-immutable`
+  (see [secure-boot.md](../secure-boot.md#flattop-firmware-menu)).
+- **Benign ACPI logs:** Missing `RP28.PXSX.WIST` / `CNVW.IFUN` / `CNVW._DSM`
+  errors also occur on the binary fallback kernel; do not chase them as custom
+  kernel regressions.
 
-## Custom-kernel boot message cleanup
+## Peripheral and workflow notes
 
-The Flattop kernel fragment disables AMD KVM, ITE IT87 GPIO, IBM ACPI PCI
-hotplug, and AMD CCP crypto offload. With these drivers built in, the observed
-6.18.57-agentoo-v0.4 boot reports probe failures for hardware absent on this host.
-The shared baseline retains these capabilities for other platforms.
-
-The fragment also disables the Chrome EC USB-PD charger driver, which reports
-an invalid port count and fails with `-71` on both the custom and distribution
-6.18.57 kernels. Framework uses ACPI battery/mains reporting; Chrome EC support
-remains enabled. After rebuilding with this fragment, verify charger detection,
-charging on the supported USB-C ports, and suspend/resume. These changes require
-a fresh kernel configuration/build and a boot test; they are not yet accepted
-on hardware.
-
-The ACPI errors referencing missing `RP28.PXSX.WIST` and aborting `CNVW.IFUN`
-and `CNVW._DSM` also occur with the binary fallback kernel. They remain a separate
-firmware/kernel investigation; this fragment does not suppress them or alter
-console logging policy.
+- Retains `rtl_nic/rtl8156b-2.fw` for the shared Dell U5226KW monitor/KVM.
+- Open Framework EC/peripheral checks live in
+  [card 025](../../kanban/Backlog/025-flattop-kernel-v0.3-followups.md);
+  native `gentoo-kernel` migration is tracked in
+  [card 053](../../kanban/Open/053-gentoo-kernel-fleet-migration.md).
