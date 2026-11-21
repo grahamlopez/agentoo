@@ -117,21 +117,41 @@ loaded.
 
 ### Documentation
 
-Minimize Markdown. Information belongs in one of four homes:
+Minimize Markdown by putting knowledge where it operates. Every kind of
+information has **one** authoritative home—never mirror it across two:
 
-1. **Comments beside code and config** — explanations, *why*, and invariants.
-2. **CLI `--help` and command output** — operational usage for `agentoo` tools.
-3. **Minimal Markdown (`docs/`)** — only manual operational runbooks that cannot
-   live in CLI output or comments, plus disciplined per-host hardware baselines
-   (`docs/hosts/<host>.md`).
-4. **Kanban cards (`kanban/`)** — deferred work, investigations, and temporary
-   fleet transitions.
+| Knowledge type | Single authoritative home |
+| --- | --- |
+| Tool mechanics (flags, bounds, units, exit codes, examples) | CLI `--help` (never mirrored in `docs/`) |
+| Config/code invariants, register maps, and *why-not* notes | Comments beside the live code or config |
+| Overlay package USE flags, user setup, and bump checklists | Native Portage (`metadata.xml`, `files/README.gentoo`, ebuild header comments) |
+| Cross-tool mental models and multi-step human runbooks | Minimal `docs/` guides |
+| Per-host hardware facts and exception indexes | Uniform `docs/hosts/<host>.md` baselines |
+| Deferred work, investigations, future designs, active checklists, fleet migrations | `kanban/` cards |
 
-Durable docs (`docs/`, `README.md`, comments) describe the *current system*,
-never work-in-progress history. Do not record test runs, verification logs,
-acceptance checklists ("pending/passed"), session checkpoints, or "not tested on
-hardware" disclaimers in durable docs—those belong only in active Kanban cards
-or Git commit messages so they vanish cleanly when the work finishes.
+**Litmus test for `docs/*.md`:** Strip out tool mechanics (→ `--help`) and
+single-file config or packaging facts (→ comments / Portage). Keep a `docs/`
+file only when a genuine cross-tool mental model or multi-step human workflow
+remains—and point to `--help` or live files instead of paraphrasing flag tables,
+keybinding tables, or config grammars (**No-Mirror rule**).
+
+- **Current system only:** Durable docs (`docs/`, `README.md`, comments)
+  describe the *current system*, never work-in-progress history. Never record
+  test runs, dated verification logs, acceptance checklists ("pending/passed"),
+  session checkpoints, or "not tested on hardware" disclaimers in durable
+  docs—those belong in active Kanban cards or Git commit messages.
+- **Git is the history folder:** Do not maintain `docs/history/` or archived
+  legacy snapshots in the live `/` work tree. Delete retired docs cleanly with
+  a descriptive commit message; Git history is the archive.
+- **Uniform host baselines (`docs/hosts/<host>.md`):** Every onboarded physical
+  host has one concise baseline using the same four sections:
+  1. *Hardware identity* — model, CPU, GPU, Wi-Fi/BT, audio, storage.
+  2. *Scoped exceptions* — host-specific profile, kernel, firmware, dracut, udev,
+     desktop, and EFI exceptions with brief *why*.
+  3. *Hardware quirks and negative findings* — concise *why-not* facts so agents
+     do not repeat rejected fixes or misread benign logs.
+  4. *Peripheral and workflow notes* — active display/dock/recovery notes and
+     links to open `kanban/` investigations.
 
 ### Compatibility and fleet transitions
 

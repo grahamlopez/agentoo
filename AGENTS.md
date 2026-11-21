@@ -38,10 +38,14 @@ Code design
   interfaces directly and remove superseded code, aliases, and configuration.
   Update in-repository callers, tests, and documentation together; do not add
   compatibility layers or migration paths unless explicitly requested.
-- Minimize Markdown: put explanations in code/config comments and tool usage in
-  CLI output; reserve `docs/` for manual runbooks and host baselines. Keep
-  verification logs, progress checkpoints, and migration notes in Kanban cards
-  or commits—never in durable docs.
+- Minimize Markdown and never mirror code or `--help` in docs. Route each kind
+  of knowledge to its single operational home: tool flags/examples → CLI
+  `--help`; config/code facts and *why-not* notes → comments at the site;
+  package USE/setup/bump notes → Portage (`metadata.xml`, `README.gentoo`,
+  ebuild comments); cross-tool mental models, multi-step human runbooks, and
+  host baselines → `docs/`; deferred work, investigations, future designs,
+  active checklists, and temporary fleet transitions → `kanban/`. Never keep
+  verification logs, progress checkpoints, or `docs/history/`—Git is the archive.
 
 See [philosophy, principles, and guides](usr/local/share/agentoo/docs/README.md)
 for project details.

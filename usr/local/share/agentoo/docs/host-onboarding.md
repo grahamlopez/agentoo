@@ -20,9 +20,11 @@ configuration support only; installation and hardware acceptance are separate.
 - [ ] **`usr/local/share/agentoo/tests/test_installer.py`** — extend the accepted
   target list in `test_supported_targets_validate` and add coverage for any new
   installer behavior. The shared native profile adapter needs no new name registry.
-- [ ] **`etc/agentoo/README.md`** — update supported selectors. Record hardware
-  assumptions and the selected host policy in
-  `usr/local/share/agentoo/docs/hosts/<host>.md`.
+- [ ] **`etc/agentoo/README.md`** and **`usr/local/share/agentoo/docs/README.md`** —
+  update supported selectors and links. Record hardware identity, scoped
+  exceptions, and quirks in `usr/local/share/agentoo/docs/hosts/<host>.md` using
+  the uniform four-section baseline format in
+  [docs/README.md](README.md#documentation).
 
 ## Required for custom kernel support
 
