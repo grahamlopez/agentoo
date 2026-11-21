@@ -125,9 +125,10 @@ for interpreting coverage, matching, and rendering evidence.
 ## Privileges and secret installation
 
 Operations request sudo only when needed; help and desktop utilities run as the
-current user. Arbitrary Git commands also run as the current user: use explicit
-`sudo agentoo git ...` for protected system repository writes. Git may require
-root even for reads that traverse protected files or access its database.
+current user. Read-only `agentoo git` commands run as the current user against
+world-readable system repository metadata; mutating Git commands fail fast and
+require explicit `sudo agentoo git ...` (full-tree `status`/`diff` also needs
+`sudo` to inspect root-only paths like `/root/`).
 Secrets confirm selected file replacements before Proton login. Use
 `agentoo secrets install --profile FILE --user USER CATEGORY --dry-run` to inspect
 the plan without fetching secrets or replacing files. Installation requires

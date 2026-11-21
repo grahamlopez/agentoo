@@ -5,6 +5,7 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -43,6 +44,143 @@ class GitTests(unittest.TestCase):
                         result = subprocess.run([*command, 'remote', 'get-url', *options, 'origin'],
                                                 check=True, text=True, capture_output=True)
                         self.assertEqual(result.stdout.strip(), git.SSH_REMOTE)
+
+    def _init_repo_with_commit(self, root):
+        repository = root / 'repository.git'
+        work_tree = root / 'work'
+        work_tree.mkdir()
+        env = {
+            **os.environ,
+            'GIT_CONFIG_NOSYSTEM': '1',
+            'GIT_CONFIG_GLOBAL': '/dev/null',
+            'GIT_AUTHOR_NAME': 'Test',
+            'GIT_AUTHOR_EMAIL': 'test@example.invalid',
+            'GIT_COMMITTER_NAME': 'Test',
+            'GIT_COMMITTER_EMAIL': 'test@example.invalid',
+        }
+        subprocess.run(['git', 'init', '--bare', '-b', 'main', str(repository)],
+                       check=True, env=env, capture_output=True)
+        base = ['git', f'--git-dir={repository}', f'--work-tree={work_tree}']
+        subprocess.run([*base, 'config', 'core.bare', 'false'], check=True, env=env)
+        subprocess.run([*base, 'config', 'core.worktree', str(work_tree)], check=True, env=env)
+        (work_tree / 'file.txt').write_text('hello\n')
+        subprocess.run([*base, 'add', 'file.txt'], check=True, env=env)
+        subprocess.run([*base, 'commit', '-m', 'Initial commit'], check=True, env=env, capture_output=True)
+        return repository, work_tree, env
+
+    def test_non_root_allows_read_only_commands_and_fails_fast_on_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository, work_tree, env = self._init_repo_with_commit(root)
+            for alias, target in [('l', 'log --oneline'), ('st', 'status'), ('br', 'branch'),
+                                  ('sh', 'remote show origin'), ('ci', 'commit'), ('co', 'checkout'),
+                                  ('please', 'push --force-with-lease'), ('shell', '!echo hi')]:
+                subprocess.run(['git', f'--git-dir={repository}', 'config', f'alias.{alias}', target],
+                               check=True, env=env)
+            git.make_git_dir_readable(repository)
+            # Simulate a root-owned read-only system repository.
+            os.chmod(repository, 0o555)
+            try:
+                with patch.dict(os.environ, env, clear=True), \
+                     patch.object(git, 'SYSTEM_GIT_DIR', repository), \
+                     patch.object(git, 'SYSTEM_WORK_TREE', work_tree), \
+                     patch.object(git.os, 'geteuid', return_value=1000):
+                    for read_args in [
+                        ['log', '-1'], ['--no-pager', 'log', '-1'], ['-c', 'color.ui=false', 'show', 'HEAD'],
+                        ['status'], ['diff'], ['branch'], ['branch', '-a'], ['branch', '-l', 'main'],
+                        ['tag'], ['tag', '-l'], ['remote', '-v'], ['remote', 'get-url', 'origin'],
+                        ['config', '--list'], ['config', '--get', 'core.bare'],
+                        ['l', '-1'], ['st'], ['br', '-v'], ['sh'],
+                        ['commit', '--help'], ['--version'],
+                    ]:
+                        with self.subTest(read_args=read_args):
+                            command = git.git_command(read_args)
+                            self.assertEqual(command[0], 'git')
+                            self.assertEqual(command[-len(read_args):], read_args)
+                    for write_args in [
+                        ['pull'], ['fetch'], ['push'], ['commit', '-m', 'x'], ['add', '.'],
+                        ['checkout', 'main'], ['switch', 'main'], ['reset', '--hard'], ['restore', '.'],
+                        ['branch', 'topic'], ['branch', '-d', 'main'], ['branch', '-vD', 'main'],
+                        ['tag', 'v1'], ['config', 'user.name', 'Test'], ['config', '--unset', 'core.bare'],
+                        ['remote', 'set-url', 'origin', 'https://example.invalid/repo.git'],
+                        ['ci', '-m', 'x'], ['co', 'main'], ['please'], ['shell'], ['unknown-cmd'],
+                    ]:
+                        with self.subTest(write_args=write_args):
+                            with self.assertRaises(RuntimeError) as context:
+                                git.git_command(write_args)
+                            self.assertIn('sudo agentoo git', str(context.exception))
+            finally:
+                os.chmod(repository, 0o755)
+
+    def test_unreadable_ref_or_index_reports_sudo_instead_of_broken_branch(self):
+        if os.geteuid() == 0:
+            self.skipTest('root bypasses mode 0000 permission checks')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository, work_tree, env = self._init_repo_with_commit(root)
+            git.make_git_dir_readable(repository)
+            ref = repository / 'refs/heads/main'
+            index = repository / 'index'
+            for restricted in (ref, index):
+                with self.subTest(restricted=restricted.name):
+                    os.chmod(restricted, 0o000)
+                    try:
+                        with patch.dict(os.environ, env, clear=True), \
+                             patch.object(git, 'SYSTEM_GIT_DIR', repository), \
+                             patch.object(git, 'SYSTEM_WORK_TREE', work_tree):
+                            with self.assertRaises(RuntimeError) as context:
+                                git.git_command(['log', '-1'])
+                            message = str(context.exception)
+                            self.assertIn(str(restricted), message)
+                            self.assertIn('sudo agentoo git', message)
+                    finally:
+                        os.chmod(restricted, 0o644)
+
+    def test_setup_hooks_configures_shared_repository_and_repairs_metadata_modes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository, work_tree, env = self._init_repo_with_commit(root)
+            hooks = root / 'hooks'
+            hooks.mkdir()
+            for name in ('pre-commit', 'post-checkout', 'post-merge', 'post-rewrite'):
+                hook = hooks / name
+                hook.write_text('#!/bin/sh\nexit 0\n')
+                hook.chmod(0o755)
+            # Simulate drifted root-only modes written under umask 077.
+            os.chmod(repository / 'refs/heads/main', 0o600)
+            os.chmod(repository / 'index', 0o600)
+            pack_dir = repository / 'objects/pack'
+            sample_pack = pack_dir / 'pack-sample.pack'
+            sample_pack.write_bytes(b'pack')
+            os.chmod(sample_pack, 0o400)
+            os.chmod(repository / 'refs/heads', 0o700)
+
+            real_run = subprocess.run
+
+            def run_without_system_permissions(command, *args, **kwargs):
+                if command and str(command[0]).endswith('agentoo-permissions'):
+                    return subprocess.CompletedProcess(command, 0)
+                return real_run(command, *args, **kwargs)
+
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(git, 'SYSTEM_GIT_DIR', repository), \
+                 patch.object(git, 'SYSTEM_WORK_TREE', work_tree), \
+                 patch.object(git, 'HOOKS', str(hooks)), \
+                 patch.object(git.os, 'geteuid', return_value=0), \
+                 patch.object(git.subprocess, 'run', side_effect=run_without_system_permissions), \
+                 patch.object(git.sys, 'argv', ['agentoo-git', 'setup-hooks']), \
+                 redirect_stderr(io.StringIO()):
+                self.assertEqual(git.main(), 0)
+
+            shared = subprocess.run(
+                ['git', f'--git-dir={repository}', 'config', '--get', 'core.sharedRepository'],
+                check=True, env=env, text=True, capture_output=True,
+            ).stdout.strip()
+            self.assertEqual(shared, '0644')
+            self.assertEqual(stat.S_IMODE((repository / 'refs/heads').stat().st_mode), 0o755)
+            self.assertEqual(stat.S_IMODE((repository / 'refs/heads/main').stat().st_mode), 0o644)
+            self.assertEqual(stat.S_IMODE((repository / 'index').stat().st_mode), 0o644)
+            self.assertEqual(stat.S_IMODE(sample_pack.stat().st_mode), 0o444)
 
 
 class WrapCommitMessageTests(unittest.TestCase):

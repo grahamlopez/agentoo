@@ -6,6 +6,8 @@ interpreted in forwarded Git arguments; an initial `git` explicitly forwards.
 """
 import os
 from pathlib import Path
+import shlex
+import stat
 import subprocess
 import sys
 
@@ -18,8 +20,26 @@ from paths import SYSTEM_GIT_DIR, SYSTEM_WORK_TREE
 HOOKS = '/usr/local/share/agentoo/git-hooks'
 SSH_REMOTE = 'git@github.com:grahamlopez/agentoo.git'
 GUARD_BYPASS = {'status', 'diff', 'log', 'show', 'blame', 'grep', 'ls-files', 'ls-tree',
-             'rev-parse', 'rev-list', 'describe', 'config', 'remote', 'fetch', 'push',
-             'help', '--help', '--version'}
+                'rev-parse', 'rev-list', 'describe', 'config', 'remote', 'fetch', 'push',
+                'help', '--help', '--version'}
+READ_ONLY_COMMANDS = {
+    'status', 'diff', 'log', 'show', 'blame', 'grep', 'ls-files', 'ls-tree',
+    'rev-parse', 'rev-list', 'describe', 'shortlog', 'cat-file', 'show-ref',
+    'for-each-ref', 'name-rev', 'merge-base', 'diff-tree', 'diff-files',
+    'diff-index', 'help', 'version',
+}
+GLOBAL_VALUE_OPTIONS = {
+    '-c', '-C', '--git-dir', '--work-tree', '--namespace', '--config-env',
+    '--super-prefix', '--list-cmds',
+}
+BRANCH_WRITE_LONG = {'--delete', '--move', '--copy', '--force', '--set-upstream-to',
+                     '--unset-upstream', '--edit-description', '--create-reflog',
+                     '--track', '--no-track'}
+TAG_WRITE_LONG = {'--annotate', '--sign', '--local-user', '--delete', '--force',
+                  '--message', '--file'}
+CONFIG_READ_FLAGS = {'-l', '--list', '--get', '--get-all', '--get-regexp', '--get-urlmatch'}
+CONFIG_WRITE_FLAGS = {'--add', '--replace-all', '--unset', '--unset-all',
+                      '--rename-section', '--remove-section', '-e', '--edit'}
 
 
 def build_parser():
@@ -28,16 +48,208 @@ def build_parser():
                                    'to explicitly forward an Agentoo operation name to Git.')
     sub = parser.add_subparsers(dest='operation', required=True)
     for name, description in [('enable-write', 'Switch origin fetch/push URL to SSH'),
-                              ('setup-hooks', 'Install managed permission hooks')]:
+                              ('setup-hooks', 'Install managed permission hooks and readable repo metadata')]:
         child = sub.add_parser(name, help=description, description=description)
         child.add_argument('--no-input', action='store_true', help='Use sudo without prompting (sudo -n)')
     return parser
 
 
+def split_git_command(args):
+    """Return (subcommand, rest) after skipping leading Git global options."""
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in ('-h', '--help', '-v', '--version'):
+            return token, args[index + 1:]
+        if token in GLOBAL_VALUE_OPTIONS:
+            index += 2
+            continue
+        if token.startswith('-'):
+            index += 1
+            continue
+        return token, args[index + 1:]
+    return None, []
+
+
+def options_before_terminator(tokens):
+    return tokens[:tokens.index('--')] if '--' in tokens else tokens
+
+
+def is_help_or_version(args):
+    subcommand, rest = split_git_command(args)
+    if subcommand in (None, '-h', '--help', '-v', '--version', 'help', 'version'):
+        return True
+    before = options_before_terminator(rest)
+    return '-h' in before or '--help' in before
+
+
+def has_option(tokens, short_letters, long_options):
+    for token in options_before_terminator(tokens):
+        if token.startswith('--'):
+            if token.split('=', 1)[0] in long_options:
+                return True
+        elif token.startswith('-') and len(token) > 1 and set(token[1:]) & short_letters:
+            return True
+    return False
+
+
+def first_positional(tokens):
+    for token in options_before_terminator(tokens):
+        if not token.startswith('-'):
+            return token
+    return None
+
+
+def expand_alias(name):
+    """Resolve one Git alias via native config; ignore shell aliases (!...)."""
+    try:
+        result = subprocess.run(
+            ['git', f'--git-dir={SYSTEM_GIT_DIR}', 'config', '--get', f'alias.{name}'],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    if not value or value.startswith('!'):
+        return None
+    try:
+        return shlex.split(value)
+    except ValueError:
+        return None
+
+
+def is_read_only_command(args, resolve_alias=True):
+    if is_help_or_version(args):
+        return True
+    subcommand, rest = split_git_command(args)
+    if subcommand in READ_ONLY_COMMANDS:
+        return True
+    before = options_before_terminator(rest)
+    if subcommand == 'branch':
+        if has_option(before, set('dDmMcCfut'), BRANCH_WRITE_LONG):
+            return False
+        return '-l' in before or '--list' in before or first_positional(before) is None
+    if subcommand == 'tag':
+        if has_option(before, set('asudfmF'), TAG_WRITE_LONG):
+            return False
+        return (any(flag in before for flag in ('-l', '--list', '-v', '--verify'))
+                or first_positional(before) is None)
+    if subcommand == 'remote':
+        return first_positional(before) in (None, 'show', 'get-url')
+    if subcommand == 'config':
+        if has_option(before, set('e'), CONFIG_WRITE_FLAGS):
+            return False
+        return (any(token.split('=', 1)[0] in CONFIG_READ_FLAGS for token in before)
+                or first_positional(before) in ('list', 'get'))
+    if subcommand == 'stash':
+        return first_positional(before) in ('list', 'show')
+    if subcommand == 'reflog':
+        return first_positional(before) in (None, 'show')
+    if resolve_alias and subcommand:
+        expanded = expand_alias(subcommand)
+        if expanded:
+            return is_read_only_command([*expanded, *rest], resolve_alias=False)
+    return False
+
+
+def unreadable_metadata_path(git_dir):
+    """Return the first unreadable essential Git metadata path, or None."""
+    head = git_dir / 'HEAD'
+    if not os.access(head, os.R_OK):
+        return head
+    try:
+        target = head.read_text().strip()
+    except OSError:
+        return head
+    if target.startswith('ref: '):
+        ref_rel = Path(target[5:].strip())
+        current = git_dir
+        for part in ref_rel.parts[:-1]:
+            current = current / part
+            try:
+                st = current.lstat()
+            except PermissionError:
+                return current
+            except FileNotFoundError:
+                break
+            if stat.S_ISDIR(st.st_mode) and not os.access(current, os.R_OK | os.X_OK):
+                return current
+        else:
+            ref_path = git_dir / ref_rel
+            try:
+                ref_path.lstat()
+            except PermissionError:
+                return ref_path
+            except FileNotFoundError:
+                pass
+            else:
+                if not os.access(ref_path, os.R_OK):
+                    return ref_path
+    for name in ('packed-refs', 'index', 'config'):
+        path = git_dir / name
+        try:
+            path.lstat()
+        except PermissionError:
+            return path
+        except FileNotFoundError:
+            continue
+        if not os.access(path, os.R_OK):
+            return path
+    for rel in ('refs', 'refs/heads', 'refs/remotes', 'refs/tags', 'objects', 'objects/pack'):
+        directory = git_dir / rel
+        try:
+            st = directory.lstat()
+        except PermissionError:
+            return directory
+        except FileNotFoundError:
+            continue
+        if stat.S_ISDIR(st.st_mode) and not os.access(directory, os.R_OK | os.X_OK):
+            return directory
+    for directory in (git_dir / 'objects', git_dir / 'objects/pack'):
+        if not directory.is_dir():
+            continue
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    mode = os.R_OK | os.X_OK if entry.is_dir(follow_symlinks=False) else os.R_OK
+                    if not os.access(entry.path, mode):
+                        return Path(entry.path)
+        except PermissionError:
+            return directory
+    return None
+
+
+def make_git_dir_readable(git_dir):
+    """Ensure repository metadata is world-readable without adding write bits."""
+    for root, _dirs, files in os.walk(git_dir):
+        root_path = Path(root)
+        mode = stat.S_IMODE(root_path.lstat().st_mode)
+        if (mode & 0o555) != 0o555:
+            os.chmod(root_path, mode | 0o555)
+        for name in files:
+            path = root_path / name
+            st = path.lstat()
+            if stat.S_ISREG(st.st_mode):
+                file_mode = stat.S_IMODE(st.st_mode)
+                if (file_mode & 0o444) != 0o444:
+                    os.chmod(path, file_mode | 0o444)
+
+
 def git_command(args):
-    if os.geteuid() != 0 and SYSTEM_GIT_DIR.is_dir() and not os.access(SYSTEM_GIT_DIR / 'HEAD', os.R_OK):
-        raise RuntimeError(f'cannot read {SYSTEM_GIT_DIR}/HEAD; system repository metadata requires root.\n'
-                           'Run this system repository operation with sudo agentoo git ...')
+    if os.geteuid() != 0 and SYSTEM_GIT_DIR.is_dir():
+        if not os.access(SYSTEM_GIT_DIR, os.W_OK) and not is_read_only_command(args):
+            subcommand, _ = split_git_command(args)
+            label = f"'{subcommand}'" if subcommand else 'this command'
+            raise RuntimeError(f'{label} modifies the system repository and requires root.\n'
+                               'Run this system repository operation with sudo agentoo git ...')
+        if not is_help_or_version(args):
+            unreadable = unreadable_metadata_path(SYSTEM_GIT_DIR)
+            if unreadable is not None:
+                raise RuntimeError(
+                    f'cannot read {unreadable}; system repository metadata requires root.\n'
+                    'Run with sudo agentoo git ..., or make metadata world-readable with sudo agentoo git setup-hooks.')
     command = ['git', f'--git-dir={SYSTEM_GIT_DIR}', f'--work-tree={SYSTEM_WORK_TREE}', *args]
     if os.geteuid() == 0 and (not args or args[0] not in GUARD_BYPASS):
         command = [sys.executable, str(SHARE / 'lib/git_transaction.py'), *command]
@@ -53,6 +265,8 @@ def main():
         if args[0] == 'git':
             args = args[1:]
         command = git_command(args)
+        if os.geteuid() != 0 and SYSTEM_GIT_DIR.is_dir() and not os.access(SYSTEM_GIT_DIR, os.W_OK):
+            os.environ['GIT_OPTIONAL_LOCKS'] = '0'
         os.execvp(command[0], command)
     parsed = build_parser().parse_args(args)
     if os.geteuid() != 0:
@@ -84,7 +298,9 @@ def main():
             raise RuntimeError(f'refusing to replace existing hooksPath: {existing}')
         subprocess.run([str(Path(__file__).resolve().parent / 'agentoo-permissions'), 'fix', *(['--no-input'] if parsed.no_input else [])], check=True)
         subprocess.run(git_command(['config', 'core.hooksPath', HOOKS]), check=True)
-        print('agentoo permission hooks enabled.', file=sys.stderr)
+        subprocess.run(git_command(['config', 'core.sharedRepository', '0644']), check=True)
+        make_git_dir_readable(SYSTEM_GIT_DIR)
+        print('agentoo permission hooks enabled and repository metadata set world-readable.', file=sys.stderr)
     return 0
 
 

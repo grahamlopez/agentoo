@@ -1442,6 +1442,7 @@ mkdir -p /var/lib/agentoo
 git clone --bare --single-branch --branch main https://github.com/grahamlopez/agentoo.git /var/lib/agentoo/repository.git
 git --git-dir=/var/lib/agentoo/repository.git config core.bare false
 git --git-dir=/var/lib/agentoo/repository.git config core.worktree /
+git --git-dir=/var/lib/agentoo/repository.git config core.sharedRepository 0644
 git --git-dir=/var/lib/agentoo/repository.git config status.showUntrackedFiles no
 git --git-dir=/var/lib/agentoo/repository.git config pull.rebase true
 git --git-dir=/var/lib/agentoo/repository.git config remote.origin.fetch +refs/heads/main:refs/remotes/origin/main
@@ -1576,6 +1577,7 @@ EOF
   config_git_dir=$MOUNT_ROOT/var/lib/agentoo/repository.git
   run_privileged git --git-dir="$config_git_dir" config core.bare false
   run_privileged git --git-dir="$config_git_dir" config core.worktree /
+  run_privileged git --git-dir="$config_git_dir" config core.sharedRepository 0644
   run_privileged git --git-dir="$config_git_dir" config status.showUntrackedFiles no
   run_privileged git --git-dir="$config_git_dir" config pull.rebase true
   run_privileged git --git-dir="$config_git_dir" config remote.origin.fetch "+refs/heads/$CONFIG_BRANCH:refs/remotes/origin/$CONFIG_BRANCH"

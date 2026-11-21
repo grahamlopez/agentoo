@@ -5,10 +5,19 @@
 `agentoo git br` and `agentoo git --no-pager log -5` work like their Git
 equivalents. `setup-hooks` and `enable-write` are Agentoo helper commands.
 
-Forwarded Git commands run as the invoking user. Use `sudo agentoo git ...`
-for protected system repository operations, including reads that need root.
-Only `setup-hooks` and `enable-write` request sudo authorization automatically.
-Root invocations use root's Git configuration and SSH access.
+Read-only Git commands (`log`, `show`, `branch`, `diff`, `status`, and read-only
+aliases) run as the invoking user with `GIT_OPTIONAL_LOCKS=0` against the
+world-readable system repository (`core.sharedRepository=0644`). Full-tree
+`status` or `diff` without `sudo` still reports `Permission denied` on root-only
+tracked paths such as `/root/`; use `sudo agentoo git status` for a complete
+work-tree check.
+
+Mutating Git commands (`pull`, `fetch`, `push`, `commit`, `checkout`, etc.)
+fail fast without `sudo` and require `sudo agentoo git ...`. Only `setup-hooks`
+and `enable-write` request sudo authorization automatically. On an existing host
+whose repository metadata drifted to root-only permissions, `sudo agentoo git
+setup-hooks` configures `core.sharedRepository=0644` and restores world-readable
+metadata permissions. Root invocations use root's Git configuration and SSH access.
 If identity setup was skipped, configure it with
 `sudo agentoo git config --local user.name "Your Name"` and
 `sudo agentoo git config --local user.email "you@example.com"` before committing.
