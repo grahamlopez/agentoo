@@ -1,10 +1,20 @@
-"""Verify relative Markdown links and heading anchors across repository docs."""
+"""Verify relative Markdown links, heading anchors, and doc layout invariants."""
 from pathlib import Path
 import re
 import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[5]
+PROFILES_DESC = ROOT / 'usr/local/share/agentoo/portage/profiles/profiles.desc'
+DOCS_HOSTS = ROOT / 'usr/local/share/agentoo/docs/hosts'
+DOCS_HISTORY = ROOT / 'usr/local/share/agentoo/docs/history'
+NON_PHYSICAL_HOSTS = {'generic', 'qemu'}
+HOST_BASELINE_SECTIONS = {
+    'hardware-identity',
+    'scoped-exceptions',
+    'hardware-quirks-and-negative-findings',
+    'peripheral-and-workflow-notes',
+}
 LINK_RE = re.compile(r'!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
 FENCE_RE = re.compile(r'^\s*(```|~~~)')
 HEADING_RE = re.compile(r'^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$')
@@ -97,6 +107,24 @@ class DocLinkTests(unittest.TestCase):
         self.assertEqual(github_slug('Native `gentoo-kernel` & NVIDIA'), 'native-gentoo-kernel--nvidia')
         lines = strip_fenced_blocks('ok [a](b.md)\n```md\n[bad](missing.md)\n```\nend\n')
         self.assertEqual(lines, ['ok [a](b.md)', '', '', '', 'end'])
+
+    def test_physical_hosts_have_uniform_baselines(self):
+        hosts = []
+        for line in PROFILES_DESC.read_text(encoding='utf-8').splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[1].startswith('hosts/'):
+                name = parts[1].removeprefix('hosts/')
+                if name not in NON_PHYSICAL_HOSTS:
+                    hosts.append(name)
+        self.assertTrue(hosts, 'expected physical hosts in profiles.desc')
+        for name in hosts:
+            baseline = DOCS_HOSTS / f'{name}.md'
+            self.assertTrue(baseline.is_file(), f'missing host baseline: {baseline.relative_to(ROOT)}')
+            missing = HOST_BASELINE_SECTIONS - heading_anchors(baseline)
+            self.assertEqual(missing, set(), f'{baseline.relative_to(ROOT)} missing sections: {sorted(missing)}')
+
+    def test_no_docs_history_directory(self):
+        self.assertFalse(DOCS_HISTORY.exists(), 'docs/history/ should not exist; Git history is the archive')
 
 
 if __name__ == '__main__':
