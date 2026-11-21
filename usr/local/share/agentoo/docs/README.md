@@ -13,7 +13,6 @@ System
 - [Target host configuration checklist](host-onboarding.md)
   with [Thinktop](hosts/thinktop.md), [Flattop](hosts/flattop.md),
   [Startop](hosts/startop.md), and [Bequiet](hosts/bequiet.md) hardware baselines
-- [Startop power after resume investigation](hosts/startop-power.md)
 - [System checkpoints and recovery](checkpoints.md)
 - [Git updates for the system repository](git.md)
 - [Managed file permissions and Git automation](permissions.md)

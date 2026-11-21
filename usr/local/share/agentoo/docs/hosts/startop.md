@@ -51,7 +51,8 @@ unused secondary MAXIO `1e4b:1602` at `59:00.0`).
 - Uses the shared Dell U5226KW monitor/KVM, Bluetooth mice/headsets, Lily58
   keyboard, webcams, and Blue USB microphone.
 - Full post-resume power evidence and rejected hypotheses live in
-  [startop-power.md](startop-power.md). Native `gentoo-kernel` migration is
-  tracked in [card 053](../../kanban/Open/053-gentoo-kernel-fleet-migration.md);
+  [card 054](../../kanban/Backlog/054-startop-power-after-resume.md). Native
+  `gentoo-kernel` migration is tracked in
+  [card 053](../../kanban/Open/053-gentoo-kernel-fleet-migration.md);
   shared kernel follow-ups live in
   [card 027](../../kanban/Backlog/027-shared-kernel-v0.3-followups.md).

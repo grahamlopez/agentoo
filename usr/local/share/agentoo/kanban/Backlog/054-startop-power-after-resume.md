@@ -1,5 +1,8 @@
 # Startop power increase after resume
 
+Created: 2026-11-03
+Status: Backlog
+
 Investigation begun 2026-11-03 on Startop, a Star Labs StarFighter with an
 Intel Core Ultra 9 285H, i915 graphics, AX210 Wi-Fi, two NVMe drives, coreboot
 26.08 (BIOS date 2026-08-13), and kernel `6.18.60-gentoo-dist-bin`.
@@ -272,7 +275,7 @@ model string; neither identity observation establishes its role in the issue.
 
 ## Preserved evidence and next investigation
 
-[The evidence archive](startop-power-evidence.tar.gz) preserves the original
+[The evidence archive](054-startop-power-evidence.tar.gz) preserves the original
 captures and the collector used for them, with their boot IDs and raw output:
 
 - `power-before.json`, `power-after.json`, `power-after-s2idle.json`
