@@ -2,12 +2,19 @@
 
 ## Hardware identity
 
-Desktop workstation, Gigabyte X570 AORUS MASTER (BIOS F39), AMD Ryzen 9 3950X
-(Zen 2, 16 cores / 32 logical CPUs), dual NVIDIA GPUs (RTX PRO 2000 Blackwell
-`10de:2d30` and RTX 6000 Ada `10de:26b1`), Intel AX200 Wi-Fi (`iwlwifi`), Intel
-USB Bluetooth (`8087:0029`), Intel I211 1GbE (`igb`), Realtek RTL8125 2.5GbE
-(`r8169`), Realtek ALC1220 HDA audio (`snd_hda_intel`) + NVIDIA HDMI/DP audio,
-three NVMe drives, and two AMD `1022:7901` AHCI SATA controllers.
+- **System:** Desktop workstation, Gigabyte X570 AORUS MASTER (AMI BIOS `F39`).
+- **CPU:** AMD Ryzen 9 3950X (Zen 2, 16 cores / 32 logical CPUs).
+- **Graphics:** Dual NVIDIA GPUs—RTX PRO 2000 Blackwell (`10de:2d30`) and RTX
+  6000 Ada (`10de:26b1`).
+- **Networking & Bluetooth:** Intel Wi-Fi 6 AX200 (`8086:2723`, `iwlwifi`),
+  Intel USB Bluetooth (`8087:0029`), Intel I211 1GbE (`8086:1539`, `igb`),
+  Realtek RTL8125 2.5GbE (`10ec:8125`, `r8169`).
+- **Audio:** AMD Starship/Matisse HD Audio (`1022:1487`, Realtek ALC1220 codec,
+  `snd_hda_intel`) plus NVIDIA HDMI/DP audio (`10de:22eb`, `10de:22ba`).
+- **Storage & sleep:** Three NVMe SSDs—WD_BLACK SN770 2 TB (`15b7:5017`),
+  Samsung 980 1 TB (`144d:a809`), and Samsung 970 EVO 1 TB (`144d:a808`); two
+  AMD FCH AHCI SATA controllers (`1022:7901`) with two 3 TB Seagate HDDs
+  (`ST3000DM008`, `ST3000DM001`); `s2idle [deep]` sleep.
 
 ## Scoped exceptions
 

@@ -2,11 +2,19 @@
 
 ## Hardware identity
 
-Framework Laptop 13 (13th Gen Intel Core, board FRANMCCP06 A6), Intel Core
-i7-1360P (12 cores / 16 logical CPUs), Intel Raptor Lake-P integrated graphics
-(`i915`), Intel AX211 Wi-Fi (`iwlwifi`), Intel USB Bluetooth (`8087:0033`), IDT
-92HD95 HDA audio (`snd_hda_intel`), Realtek UVC camera (`0bda:5634`), WD NVMe
-storage, and internal 2880×1920 (3:2) panel.
+- **System:** Framework Laptop 13 (13th Gen Intel Core, board `FRANMCCP06`
+  rev `A6`, Insyde BIOS `03.16`).
+- **CPU:** Intel Core i7-1360P (12 cores / 16 logical CPUs).
+- **Graphics:** Intel Raptor Lake-P UHD Graphics (`8086:a720`, `i915`).
+- **Wireless:** Intel Raptor Lake PCH CNVi Wi-Fi (`8086:51f1`, AX211,
+  `iwlwifi`) and Intel USB Bluetooth (`8087:0033`).
+- **Audio:** Intel Raptor Lake-P/U/H cAVS (`8086:51ca`) with IDT 92HD95 HDA
+  codec (`snd_hda_intel`).
+- **Storage & I/O:** WD PC SN810 / Black SN850 1 TB NVMe SSD (`15b7:5011`),
+  Intel Thunderbolt 4 (`8086:a73e`/`8086:a76d`).
+- **Built-in peripherals & display:** 2256×1504 (3:2) panel (`eDP-1`), Realtek
+  UVC camera (`0bda:5634`), Goodix fingerprint reader (`27c6:609c`),
+  `[s2idle] deep` sleep.
 
 ## Scoped exceptions
 

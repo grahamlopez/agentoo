@@ -2,13 +2,23 @@
 
 ## Hardware identity
 
-Lenovo ThinkPad (subsystem `17aa:2349`), Intel Core Ultra 7 255H (Arrow Lake,
-16 logical CPUs), 62 GiB RAM, Intel Arrow Lake integrated graphics (`i915` /
-Meteor Lake firmware), unused NVIDIA RTX 5060 Mobile (`10de:2d19`, upstream
-bridge `8086:7ecc`), Intel CNVi Wi-Fi (`iwlwifi-bz-b0-fm-c0`), Intel USB
-Bluetooth (`8087:0037`), Meteor Lake NPU (`vpu_37xx`), Intel SOF + SoundWire
-audio (`cs42l43` codec, dual `cs35l56` amplifiers), internal 3840×2400 panel,
-and NVMe storage.
+- **System:** Lenovo ThinkPad T1g Gen 8 (`21TDCTO1WW`, Lenovo subsystem
+  `17aa:2349`, BIOS `N4EET24W (1.10)`).
+- **CPU & memory:** Intel Core Ultra 7 255H (Arrow Lake, 16 logical CPUs),
+  62 GiB RAM.
+- **Graphics & NPU:** Intel Arc Pro 140T (`8086:7d51`, `i915` / Meteor Lake
+  firmware), unused NVIDIA GeForce RTX 5060 Max-Q / Mobile (`10de:2d19`,
+  upstream bridge `8086:7ecc`), Intel Meteor Lake NPU (`8086:7d1d`).
+- **Wireless:** Intel Arrow Lake CNVi Wi-Fi (`8086:7740`, `iwlwifi`) and Intel
+  USB Bluetooth (`8087:0037`).
+- **Audio:** Intel Arrow Lake cAVS (`8086:7728`) with SOF/SoundWire
+  (`cs42l43` codec, dual `cs35l56` amplifiers).
+- **Storage & I/O:** Dual Samsung PM9E1 1 TB NVMe SSDs (`144d:a810`), Realtek
+  RTS5261 PCIe SD Express card reader (`10ec:5261`), Intel Thunderbolt 4
+  (`8086:7ec2`) + discrete JHL9580 Thunderbolt 5 (`8086:5781`).
+- **Built-in peripherals & display:** 3840×2400 panel (`eDP-1`), Chicony
+  integrated camera (`04f2:b83f`), Synaptics fingerprint reader (`06cb:00f9`),
+  `s2idle`-only sleep, platform profiles (`low-power`/`balanced`/`performance`).
 
 ## Scoped exceptions
 

@@ -2,12 +2,19 @@
 
 ## Hardware identity
 
-Star Labs StarFighter (coreboot 26.08), Intel Core Ultra 9 285H (Arrow Lake,
-16 logical CPUs), 62 GiB RAM, Intel Arrow Lake integrated graphics
-(`8086:7d51`, `i915` / Meteor Lake firmware), Intel AX210 Wi-Fi (`8086:2725`),
-Intel USB Bluetooth, HDA/ALC233 audio (`8086:7728`, `snd_hda_intel`), internal
-3840×2400 panel, and two NVMe drives (system Samsung 970 EVO at `02:00.0`;
-unused secondary MAXIO `1e4b:1602` at `59:00.0`).
+- **System:** Star Labs StarFighter (rev `1.0`, coreboot `26.08`).
+- **CPU & memory:** Intel Core Ultra 9 285H (Arrow Lake, 16 logical CPUs),
+  62 GiB RAM.
+- **Graphics:** Intel Arc Pro 140T (`8086:7d51`, `i915` / Meteor Lake firmware).
+- **Wireless:** Intel Wi-Fi 6E AX210 (`8086:2725`, `iwlwifi`) and Intel USB
+  Bluetooth (`8087:0032`).
+- **Audio:** Intel Arrow Lake cAVS (`8086:7728`) with HDA/ALC233 codec
+  (`snd_hda_intel`).
+- **Storage & I/O:** Two 1 TB NVMe SSDs—system Samsung 970 EVO (`144d:a808` at
+  `02:00.0`) and unused secondary MAXIO MAP1602 (`1e4b:1602` at `59:00.0`,
+  model string `Samsung SSD 990PRO 1TB`), Intel Thunderbolt 4 (`8086:7ec2`),
+  Realtek USB 2.0 card reader (`0bda:0129`).
+- **Display:** 3840×2400 panel (`eDP-1`).
 
 ## Scoped exceptions
 
