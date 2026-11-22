@@ -95,6 +95,16 @@ class FirstbootSetupTest(unittest.TestCase):
         self.assertIn('COMPLETED', result.stdout)
         self.assertNotIn('journalctl -b -u', result.stdout)
 
+    def test_operational_scripts_support_help_without_root(self):
+        for relpath in ('root/001-firstboot-verify-and-checkpoint.sh',
+                        'root/002-agentoo-setup-user.sh',
+                        'usr/local/share/agentoo/installer/gentoo-install.sh'):
+            with self.subTest(script=relpath):
+                result = subprocess.run(['bash', str(ROOT / relpath), '--help'],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('usage:', result.stdout.lower())
+
 
 if __name__ == '__main__':
     unittest.main()

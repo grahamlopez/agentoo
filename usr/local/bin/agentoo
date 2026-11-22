@@ -20,14 +20,32 @@ spec = importlib.util.spec_from_file_location('agentoo_completion', SHARE / 'lib
 completion = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(completion)
 COMMANDS = completion.COMMANDS
+COMMAND_GROUPS = (
+    ('System', ('git', 'repos', 'checkpoint', 'kernel', 'permissions', 'secrets', 'cloud-storage')),
+    ('Desktop', ('desktop', 'display', 'theme', 'fonts', 'screenshot')),
+    ('Diagnostics & help', ('power', 'term-colors', 'help')),
+)
 
 
 def usage(file=None):
     print('Usage: agentoo <command> [options]\n', file=file)
-    print('Manage Agentoo system configuration and desktop utilities.\n', file=file)
-    for name, description in COMMANDS.items():
-        print(f'  {name:<12} {description}', file=file)
-    print("\nExamples:\n  agentoo power\n  agentoo fonts doctor\n  agentoo git status", file=file)
+    print('Manage Agentoo system configuration and desktop utilities.', file=file)
+    width = max(len(name) for name in COMMANDS)
+    grouped = set()
+    for heading, names in COMMAND_GROUPS:
+        entries = [name for name in names if name in COMMANDS]
+        if not entries:
+            continue
+        print(f'\n{heading}:', file=file)
+        for name in entries:
+            print(f'  {name:<{width}}  {COMMANDS[name]}', file=file)
+        grouped.update(entries)
+    remaining = [name for name in COMMANDS if name not in grouped]
+    if remaining:
+        print('\nOther:', file=file)
+        for name in remaining:
+            print(f'  {name:<{width}}  {COMMANDS[name]}', file=file)
+    print('\nExamples:\n  agentoo power\n  agentoo fonts doctor\n  agentoo git status', file=file)
     print("\nRun 'agentoo help COMMAND [SUBCOMMAND]' for details.", file=file)
     print('Documentation: /usr/local/share/agentoo/docs/', file=file)
 

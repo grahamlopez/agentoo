@@ -585,7 +585,7 @@ def build_parser():
                '  agentoo fonts test --interactive\n'
                '  agentoo fonts set --font \'Liberation Mono\' --size 11\n'
                '  agentoo fonts doctor --text TEXT --json\n\n'
-               'Guide: ' + str(DATA.parent / 'docs/fonts.md'))
+               'Guide: /usr/local/share/agentoo/docs/fonts.md')
     parser.add_argument('--no-input', action='store_true', help='do not open interactive windows or choosers')
     parser.add_argument('--filter', default='', help='filter installed families/styles in default status output; case-insensitive substring')
     parser.add_argument('--nerd', action='store_true', help='show only Nerd faces in default status output')
@@ -627,7 +627,7 @@ def build_parser():
                '  text.characters contains codepoints; text.NFC/NFD preserve sequence context.\n'
                '  --font adds font_analysis for one matched face without selecting it.\n\n'
                '--render requires a GUI and waits for the diagnostic window to close.\n'
-               'Guide: ' + str(DATA.parent / 'docs/fonts.md'))
+               'Guide: /usr/local/share/agentoo/docs/fonts.md')
     p.add_argument('--suite', choices=suites, metavar='SUITE', default='all', help=suite_help)
     p.add_argument('--text', help='inspect exact text: codepoints, Unicode names, normalization, combining marks, and covering families; also display it with --render')
     mode = p.add_mutually_exclusive_group()

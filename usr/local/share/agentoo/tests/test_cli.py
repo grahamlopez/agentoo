@@ -251,17 +251,25 @@ class CliTest(unittest.TestCase):
                                  (direct.returncode, direct.stdout, direct.stderr))
 
     def test_catalog_discovered_direct_and_grouped_help(self):
+        root_help = self.run_cli('--help')
+        self.assertEqual(root_help.returncode, 0, root_help.stderr)
+        self.assertIn('usage:', root_help.stdout.lower())
         catalog = self.run_cli('__complete', '1', '')
         self.assertEqual(catalog.returncode, 0, catalog.stderr)
-        names = [line.split('\t')[1] for line in catalog.stdout.splitlines()
-                 if line.startswith('command\t') and line.split('\t')[1] != 'help']
+        all_names = [line.split('\t')[1] for line in catalog.stdout.splitlines()
+                     if line.startswith('command\t')]
+        names = [name for name in all_names if name != 'help']
         self.assertTrue(names)
+        for name in all_names:
+            with self.subTest(root_help_lists=name):
+                self.assertIn(f'  {name} ', root_help.stdout)
         for name in names:
             with self.subTest(name=name):
                 grouped = self.run_cli(name, '--help')
                 direct = subprocess.run([str(self.root / ('agentoo-' + name)), '--help'],
                                         capture_output=True, text=True, env=self.env)
                 self.assertEqual(grouped.returncode, 0, grouped.stderr)
+                self.assertIn('usage:', grouped.stdout.lower())
                 self.assertEqual((grouped.returncode, grouped.stdout, grouped.stderr),
                                  (direct.returncode, direct.stdout, direct.stderr))
 

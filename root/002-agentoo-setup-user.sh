@@ -5,7 +5,20 @@ set -Eeuo pipefail
 umask 077
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 case ${1:-} in
-  --help|-h) printf 'Usage: %s\nCreate/validate graham, prompt for a password and optional SSH login key.\n' "$0"; exit 0 ;;
+  --help|-h)
+    cat <<EOF
+Usage: $0
+
+Interactive post-install user setup; run as root on the booted target after
+001-firstboot-verify-and-checkpoint.sh.
+
+- Installs Zsh, sudo, OpenSSH, Git, and the video group
+- Creates or validates graham (UID/GID 1000, groups: wheel,portage,video)
+- Prompts for account password, optional SSH key, and user/root Git identities
+- Enforces key-only SSH login for graham and reapplies Agentoo file permissions
+- Writes the local tty1 autologin drop-in (active on next tty1 start or reboot)
+EOF
+    exit 0 ;;
   '') (( $# == 0 )) || die 'No arguments supported.' ;;
   *) die 'Only --help is supported.' ;;
 esac

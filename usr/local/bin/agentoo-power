@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Report the power information exposed by the running kernel."""
+from argparse import RawDescriptionHelpFormatter
 import json
 import sys
 from pathlib import Path
@@ -55,8 +56,13 @@ def battery_values(device):
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo power', description=__doc__,
-        epilog='JSON: numeric watts, hours and percentages; null means unavailable. '
-               'Missing kernel data is a successful partial report (exit 0).')
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog='JSON: numeric watts, hours, and percentages; null means unavailable.\n'
+               'Missing kernel data is a successful partial report (exit 0).\n\n'
+               'Examples:\n'
+               '  agentoo power\n'
+               '  agentoo power show-all\n'
+               '  agentoo power --json')
     parser.add_argument('--json', action='store_true', help='emit a stable JSON report instead of human output')
     parser.add_argument('action', nargs='?', choices=['show-all'],
                         help='show detailed battery and CPU power information (default: brief battery status)')

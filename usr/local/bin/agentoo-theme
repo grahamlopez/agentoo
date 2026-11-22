@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Show or set the current user's system light/dark preference."""
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
 import subprocess
 import sys
@@ -11,10 +12,17 @@ from cli import ArgumentParser
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo theme', description=__doc__,
-        epilog='Run as your desktop user, without sudo. Applications must be configured '
-               'to follow system appearance. This changes only the mode preference, not '
-               'application themes. With no argument, prints light, dark, or no-preference. '
-               'Exit codes: 0 success, 1 settings failure, 2 invalid arguments.')
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog='Run as your desktop user, without sudo.\n'
+               'Persists org.gnome.desktop.interface color-scheme via gsettings; desktop\n'
+               'portals and applications configured to follow system appearance update\n'
+               'automatically. Changes only the mode preference, not application themes.\n'
+               'With no argument, prints light, dark, or no-preference.\n\n'
+               'Examples:\n'
+               '  agentoo theme\n'
+               '  agentoo theme dark\n'
+               '  agentoo theme light\n\n'
+               'Exit 0: success; 1: settings failure; 2: invalid arguments.')
     parser.add_argument('mode', nargs='?', choices=('light', 'dark'),
                         help='Persist the system appearance preference (default: show it)')
     return parser

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Capture Wayland displays to private files in ~/Downloads/Screenshots."""
+from argparse import RawDescriptionHelpFormatter
 from datetime import datetime
 import os
 from pathlib import Path
@@ -16,7 +17,13 @@ from cli import ArgumentParser
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo screenshot', description=__doc__,
-                            epilog='Prints the saved path. Cancelling region selection never captures the full screen.')
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog='Prints the saved PNG path. Cancelling region selection never captures\n'
+               'the full screen. Requires a Wayland session and @gui-desktop (grim/slurp).\n\n'
+               'Examples:\n'
+               '  agentoo screenshot full\n'
+               '  agentoo screenshot region\n\n'
+               'Exit 0: saved; 1: cancelled or operational failure; 2: invalid arguments.')
     parser.add_argument('capture', choices=('full', 'region'), help='All displays, or an interactively selected region')
     parser.add_argument('--no-input', action='store_true', help='Reject interactive region selection')
     return parser

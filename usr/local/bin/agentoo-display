@@ -14,7 +14,14 @@ import display_external
 
 
 def build_parser():
-    parser = ArgumentParser(prog='agentoo display', description=__doc__)
+    parser = ArgumentParser(prog='agentoo display', description=__doc__,
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog='Examples:\n'
+               '  agentoo display off\n'
+               '  agentoo display backlight up\n'
+               '  agentoo display external list\n'
+               '  agentoo display external layout 50-50 --left thunderbolt --right hdmi1\n\n'
+               'Exit 0: success; 1: operational failure; 2: invalid arguments.')
     sub = parser.add_subparsers(dest='action', required=True)
     sub.add_parser('off', help='Turn off all displays without locking',
                    description='Waits one second for key release, then turns off all displays through DPMS. '
