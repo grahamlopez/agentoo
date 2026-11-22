@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Inspect firmware and print EFI guidance."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -19,15 +20,36 @@ DIST_CMDLINE = Path('/etc/kernel/cmdline')
 
 
 def build_parser():
-    parser = ArgumentParser(prog='agentoo kernel', description=__doc__)
+    parser = ArgumentParser(prog='agentoo kernel', description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Portage owns custom gentoo-kernel builds (see /usr/local/share/agentoo/docs/kernel.md).\n'
+               'Host policy comes from the selected Agentoo Portage profile.\n\n'
+               'Examples:\n'
+               '  agentoo kernel firmware\n'
+               '  agentoo kernel firmware apply --dry-run\n'
+               '  agentoo kernel gen-efi-cmd --image /boot/EFI/Gentoo/kernel-RELEASE.efi')
     sub = parser.add_subparsers(dest='operation')
-    firmware = sub.add_parser('firmware', help='Show host firmware status or apply its native savedconfig')
+    firmware = sub.add_parser('firmware', help='Show host firmware status or apply its native savedconfig',
+        description='Read-only status report without sudo; use `apply` to install the host savedconfig list.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Host lists: /etc/agentoo/firmware/<host>.list\n'
+               'Maintenance guide: /usr/local/share/agentoo/docs/firmware.md')
     actions = firmware.add_subparsers(dest='firmware_operation')
-    apply = actions.add_parser('apply', help='Install the host list and rebuild the installed linux-firmware package')
+    apply = actions.add_parser('apply', help='Install the host list and rebuild the installed linux-firmware package',
+        description='Back up overriding savedconfigs, install /etc/agentoo/firmware/<host>.list, '
+                    'and rebuild the installed linux-firmware version from source (--usepkg=n).',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Backups go to /var/backups/agentoo/kernel-firmware/.\n'
+               'Firmware uses -initramfs: explicitly refresh gentoo-kernel-bin and rebuild gentoo-kernel afterward.\n'
+               'Exit 0: applied/planned; 1: operational error or cancelled; 2: invalid arguments.')
     apply.add_argument('--yes', action='store_true', help='accept the displayed plan')
     apply.add_argument('--dry-run', action='store_true', help='show the plan without changes')
     efi = sub.add_parser('gen-efi-cmd', help='Print an EFI registration command without changing firmware',
-                        description='Inspect a mounted ESP and print a create-only efibootmgr command.')
+        description='Inspect a mounted FAT GPT ESP and print a shell-quoted create-only efibootmgr command.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Never modifies NVRAM, BootOrder, or BootNext; review and run the printed command separately.\n'
+               'Binary fallback images (-gentoo-dist-bin.efi) include /etc/kernel/cmdline and their initramfs.\n'
+               'Startop automatically adds --full-dev-path.')
     efi.add_argument('--image', required=True, metavar='FILE', help='installed EFI kernel image').completion = 'files'
     efi.add_argument('--args', default='', metavar='TEXT', help='extra firmware arguments; binary fallback also uses its native cmdline/initramfs')
     efi.add_argument('--label', metavar='TEXT', help='boot entry label (default: image filename without extension)')

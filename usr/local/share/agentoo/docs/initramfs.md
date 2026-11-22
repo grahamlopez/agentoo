@@ -1,73 +1,38 @@
 # Agentoo initramfs
 
-`sys-kernel/agentoo-initramfs` packages Agentoo's early-boot implementation and
-archive generator. It builds a private static BusyBox and installs it with the
-generator, `/init` source, udev-handoff helper and storage smoke test under
-`/usr/libexec/agentoo-initramfs`. Portage owns these installed files; the
-implementation sources live in the overlay's
-`sys-kernel/agentoo-initramfs/files/` directory.
+`sys-kernel/agentoo-initramfs` (`@kernel-dev`) builds a private static BusyBox
+and installs the archive generator, `/init`, udev-handoff helper, and storage
+smoke test under `/usr/libexec/agentoo-initramfs` (sources in
+`usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/files/`).
 
-The package supports built-in boot drivers, one LUKS2 partition, Btrfs
-subvolume `@` and `/sbin/init` on the real root. Internal and kernel-supported
-USB keyboards/receivers work through a compiled console keymap. Bluetooth,
-initramfs udev/firmware loading, early module loading, resume, token unlock and boot animations
-are not implemented. Kernel module support is allowed when the required boot
-drivers remain built in; NVIDIA can load after the real-root handoff.
+**Supported scope:** Built-in boot drivers, single LUKS2 partition, Btrfs
+subvolume `@`, `/sbin/init`, and internal/USB keyboards via compiled console
+keymap (`us-caps.map.gz`). Bluetooth, initramfs udev/firmware loading, early
+module loading, resume, token unlock, and boot animations are not implemented.
 
-## Package and boot-image lifecycle
+## Lifecycle
 
-Install the generator before preparing the custom gentoo-kernel build:
+Install/update the generator *before* building the custom kernel (see
+[kernel guide](kernel.md#setup-and-build)):
 
 ```sh
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
-sudo emerge --ask --usepkg=n @kernel-dev
-```
-
-Portage fetches/verifies BusyBox sources and compiles the private binary using
-its selected compiler and flags. The build requires static glibc libraries. It
-does not install normal BusyBox applet links into the running system.
-
-The custom gentoo-kernel build's `post_src_prepare` hook invokes the installed
-generator, assembling a fresh archive inside WORKDIR and selecting that archive
-with native `scripts/config` before configuration/compilation. Assembly needs no
-compiler, source archive, network or root privileges. The initramfs package alone
-does not generate an archive, rebuild a kernel, write the ESP or change firmware.
-
-After changing the implementation or installed cryptsetup/libraries, install the
-new inputs first, then force a custom gentoo-kernel rebuild:
-
-```sh
 sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 ```
 
-Even initramfs-only changes require recompilation because the archive is embedded.
-There is no persistent archive cache or separate Agentoo kernel workspace. Native
-Portage phases own temporary outputs; `emerge --config` cannot refresh embedding.
-See [kernel configuration and installation](kernel.md) for installation inputs, signing,
-manual EFI guidance, experiments and remaining host acceptance.
-
-## Host inputs
-
-Target installation uses the selected Agentoo Portage profile and validated
-storage layout to activate its tracked host Kconfig fragment. Only Bequiet may
-enable modules, loaded after real-root handoff; boot drivers remain built in.
-It records
-explicit PARTUUID, mapper and transport in untracked
-`/etc/portage/env/kernel-local`; an optional `AGENTOO_INITRAMFS_KEYMAP` overrides
-the packaged default. The native source-package environment supplies these inputs
-to the generation hook. Review and directly edit local inputs after relevant
-storage/profile changes. The [kernel guide](kernel.md#setup-and-build) describes
-manual setup for Thinktop's one-off conversion.
-
-Generation does not query the selected profile or rediscover storage. Standalone
-and integrated generation use the same packaged implementation. No package USE
-flag selects a host; tracked sources contain no host disk UUIDs. See
-[host selection](../../../../../etc/agentoo/README.md#host-selection).
+During `gentoo-kernel`'s `post_src_prepare`, Portage invokes
+`/usr/libexec/agentoo-initramfs/build` with `/etc/portage/env/kernel-local`
+(`AGENTOO_INITRAMFS_PARTUUID`, `AGENTOO_INITRAMFS_MAPPER`,
+`AGENTOO_INITRAMFS_TRANSPORT`, optional `AGENTOO_INITRAMFS_KEYMAP`), assembling
+a fresh archive inside `WORKDIR` using static ELF inspection (`lddtree`,
+excluding Portage preload libraries). Because the archive embeds stripped copies
+of installed `cryptsetup` libraries, rebuild `gentoo-kernel` after generator or
+`cryptsetup`/library updates (`emerge --config` cannot refresh embedding).
 
 ## Standalone generation
 
-Run as an ordinary user, using the destination root partition's GPT PARTUUID
-and its installed mapping name:
+Run as an ordinary user into a fresh, non-existent `--work` directory (pass
+`--check` to validate inputs without creating output):
 
 ```sh
 /usr/libexec/agentoo-initramfs/build \
@@ -75,37 +40,16 @@ and its installed mapping name:
   --partuuid ENCRYPTED_PARTITION_UUID --mapper cryptroot
 ```
 
-`--partuuid` is required. `--mapper` defaults to `root`; the installer normally
-uses `cryptroot`. `--keymap` defaults to
-`/usr/share/keymaps/i386/qwerty/us-caps.map.gz`. `--busybox FILE` selects a compiled
-static binary instead of the package's adjacent `busybox` executable, primarily
-for development. It does not accept a source tree.
+Defaults: `--mapper root` (installer uses `cryptroot`),
+`--keymap /usr/share/keymaps/i386/qwerty/us-caps.map.gz`, optional
+`--busybox FILE` for development staging.
 
-The work directory must not exist. The generator writes `root/` and
-`initramfs.cpio` beneath it. Choose a fresh disposable directory for each run.
-Pass `--check` with the same arguments to validate the binary, required applets,
-keymap, required tools and cryptsetup's linked libraries without creating the
-workspace. Preflight does not establish boot acceptance.
+## Development and staging
 
-The package declares runtime dependencies for Python, cpio, loadkeys, strip,
-cryptsetup and pax-utils' lddtree. Dependency inspection reads ELF metadata
-without importing Portage's preload libraries into the archive.
-The shared US/Caps-to-Control keymap is supplied by Agentoo's
-configuration repository. The archive contains stripped copies of installed
-cryptsetup libraries; rebuild the archive and embedded kernel after relevant
-cryptsetup/library security updates. Updating installed libraries alone does not
-update existing archives.
-
-## Development and testing
-
-Edit the sources under
-`usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/files/` in the
-checkout. BusyBox configuration has one definition, `busybox.config`. The ebuild
-pins its upstream source version and compiles it. Script edits need no BusyBox
-recompilation.
-
-To stage the package without merging it, run from the repository root on a
-Gentoo development host:
+Edit sources under
+`usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/files/` (BusyBox
+config lives in `busybox.config`; script-only edits need no BusyBox rebuild).
+Stage without merging to test checkout scripts against the staged BusyBox:
 
 ```sh
 initramfs_ebuild="$PWD/usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/agentoo-initramfs-1-r1.ebuild"
@@ -114,16 +58,7 @@ sudo install -d -m 0755 "$initramfs_dev"
 sudo env PORTAGE_TMPDIR="$initramfs_dev" \
   ebuild "$initramfs_ebuild" clean unpack configure compile install
 initramfs_image="$initramfs_dev/portage/sys-kernel/agentoo-initramfs-1/image/usr/libexec/agentoo-initramfs"
-```
 
-Use a dedicated temporary build location: `clean` removes this package's previous
-Portage build tree there. Use the current ebuild filename and package version
-when those change. The staging phases compile and install into Portage's image
-directory; they do not merge files into the running system.
-
-Run the checkout generator against the staged binary:
-
-```sh
 initramfs_sources="$PWD/usr/local/share/agentoo/portage/sys-kernel/agentoo-initramfs/files"
 python3 "$initramfs_sources/build" \
   --busybox "$initramfs_image/busybox" \
@@ -132,75 +67,33 @@ python3 "$initramfs_sources/build" \
 cpio -it < /dev/shm/agentoo-initramfs-dev/initramfs.cpio
 ```
 
-Repeat with a fresh output directory after editing scripts. The checkout
-`init` and `udev-handoff` are copied by the checkout generator, so script edits
-are exercised directly. Rebuild the staged package when BusyBox configuration
-or its source version changes.
-
-Run the disposable storage smoke test described below to check the generated
-archive independently of a kernel build. For boot testing, install the revised
-generator and rebuild the native kernel; the preparation hook generates/selects
-the archive in that build's WORKDIR.
-
-Before validating the packaged default path, reinstall the package from source
-so changed local files are used even if a binary package is available:
-
-```sh
-sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
-sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
-```
-
-Increment the ebuild revision when shipped scripts or BusyBox configuration
-change, so normal Portage updates select the new implementation. Update the
-Manifest when changing the BusyBox source archive. Keep installed files under
-Portage ownership; edit package sources rather than installed copies.
+Bump the ebuild revision when shipping script or BusyBox config changes, and
+reinstall with `--usepkg=n` before boot testing.
 
 ## Disposable storage smoke test
 
-Run on the host before building a boot candidate:
+Run on a host before building a boot candidate (uses a disposable 512 MiB
+sparse loop file and random test key—never touches the real encrypted disk;
+requires root, loop, dm, Btrfs, `cryptsetup`, `udevadm`, `blkid`, ~1 GiB RAM
+for Argon2id):
 
 ```sh
 sudo /usr/libexec/agentoo-initramfs/smoke /dev/shm/agentoo-initramfs
-```
-
-For a checkout-generated archive, use the checkout's test implementation:
-
-```sh
+# Or for a checkout-generated archive:
 sudo bash "$initramfs_sources/smoke" /dev/shm/agentoo-initramfs-dev
 ```
 
-This requires root, mount namespaces, loop devices, device-mapper, Btrfs kernel
-support, btrfs-progs, host cryptsetup, udevadm and blkid. These additional test
-requirements are not needed for normal archive generation. It uses a disposable
-512 MiB sparse file and random test key; Argon2id requests 1 GiB RAM.
+Exercises archived `cryptsetup` (LUKS2 unlock without udev), mapping-node
+creation, Btrfs `@` read-only mount via archived BusyBox, and real-root udev
+coldplug rules via `udevadm test` after the handoff helper.
 
-The test runs archived cryptsetup with private `/dev` and `/run`, unlocks LUKS2
-without udev, checks mapping-node creation, creates Btrfs `@` and mounts it
-read-only with archived BusyBox. It also evaluates real-root udev rules with
-real filesystem probing, checking UUID-link requests and systemd readiness after
-the archived handoff helper. `udevadm test` does not emit events, execute RUN
-commands or start services. Cleanup removes test mounts, mapping and loop
-attachment. The test does not open or modify the real encrypted partition.
+## Early-boot handoff
 
-Full PID 1 handoff, physical keyboard behavior and graphics require boot testing.
-Retain a working EFI image. Check internal/USB keyboards, incorrect then correct
-passphrase, Btrfs `@`, active discards, normal systemd startup and firmware.
-Record boot results against the tested host and image; packaging success and
-storage smoke tests alone do not establish boot acceptance.
-
-## Early-boot behavior
-
-The archive includes a root-owned `/dev/console` character device (5:1, mode
-0600), generated without root so the kernel can attach initial standard I/O.
-`/init` mounts devtmpfs, proc, sysfs and tmpfs, loads the keymap and waits roughly
-ten seconds for the recorded partition. It disables device-mapper udev handling
-for cryptsetup, enables discards and permits three passphrase attempts. It
-mounts Btrfs `@` read-only, prepares the real-root udev handoff, moves API mounts
-and executes BusyBox `switch_root`. Failures before handoff enter a rescue shell.
-The real root must contain `/dev`, `/proc`, `/sys` and `/run` directories.
-
-The handoff writes `/run/udev/rules.d/09-agentoo-initramfs-root.rules`, scoped to
-the active mapping's exact device and LUKS mapping UUID and non-suspended state.
-This lets real-root udev coldplug recognize a mapping created without an
-initramfs udev database. The rule disappears at reboot and adds no initramfs
-daemon or hardware database.
+The archive embeds root-owned `/dev/console` (5:1, mode `0600`) without root
+build privileges. `/init` mounts API filesystems, loads the keymap, waits ~10 s
+for the recorded `PARTUUID`, unlocks LUKS2 with discards (3 attempts, udev
+disabled), mounts Btrfs `@` read-only, writes a temporary
+`/run/udev/rules.d/09-agentoo-initramfs-root.rules` scoped to the active
+mapping's device and LUKS UUID so real-root udev coldplug recognizes the
+daemon-free mapping (disappears at reboot), moves mounts, and `switch_root`s
+into `/sbin/init`. Pre-handoff failures drop to a rescue shell.

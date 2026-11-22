@@ -1,280 +1,165 @@
 # Native kernel workflow
 
-Portage owns kernel configuration merging, compilation, signing, prepared trees
-and installation. Agentoo supplies the shared built-in driver union, selected
-host fragment, minimal embedded initramfs, boot-critical validation and manual
-EFI guidance. The custom gentoo-kernel build uses `sys-kernel/gentoo-kernel`; the
-binary fallback kernel uses `sys-kernel/gentoo-kernel-bin`.
+Portage owns kernel config merging, compilation, signing, prepared trees, and
+installation (`sys-kernel/gentoo-kernel` for custom builds;
+`sys-kernel/gentoo-kernel-bin` for the binary fallback). Agentoo supplies the
+shared built-in driver union, selected host fragment, minimal embedded
+initramfs, boot-critical validation, and manual EFI guidance (`agentoo kernel
+--help`).
 
-Custom gentoo-kernel builds require `CONFIG_MODULES=n` except on Bequiet, which
-requires signed modules with signature enforcement. All hosts retain built-in
-early-boot drivers. Deferred maintenance, configuration reduction, and optional
-development work are tracked in
-[card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
-See [Bequiet modules and NVIDIA](#bequiet-modules-and-nvidia) for Bequiet's
-external-module workflow. There is one supported build interface: native
-Portage commands.
+Custom `gentoo-kernel` builds require `CONFIG_MODULES=n` except on Bequiet,
+which requires signed modules with signature enforcement (`MODULE_SIG_FORCE=y`).
+Early-boot drivers stay built in on every host. Deferred maintenance and config
+reduction live in [card 052](../kanban/Backlog/052-native-kernel-maintenance-followups.md).
 
 ## Host specialization
 
-Configuration is authoritative at these locations, applied in native filename order:
+Authoritative layers applied in native filename order:
 
 | Path | Purpose |
 | --- | --- |
 | `/etc/kernel/config.d/10-agentoo.config` | Tracked shared baseline, including explicit disabled options |
-| `/etc/agentoo/kernel/hosts/<host>.config` | Tracked host specialization; preserve the shared driver union |
+| `/etc/agentoo/kernel/hosts/<host>.config` | Tracked host specialization (preserves shared driver union) |
 | `/etc/kernel/config.d/20-host.config` | Local symlink activating the selected host fragment |
 | `/etc/kernel/config.d/80-local-boot.config` | Optional untracked command-line/release settings |
 | `/etc/kernel/config.d/90-local.config` | Optional untracked overrides and experiments |
-| `/etc/portage/env/kernel-local` | Local initramfs PARTUUID, mapping name and root transport; optional keymap override |
+| `/etc/portage/env/kernel-local` | Local initramfs `PARTUUID`, mapper name, root transport, optional keymap |
 
-The selected Agentoo Portage profile is the sole host selection. Target
-installation activates the matching reviewed host fragment and records local
-inputs from its validated LUKS2/Btrfs `@` layout and NVMe/AHCI storage. Generic,
-QEMU and module-enabled targets other than Bequiet retain the binary fallback workflow.
-The installer records the mounted ESP UUID for both kernel installation paths.
-
-These inputs are installation-time setup. After changing storage, the selected
-profile or ESP, review `/etc/portage/env/kernel-local`, the host activation link
-and `/etc/kernel/gentoo-dist-esp.uuid` directly. Keep UUIDs outside Git. Local
-config.d overrides are preserved. The generator owns the default console keymap;
-set `AGENTOO_INITRAMFS_KEYMAP` in kernel-local only to override it.
-
-Shared `/etc/tmpfiles.d/agentoo-kernel.conf` creates the custom installkernel
-configuration link and masks sbctl's incompatible BLS/UKI install hook. The
-custom link reuses shared efistub policy; its drop-in disables external archive
-generation. EFI signing belongs to the source eclass; the binary fallback
-retains its packaged signature. Apply these rules immediately after deploying
-configuration, before either kernel is installed; they also apply at boot.
-
-No kernel savedconfig layer is used. Resolved installed configs are evidence,
-not another policy source. The source package's native phase hook generates a
-fresh archive inside WORKDIR after fragment merging and sets its computed
-`CONFIG_INITRAMFS_SOURCE` using `scripts/config`. That filename is a build input,
-not a persistent local override. Archive paths in an installed config need not
-survive Portage cleanup.
+The installer sets `/etc/portage/env/kernel-local`, `20-host.config`, and
+`/etc/kernel/gentoo-dist-esp.uuid` from the validated LUKS2/Btrfs `@` layout
+(review them manually after changing storage, profile, or ESP; keep UUIDs out
+of Git). Shared `/etc/tmpfiles.d/agentoo-kernel.conf` links the custom
+installkernel config and masks sbctl's incompatible BLS/UKI hook. No kernel
+savedconfig layer is used; `post_src_prepare` generates a fresh initramfs
+archive in `WORKDIR` and sets `CONFIG_INITRAMFS_SOURCE` via `scripts/config`.
 
 ## Setup and build
 
-Deploy this repository's configuration first. Keep the working boot images and
-entries available while accepting the candidate. Establish and back up your
-existing sbctl identity using the [Secure Boot guide](secure-boot.md); private
-keys stay under `/var/lib/sbctl/keys/db` and outside Git.
-
-Apply shared installation policy, install the revised generator **before**
-building the kernel, then select the native development set:
+Establish and back up your sbctl keys first ([Secure Boot guide](secure-boot.md);
+private keys stay under `/var/lib/sbctl/keys/db`, outside Git). Apply tmpfiles
+and install the initramfs generator **before** building `@kernel-dev`:
 
 ```sh
 sudo systemd-tmpfiles --create agentoo-kernel.conf
 sudo emerge --ask --oneshot --usepkg=n sys-kernel/agentoo-initramfs
 ```
 
-The installer establishes `/etc/portage/env/kernel-local`, the
-`/etc/kernel/config.d/20-host.config` symlink, and
-`/etc/kernel/gentoo-dist-esp.uuid` on new supported targets; there is no
-recurring preparation or migration command. For existing hosts still migrating
-from `gentoo-sources`, follow the temporary fleet transition card
-[053-gentoo-kernel-fleet-migration.md](../kanban/Open/053-gentoo-kernel-fleet-migration.md).
-Once the local inputs are established, review and build the native development set:
+For existing hosts still migrating from `gentoo-sources`, establish local
+inputs using [card 053](../kanban/Open/053-gentoo-kernel-fleet-migration.md).
+Then preview and build:
 
 ```sh
 sudo emerge --ask --pretend --verbose --usepkg=n @kernel-dev
 sudo emerge --ask --usepkg=n @kernel-dev
 ```
 
-Generator revision `1-r1` or newer uses static ELF dependency inspection and
-excludes Portage preload libraries from the archive. The installed generator,
-BusyBox and cryptsetup/libraries supply the archive; no sources are downloaded
-by archive generation itself. See [initramfs development](initramfs.md).
-
-Portage merges Gentoo package defaults and config.d, generates the custom
-archive, resolves Kconfig, validates the final boot/host settings, compiles and
-stages the native prepared tree. `secureboot modules-sign` satisfies Gentoo's
-flag constraint. No-module hosts configure no module signing key. Bequiet's native
-profile supplies the existing sbctl db key/certificate for kernel and NVIDIA module
-signing; Gentoo supplies the module-signing Kconfig settings. Final validation
-requires modules, signing, signing of all in-tree modules and signature enforcement
-on Bequiet. Native EFI signing reads sbctl's original key/certificate paths.
-Missing keys fail setup rather than generating a replacement identity.
-
-Installation copies the signed source image to
-`/boot/EFI/Gentoo/kernel-<release>.efi` after checking the mounted ESP against
-`/etc/kernel/gentoo-dist-esp.uuid`. The shared localversion is `-agentoo-v0.5`;
-version 6.18.62 produces release `6.18.62-agentoo-v0.5`. Binary fallback kernel labels are unchanged.
-It generates no external initramfs and invokes neither dracut nor standalone
-microcode generation. The selected firmware/microcode is embedded in the kernel.
-Native results live under `/usr/src/linux-<release>` and `/lib/modules/<release>`.
-The source package's `post_src_install` hook generates kmod indexes with
-native depmod, including built-in driver indexes for CONFIG_MODULES=n. These
-files are package-owned; built-in drivers remain recognizable to userspace tools.
-After a custom package installation, its native Portage hook runs `eselect kernel
-set linux-<release>` so `/usr/src/linux` selects that installed prepared tree.
-Binary fallback installation uses its own release paths and preserves a valid
-custom selection; do not flip the default for binary refreshes. Inspect it with
-`eselect kernel show`. Until a custom build is installed, the binary tree may
-be selected. Native eselect rejects an existing real `/usr/src/linux` directory;
-review it manually rather than replacing it with a link.
-There are no Agentoo build workspaces, manifests, image backups or module staging.
-Portage's replacement/removal behavior applies. Keep a separately tested boot
-entry; do not treat same-release replacement as an automatic rollback mechanism.
-
-To compile in RAM, use Portage's native `PORTAGE_TMPDIR` setting with sufficient
-space, execution permissions and quota headroom. Trials used about 9.2 GiB for
-the build directory, plus link temporaries and the package image. Installed
-package results remain on persistent storage. Do not retain a second RAM-copy
-or workspace lifecycle.
+What Portage handles natively:
+- Generates the fresh embedded initramfs archive (`1-r1`+ uses static ELF
+  inspection; see [initramfs guide](initramfs.md)), resolves Kconfig, and
+  validates required built-in boot drivers and host policy.
+- Signs the EFI image via `USE="secureboot modules-sign"` using sbctl's db
+  key/cert (missing keys fail rather than generating replacements).
+- Installs the signed image to `/boot/EFI/Gentoo/kernel-<release>.efi` (shared
+  localversion `-agentoo-v0.5`) after checking `/boot` against
+  `/etc/kernel/gentoo-dist-esp.uuid`, with no external initramfs or dracut run.
+- Generates package-owned kmod built-in driver indexes via `depmod` in
+  `post_src_install` and selects the installed prepared tree with
+  `eselect kernel set linux-<release>` (binary refreshes keep a valid custom
+  selection).
+- To compile in RAM, use Portage's native `PORTAGE_TMPDIR` (~9.2 GiB+ headroom).
 
 ## Generate an EFI registration command
 
-For the installed source image:
-
 ```sh
-agentoo kernel gen-efi-cmd \
-  --image /boot/EFI/Gentoo/kernel-RELEASE.efi
+agentoo kernel gen-efi-cmd --image /boot/EFI/Gentoo/kernel-RELEASE.efi
 ```
 
-The helper validates the image's mounted FAT GPT ESP and prints one shell-quoted
-`sudo efibootmgr --create-only ...` command. Review and execute it separately.
-It leaves BootOrder and BootNext unchanged. Select the candidate from the firmware
-boot menu for first acceptance. Startop guidance adds its required full-device-path
-option using the selected host profile. No command in this workflow reboots,
-enrolls keys or changes firmware entries automatically.
-
-The installkernel guidance hook calls the same helper. For binary fallback kernel
-images ending `-gentoo-dist-bin.efi` (and standard external-initramfs distribution
-images ending `-gentoo-dist.efi`), it includes `/etc/kernel/cmdline` and the matching
-external `initrd=` path. The custom gentoo-kernel build uses its embedded boot
-policy.
-`--args 'loglevel=7'` adds optional firmware arguments; `--label TEXT` changes the
-display label. Firmware arguments supplement the built-in command line; repeated
-parameters have parameter-specific precedence. The minimal initramfs uses its
-embedded storage identity, independently of those arguments.
-
-Verify the actual source image against the intended enrolled certificate:
+Review and execute the printed `sudo efibootmgr --create-only ...` command
+separately (leaves `BootOrder`/`BootNext` unchanged; Startop automatically adds
+`--full-dev-path`). Select the candidate from the firmware boot menu for first
+boot. Verify the image signature against the enrolled db cert:
 
 ```sh
 sudo sbverify --cert /var/lib/sbctl/keys/db/db.pem \
   /boot/EFI/Gentoo/kernel-RELEASE.efi
 ```
 
-A matching signature does not establish firmware trust or physical boot success.
-Check selected release, passphrase retries, internal/USB keyboards, Btrfs `@`,
-discards, microcode, systemd startup, networking, displays/audio and suspend/resume.
-Preserve binary recovery.
+A valid signature does not prove firmware trust or hardware boot success—verify
+release, passphrase retries, internal/USB keyboards, Btrfs `@`, discards,
+microcode, systemd startup, networking, displays/audio, and suspend/resume while
+keeping a working binary recovery entry.
 
 ## Updates and rebuilds
 
-Install/update the source package through Portage:
-
 ```sh
+# Normal version update:
 sudo emerge --ask --usepkg=n sys-kernel/gentoo-kernel
-```
-
-After configuration, generator, BusyBox, cryptsetup/libraries or embedded firmware
-changes, regenerate and recompile the selected version:
-
-```sh
+# Force rebuild after config, initramfs generator, cryptsetup, or firmware edits:
 sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 ```
 
-Update the generator and other archive inputs first. A normal source build's
-prepare phase creates a new archive from the inputs installed at that time; a
-later userspace upgrade does not update an already embedded archive. Recompilation
-is required. `emerge --config` only reinstalls an existing custom gentoo-kernel
-build; it cannot refresh its embedded archive or firmware. Review EFI guidance after every
-new release and independently boot-test maintenance results.
+Update `sys-kernel/agentoo-initramfs` and userspace archive inputs *before*
+rebuilding: embedded archives and firmware require full recompilation
+(`emerge --config` only reinstalls an existing build).
 
 ### Firmware and microcode updates
 
-`linux-firmware` and `intel-microcode` use `-initramfs`: updating their installed
-payloads does not regenerate or reinstall either boot artifact. Shared dracut
-policy explicitly enables early microcode for the binary fallback, overriding
-the firmware packages' disabled generator defaults. No custom filtering hook
-or all-kernels maintenance dispatcher is used.
-
-After installing firmware/microcode updates, explicitly refresh both kernels:
+`linux-firmware` and `intel-microcode` use `-initramfs`. After any firmware,
+microcode, or `agentoo kernel firmware apply` change, explicitly refresh both
+boot artifacts (see [firmware guide](firmware.md)):
 
 ```sh
 sudo emerge --config '=sys-kernel/gentoo-kernel-bin-VERSION'
 sudo emerge --ask --oneshot --usepkg=n '=sys-kernel/gentoo-kernel-VERSION'
 ```
 
-Replace each VERSION with that package's intended installed version; they need
-not match. Refresh each binary fallback version you intend to retain. The first
-command regenerates its external archive; the second recompiles embedded inputs.
-The same requirement applies after `agentoo kernel firmware apply`. Check both
-results and cold-boot the affected kernels. `kernel-install add-all` and
-`installkernel --all` do not select our custom package environment and are not
-the refresh workflow for this mixed setup.
+Do not use `kernel-install add-all` or `installkernel --all`.
 
 ## Configuration experiments
 
-For a reproducible experiment, edit `/etc/kernel/config.d/90-local.config`, then
-force a source rebuild with the command above. Inspect the resolved config under
-`/usr/src/linux-<release>/.config`. Remove the experimental entries to return to
-shared/host policy on the next fresh merge. Promote accepted changes into the
-appropriate tracked fragment and remove redundant local settings. Do not prune
-other hosts' built-in driver requirements to specialize one host.
+Edit `/etc/kernel/config.d/90-local.config` and force a source rebuild, then
+inspect `/usr/src/linux-<release>/.config`. Promote accepted deltas into
+tracked fragments and remove redundant local overrides (never prune other hosts'
+built-in driver requirements).
 
-For menu-based exploration, use matching **full sources** from native unpack/
-prepare, with a separate output directory seeded from a current resolved config:
+For interactive `menuconfig` exploration against full sources:
 
 ```sh
+sudo env PORTAGE_TMPDIR=/var/tmp/kernel-exp \
+  ebuild /var/db/repos/gentoo/sys-kernel/gentoo-kernel/gentoo-kernel-VERSION.ebuild \
+  unpack prepare configure
+
 mkdir -p "$experiment"
 cp "$resolved_config" "$experiment/.config"
 cp "$experiment/.config" "$experiment/before.config"
-make -C "$sources" O="$experiment" menuconfig
-# Alternatively edit .config directly, then resolve dependencies:
-make -C "$sources" O="$experiment" olddefconfig
+make -C "$sources" O="$experiment" menuconfig   # or edit + olddefconfig
 diff -u "$experiment/before.config" "$experiment/.config"
 ```
 
-Use `ebuild /var/db/repos/gentoo/sys-kernel/gentoo-kernel/gentoo-kernel-VERSION.ebuild
-unpack prepare configure` with dedicated native PORTAGE_TMPDIR for development;
-the usual installed host inputs and signing setup still apply. Its WORKDIR
-contains the full source directory and resolved `build/.config`. The installed
-prepared tree is not assumed to be a full development tree.
-
-Move intentional deltas into fragments and rebuild with Portage. Editing the
-installed `.config` does not configure the next emerge. Removing a fragment does
-not reset an already edited `.config`: remerge policy. Generated compiler metadata
-and initramfs filenames are not settings to promote. If preparing a detached
-compile, generate/select its own archive first; cleanup invalidates references to
-another build's WORKDIR. The fast detached incremental compile/install loop still
-needs acceptance; no separate persistent development framework is provided.
+Promote only intentional deltas into `/etc/kernel/config.d/` (never generated
+compiler metadata or temporary initramfs paths) and rebuild through Portage.
 
 ## Binary fallback
 
-The binary package remains independently managed through the shared installkernel
-configuration and dracut:
+Managed independently through shared installkernel and dracut (`/etc/kernel/cmdline`):
 
 ```sh
 sudo emerge --ask sys-kernel/gentoo-kernel-bin
 sudo emerge --config '=sys-kernel/gentoo-kernel-bin-VERSION'
 ```
 
-The second command regenerates its external initramfs and reinstalls that version.
-Its local root arguments remain in `/etc/kernel/cmdline`. Custom source package
-environment/plugin selection does not apply to the binary package. Verify the
-fallback's packaged signing certificate and firmware acceptance separately.
-
-Bequiet's accepted fallback remains console/network recovery. When registering
-that host's fallback, add `--args 'systemd.unit=multi-user.target
-systemd.mask=getty@tty1.service'`; tty2 retains password login. NVIDIA support is
-outside the binary recovery requirement; it is required for Bequiet's custom
-kernel acceptance.
+On Bequiet, register the binary fallback as console/network recovery with
+`--args 'systemd.unit=multi-user.target systemd.mask=getty@tty1.service'`
+(NVIDIA and desktop graphics are outside the recovery requirement).
 
 ## Bequiet modules and NVIDIA
 
 Bequiet is the only host permitted to enable loadable modules, paired with
-mandatory module signing and signature enforcement (`MODULE_SIG_FORCE=y`).
-Bequiet reuses its enrolled sbctl db key and certificate for both EFI and module
-signing. The embedded initramfs does not load modules; NVIDIA loads after
-real-root handoff, with its package-owned GSP firmware and graphics
-configuration.
+mandatory signing and `MODULE_SIG_FORCE=y` using its enrolled sbctl db key/cert.
+NVIDIA loads after real-root handoff with its package-owned GSP firmware.
 
-After building the source kernel on Bequiet, inspect its resolved configuration
-and certificate fingerprint:
+After building `gentoo-kernel` on Bequiet, verify resolved signing config and
+matching certificate fingerprints:
 
 ```sh
 release=6.18.62-agentoo-v0.5
@@ -285,13 +170,9 @@ openssl x509 -inform DER -in "/usr/src/linux-$release/certs/signing_key.x509" \
 sudo openssl x509 -in /var/lib/sbctl/keys/db/db.pem -noout -fingerprint -sha256
 ```
 
-Require `MODULES`, `MODULE_UNLOAD`, `MODULE_SIG`, `MODULE_SIG_ALL` and
-`MODULE_SIG_FORCE` to be `y`, and matching certificate fingerprints.
-`MODULE_SIG_KEY` may reference a temporary native build input; external modules
-use the original sbctl paths from Bequiet's profile.
-
-Confirm `eselect kernel show` selects the installed custom candidate, then build
-NVIDIA using that native selection:
+Require `MODULES`, `MODULE_UNLOAD`, `MODULE_SIG`, `MODULE_SIG_ALL`, and
+`MODULE_SIG_FORCE` to be `y`, then confirm `eselect kernel show` points to the
+candidate and rebuild NVIDIA before booting:
 
 ```sh
 eselect kernel show
@@ -304,15 +185,9 @@ done
 modprobe --set-version "$release" --show-depends nvidia_drm
 ```
 
-Check the build log names the candidate release, module paths/version magic match
-it and dependency indexes resolve the modules. Signer metadata requires kmod's
-OpenSSL support; without it, empty signer fields and an unknown hash are
-inconclusive. Module loading with signature enforcement establishes kernel trust
-at boot; verify `sbctl status`, `uname -r`,
-`/sys/module/module/parameters/sig_enforce`, `nvidia-smi`, and Hyprland after
-booting under Secure Boot.
-
-After same-version custom kernel rebuilds, rebuild `x11-drivers/nvidia-drivers`
-with the command above before booting: a same-version rebuild does not change
-`virtual/dist-kernel`'s subslot and does not trigger dependent rebuilds
-automatically. No custom module dispatcher or workspace lifecycle is used.
+Note: `kmod` built without OpenSSL prints empty signer fields even on validly
+signed modules; verify live enforcement via
+`/sys/module/module/parameters/sig_enforce` and `nvidia-smi` after booting
+under Secure Boot. Always run the NVIDIA rebuild above after same-version
+custom kernel rebuilds (same-version rebuilds do not change
+`virtual/dist-kernel`'s subslot).
