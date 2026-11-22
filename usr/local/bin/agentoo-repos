@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Summarize Git repositories without changing their work trees."""
+import argparse
 import fnmatch
 import json
 import os
@@ -42,10 +43,18 @@ def fetch_agent(args):
 
 
 def build_parser():
-    parser = ArgumentParser(prog='agentoo repos', description=__doc__, epilog=
-        'Default scope: system Agentoo and your home. --path replaces that scope. '
-        'Exit 0: checked successfully (dirty/ahead is normal); 1: scan/Git/fetch errors; 2: invalid arguments/config. '
-        'Bare work-tree pairs count tracked changes only, avoiding a scan of / or your entire home for untracked files.')
+    parser = ArgumentParser(prog='agentoo repos', description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Default scope: system Agentoo (/) and your home; --path replaces that scope.\n'
+               'Bare work-tree pairs check tracked files only (skipping untracked scans).\n'
+               'Interactive --fetch starts a temporary ssh-agent when none is reachable.\n\n'
+               'Optional config (~/.config/agentoo/repos.json):\n'
+               '  {"exclude": ["Synct"], "repositories": [{"git_dir": "~/.dots", "work_tree": "~"}]}\n\n'
+               'Examples:\n'
+               '  agentoo repos\n'
+               '  agentoo repos --path=. --fetch\n'
+               '  agentoo repos --no-input --json\n\n'
+               'Exit 0: checked successfully (dirty/ahead is normal); 1: scan/Git/fetch errors; 2: invalid arguments/config.')
     parser.add_argument('--path', action='append', metavar='DIR', help='scan this directory instead of the default scope; repeatable').completion = 'directories'
     parser.add_argument('--exclude', action='append', default=[], metavar='GLOB', help='skip matching directory names or paths; repeatable')
     parser.add_argument('--config', metavar='FILE', help='JSON configuration (default: $XDG_CONFIG_HOME/agentoo/repos.json)').completion = 'files'

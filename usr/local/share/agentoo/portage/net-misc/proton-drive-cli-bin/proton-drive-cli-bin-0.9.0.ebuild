@@ -38,6 +38,7 @@ src_unpack() {
 
 src_install() {
 	dobin proton-drive
+	dodoc "${FILESDIR}/README.gentoo"
 	newdoc "${DISTDIR}/${P}-LICENSE.md" LICENSE.md
 }
 

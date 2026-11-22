@@ -4,6 +4,7 @@
 Only enable-write is an Agentoo operation. Its options are never interpreted in
 forwarded Git arguments; an initial `git` explicitly forwards.
 """
+import argparse
 import os
 from pathlib import Path
 import shlex
@@ -43,8 +44,16 @@ CONFIG_WRITE_FLAGS = {'--add', '--replace-all', '--unset', '--unset-all',
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo git', description=__doc__,
-                            epilog='Other arguments are passed unchanged to Git. Use `agentoo git git ...` '
-                                   'to explicitly forward an Agentoo operation name to Git.')
+                            formatter_class=argparse.RawDescriptionHelpFormatter,
+                            epilog='Repository: /var/lib/agentoo/repository.git (work tree: /).\n'
+                                   'Forwarded Git commands run as the invoking user; use `sudo agentoo git ...`\n'
+                                   'for protected reads or system writes. Root-run mutating commands pause\n'
+                                   'Hyprland auto-reload, repair managed permissions, and reload Hyprland cleanly.\n'
+                                   'Use `agentoo git git ...` to forward an Agentoo operation name to Git.\n\n'
+                                   'Examples:\n'
+                                   '  agentoo git status\n'
+                                   '  sudo agentoo git pull\n'
+                                   '  agentoo git enable-write')
     sub = parser.add_subparsers(dest='operation', required=True)
     child = sub.add_parser('enable-write', help='Switch origin fetch/push URL to SSH',
                            description='Switch origin fetch/push URL to SSH')

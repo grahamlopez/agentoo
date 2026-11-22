@@ -2,6 +2,7 @@
 
 Normal commands are Python agentoo-NAME executables. The dispatcher only routes;
 each command owns one parser, validation, privileges, help, and completion.
+`--help` is the sole reference for CLI options and usage; do not mirror it in `docs/`.
 Checkpoint is independently runnable POSIX sh, with no Python dependency.
 Use readable GNU long options, familiar short names, --help, and --. Disable
 implicit option abbreviations. Validate before privileges or effects; requested

@@ -50,7 +50,7 @@ needed. Unstarred profile `packages` entries belong to `@profile` (part of
 | `app-misc/keyd`, `acct-group/keyd` | System-wide key remapping daemon (`@gui-desktop`; shared map in `/etc/keyd/default.conf`) |
 | `app-nvim/softlock` | Live `git-r3` Neovim encryption plugin (`@terminal-env`, [shell-editors guide](../docs/shell-editors.md)) |
 | `app-admin/proton-pass-cli-bin` | Official Proton Pass CLI (`pass-cli`) |
-| `net-misc/proton-drive-cli-bin` | Official Proton Drive CLI (`proton-drive`) |
+| `net-misc/proton-drive-cli-bin` | Official Proton Drive CLI ([README.gentoo](net-misc/proton-drive-cli-bin/files/README.gentoo)) |
 | `net-misc/pcloud-drive-bin` | Official pCloud Drive AppImage ([README.gentoo](net-misc/pcloud-drive-bin/files/README.gentoo); `agentoo cloud-storage pcloud --help`) |
 | `net-misc/amazon-dcv-client-bin` | Official Amazon DCV remote desktop viewer (`dcvviewer`) |
 | `net-misc/teleport-tsh-bin` | Official Teleport Community `tsh` client and shell completions |

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check or restore permissions for tracked agentoo files and managed directories."""
+import argparse
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -139,9 +140,15 @@ def elevate():
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo permissions', description=__doc__,
-        epilog='JSON check reports paths, numeric UID/GID and octal mode strings. '
-               'Exit 0: compliant (or repair succeeded); 1: mismatches/errors; 2: invalid arguments. '
-               'Validation errors go to stderr; a report is emitted only after policy inspection.')
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Policy and rule syntax: /etc/agentoo/permissions.conf\n'
+               'Requests sudo automatically when needed; system-repo Git hooks run check/fix.\n'
+               'JSON check reports paths, numeric UID/GID and octal mode strings.\n\n'
+               'Examples:\n'
+               '  agentoo permissions check\n'
+               '  agentoo permissions fix\n'
+               '  agentoo permissions check --root /mnt/gentoo --json\n\n'
+               'Exit 0: compliant (or repair succeeded); 1: mismatches/errors; 2: invalid arguments.')
     operation = parser.add_argument('operation', choices=['check', 'fix'],
                                     help='check reports mismatches; fix restores declared permissions')
     operation.completion = 'commands'

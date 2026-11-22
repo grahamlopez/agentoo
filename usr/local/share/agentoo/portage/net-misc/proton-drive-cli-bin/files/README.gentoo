@@ -1,0 +1,20 @@
+Proton Drive CLI on Gentoo
+==========================
+This packages the official standalone `proton-drive` executable (with Bun
+embedded). Portage owns upgrades; user configuration, sessions, and synced
+data remain in upstream XDG locations and are preserved on removal.
+
+Setup and authentication
+------------------------
+Run as your normal user (sign-in opens a browser):
+    proton-drive auth login
+
+Credential storage:
+- Default: `libsecret` (requires a running Secret Service provider; installing
+  libsecret alone does not start one).
+- Terminal/GPG alternative: enable `USE=pass` (`app-admin/pass` — local GPG
+  password-store, not Proton Pass `pass-cli`), initialize `pass` with your GPG
+  key, and set before login/commands:
+      export PROTON_DRIVE_CREDENTIALS_STORE=pass
+
+Note: the upstream amd64 build requires an AVX2-capable CPU.

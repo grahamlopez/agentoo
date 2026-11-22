@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Manage cloud storage clients through systemd user services."""
+import argparse
 import os
 from pathlib import Path
 import select
@@ -26,16 +27,24 @@ SESSION_ENV = (
 
 def build_parser():
     parser = ArgumentParser(prog='agentoo cloud-storage', description=__doc__,
-        epilog='Run as your desktop user, without sudo. Exit 0: success/running; '
-               '1: operational failure; 2: invalid arguments; 3: stopped (status only).')
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Run as your desktop user, without sudo.\n'
+               'Install pCloud first: sudo emerge --ask net-misc/pcloud-drive-bin\n\n'
+               'Examples:\n'
+               '  agentoo cloud-storage pcloud start\n'
+               '  agentoo cloud-storage pcloud status\n'
+               '  agentoo cloud-storage pcloud stop\n\n'
+               'Exit 0: success/running; 1: operational failure; 2: invalid arguments; 3: stopped (status only).')
     parser.set_defaults(help_parser=parser)
     providers = parser.add_subparsers(dest='provider')
     pcloud = providers.add_parser('pcloud', help='Manage the pCloud desktop client',
         description='Run pCloud independently of your terminal in a systemd user service.',
-        epilog='Disable pCloud\'s own login autostart when using service management. '
-               'Logs: journalctl --user -u agentoo-pcloud.service. '
-               'Start requires a graphical-session terminal; stop/status also work from a TTY. '
-               'Stop quits promptly and does not wait for pending uploads.')
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Disable pCloud\'s own login autostart when using service management.\n'
+               'Start requires a graphical-session terminal; stop/status also work from a TTY.\n'
+               'Stop quits promptly and does not wait for pending uploads.\n'
+               'Logs: journalctl --user -u agentoo-pcloud.service -b\n'
+               'Sync & ~/pCloudDrive mount notes: /usr/share/doc/pcloud-drive-bin-*/README.gentoo')
     pcloud.set_defaults(help_parser=pcloud)
     actions = pcloud.add_subparsers(dest='action')
     actions.add_parser('start', help='Start the user service; leave a running service alone',

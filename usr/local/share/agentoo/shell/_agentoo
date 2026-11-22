@@ -2,6 +2,9 @@
 
 # Agentoo owns command knowledge; this adapter only handles zsh presentation.
 # Records are data. Never eval completion output or request elevated privileges.
+# Managed zsh loads this automatically; to enable in an existing shell or checkout:
+#   fpath=(/path/to/usr/local/share/agentoo/shell $fpath)
+#   autoload -Uz compinit && compinit && compdef _agentoo agentoo
 local curcontext="$curcontext" record kind value description display item group heading
 local -a records matches descriptions labels rows expl
 local -i use_git=0 width index available
