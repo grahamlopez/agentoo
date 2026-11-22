@@ -14,8 +14,6 @@ System
   with [Thinktop](hosts/thinktop.md), [Flattop](hosts/flattop.md),
   [Startop](hosts/startop.md), and [Bequiet](hosts/bequiet.md) hardware baselines
 - [System checkpoints and recovery](checkpoints.md)
-- [Git updates for the system repository](git.md)
-- [Managed file permissions and Git automation](permissions.md)
 - [Shell and editor environment](shell-editors.md)
 - [Local Portage overlay](../portage/README.md)
 
@@ -28,15 +26,16 @@ Kernel
 
 User facing tools and configuration
 
-- [Agentoo CLI usage, completion, and conventions](agentoo-cli.md)
+Use `agentoo --help` (and `agentoo help COMMAND`) for CLI tool usage, options,
+and examples; see [lib/cli.py](../lib/cli.py) for CLI conventions.
+
 - [GUI installation and session setup](gui-base.md)
 - [Audio setup and diagnostics](audio.md)
 - [Displays, HiDPI, and laptop lid behavior](displays.md)
-- [Secret profiles and installation](../secrets/README.md)
+- [Secrets trust model and provisioning](../secrets/README.md)
 - [Desktop preferences](desktop.md)
 - [Theming and light/dark appearance](theming.md)
 - [Font diagnostics and selection](fonts.md)
-- [Repository status and terminal color tests](terminal-tools.md)
 
 ## Philosophy and principles
 

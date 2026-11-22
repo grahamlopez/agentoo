@@ -10,8 +10,9 @@ Right now, this is built from the following main components:
    previously onboarded target hosts.
 2. A configuration repository that mirrors the target filesystem. A bare repo
    is checked out using `/` as its working directory
-3. A suite of [CLI tools](usr/local/share/agentoo/docs/agentoo-cli.md) to aid in
-   configuration and management
+3. A suite of CLI tools (`agentoo --help`; conventions in
+   [lib/cli.py](usr/local/share/agentoo/lib/cli.py)) to aid in configuration
+   and management
 4. A portage overlay with custom ebuilds
 
 **Opinionated** means that only very specific configurations are supported and
