@@ -1,7 +1,7 @@
 # Installation, first boot, and user setup
 
 The installer is `usr/local/share/agentoo/installer/gentoo-install.sh`; its
-source and `--verbose` output describe each phase.
+source and `--dry-run` plans describe each phase.
 
 ## Installer policy
 

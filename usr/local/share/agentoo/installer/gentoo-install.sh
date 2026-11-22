@@ -10,10 +10,9 @@
 # Keep the downloaded file available: child chroot phases copy this same script.
 # Stage3 and the target configuration are fetched during installation.
 #
-# This file is both the executable installer and its canonical design record.
-# Each phase begins with its own readable explanation immediately beside the
-# code that implements it.  Run with `--verbose` to print the technical notes
-# for each selected phase, or read the source directly.
+# This file is both the executable installer and its authoritative procedure.
+# Each phase is written to be read directly, with rationale commented beside
+# the executed commands. Run with `--dry-run` to inspect resolved plans.
 #
 # This installer currently owns seven phases:
 #   disk-setup: validate the target, then create GPT → EFI → LUKS2 → Btrfs →
@@ -74,8 +73,8 @@ INSTALL_BINPKGS=1
 RAM_BUILDS=1
 PACKAGE_OPTIONS=(--usepkg=n --getbinpkg=n)
 BINARY_INSTALL_OPTIONS=()
-SELECTED_PHASES=(disk-setup stage3-bootstrap portage-foundation system-update kernel-foundation first-boot-foundation handoff)
-VERBOSE=0
+readonly PHASE_ORDER=(disk-setup stage3-bootstrap portage-foundation system-update kernel-foundation first-boot-foundation handoff)
+SELECTED_PHASES=("${PHASE_ORDER[@]}")
 INTERNAL_PORTAGE_CHROOT=0
 INTERNAL_UPDATE_CHROOT=0
 INTERNAL_KERNEL_CHROOT=0
@@ -92,8 +91,6 @@ MOUNTED_ROOT=0
 MOUNTED_HOME=0
 MOUNTED_EFI=0
 LUKS_OPENED=0
-
-PHASE_ORDER=(disk-setup stage3-bootstrap portage-foundation system-update kernel-foundation first-boot-foundation handoff)
 
 usage() {
   cat <<EOF
@@ -119,8 +116,6 @@ Options:
   --no-install-binpkgs       Build installation packages from source.
   --no-ram-builds            Build in /var/tmp instead of the default /dev/shm.
                               This never changes post-install build storage.
-  --verbose                  Print technical notes and detailed phase output.
-                              It does not affect execution or confirmations.
   --phase NAME               Run a named phase (currently: disk-setup,
                               stage3-bootstrap, portage-foundation, system-update,
                               kernel-foundation, first-boot-foundation, handoff). May be
@@ -153,7 +148,7 @@ BTRFS_LABEL, EFI_SIZE, MOUNT_ROOT, CONFIG_SOURCE,
 CONFIG_BRANCH, TARGET_TIMEZONE, TARGET_LOCALE, TARGET_CPU_FLAGS,
 TARGET_MICROCODE, TARGET_HOSTNAME, QEMU_VARS, and QEMU_VARS_TEMPLATE.
 --target-host must be supplied explicitly; TARGET_HOST is not inherited.
-Host-specific packages come from the target's optional @host-TARGET set.
+Host-specific packages come from the selected profile's @profile set.
 
 Safety model:
   * Selected phases run by default; --dry-run is the non-destructive mode.
@@ -256,6 +251,8 @@ run_chroot_phase() {
   ' "$PROGRAM-$phase" "$MOUNT_ROOT" "$helper" "$@"
 }
 
+# Installer-only build-storage override: default to /dev/shm (or /var/tmp with
+# --no-ram-builds) per invocation without changing post-install Portage policy.
 install_emerge() {
   local build_dir=/dev/shm
   (( RAM_BUILDS )) || build_dir=/var/tmp
@@ -338,7 +335,6 @@ parse_args() {
       --install-binpkgs) INSTALL_BINPKGS=1 ;;
       --no-install-binpkgs) INSTALL_BINPKGS=0 ;;
       --no-ram-builds) RAM_BUILDS=0 ;;
-      --verbose) VERBOSE=1 ;;
       --phase)
         (($# >= 2)) || die '--phase requires a phase name'
         set_phase_selection "$2"
@@ -717,107 +713,6 @@ cleanup_after_failure() {
 disk_setup() {
   local command value mountpoint source backing_disk
 
-  if (( VERBOSE )); then
-    cat <<'EOF'
-Disk setup: target protection, layout, and mount mechanics
-==========================================================
-
-The installer accepts one whole block device and derives its partitions.  For
-example, /dev/nvme0n1 becomes /dev/nvme0n1p1 and /dev/nvme0n1p2.
-
-Optional manual safety checks
------------------------------
-
-The target must have lsblk type `disk`; partitions, /dev/mapper entries, and
-ordinary paths are rejected.  The script then protects disks backing /, /boot,
-/efi, or /boot/efi, as well as mounted or active-swap descendants.
-
-lsblk --paths --output NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS /dev/nvme0n1
-findmnt --target /
-findmnt --target /boot
-findmnt --target /efi
-findmnt --target /boot/efi
-swapon --show
-test ! -e /dev/mapper/cryptroot
-
-Erase and partition the disk
-----------------------------
-
-The target receives a GPT containing two partitions: a FAT32 EFI System
-Partition (default 1 GiB, GPT type EF00) and a LUKS2 container using the
-remainder (type 8309).  The ESP stays outside LUKS because UEFI firmware must
-read the later boot image before Linux can decrypt the root filesystem.
-
-wipefs --all --force /dev/nvme0n1
-sfdisk --wipe always --wipe-partitions always /dev/nvme0n1 <<'SFDISK_LAYOUT'
-label: gpt
-size=1G, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="EFI"
-type=CA7D7CCB-63ED-4C53-861C-1742536059CC, name="cryptroot"
-SFDISK_LAYOUT
-
-partprobe /dev/nvme0n1
-udevadm settle
-
-Create the EFI, LUKS, and Btrfs layers
----------------------------------------
-
-The LUKS partition opens as /dev/mapper/<luks-name>.  Btrfs is formatted there,
-not on the raw partition, so the filesystem, subvolume metadata, and later
-Gentoo files are encrypted.  `--data single` is appropriate for one device;
-`--metadata dup` retains two metadata copies on that device and is standard
-practice as recommended by upstream.
-
-mkfs.fat -F 32 -n EFI /dev/nvme0n1p1
-cryptsetup luksFormat --type luks2 /dev/nvme0n1p2
-cryptsetup open /dev/nvme0n1p2 cryptroot
-mkfs.btrfs --force --label GENTOO --data single --metadata dup /dev/mapper/cryptroot
-
-Create the root and home subvolumes
------------------------------------
-
-The fresh Btrfs top level, normally subvolume ID 5, is mounted temporarily only
-to create @ and @home.  The stage3 must later be unpacked after @ is remounted
-as <mount-root>.  @home is mounted separately at <mount-root>/home so system
-snapshots can exclude home by default.  Named `subvol=@` paths are simpler to
-inspect in fstab and recovery commands than numeric IDs.
-
-mkdir -p /mnt/gentoo
-mount -o subvolid=5 /dev/mapper/cryptroot /mnt/gentoo
-btrfs subvolume create /mnt/gentoo/@
-btrfs subvolume create /mnt/gentoo/@home
-umount /mnt/gentoo
-
-Mount the layout for the next phase
------------------------------------
-
-`noatime,compress=zstd:1` is a conservative initial root/home mount policy
-to start.  Do not add `ssd` or `space_cache=v2`: modern Btrfs handles those
-automatically.  Do not globally enable autodefrag, nodatacow, nodatasum, or
-compress-force without a workload-specific reason; they can harm snapshot or
-integrity behavior.
-
-The ESP mounts at <mount-root>/boot, where its EFI directory becomes /boot/EFI
-inside the installed system.  Later UKIs will live there for direct firmware
-booting.
-
-mount -o subvol=@,noatime,compress=zstd:1 /dev/mapper/cryptroot /mnt/gentoo
-mkdir -p /mnt/gentoo/home /mnt/gentoo/boot
-mount -o subvol=@home,noatime,compress=zstd:1 /dev/mapper/cryptroot /mnt/gentoo/home
-mount /dev/nvme0n1p1 /mnt/gentoo/boot
-mkdir -p /mnt/gentoo/boot/EFI
-
-Optional manual verification
-----------------------------
-
-The printed lsblk table and layout plan are the checks to read before applying
-the plan.
-
-cryptsetup isLuks /dev/nvme0n1p2
-btrfs subvolume list /mnt/gentoo
-findmnt -R /mnt/gentoo
-EOF
-  fi
-
   log 'Phase: disk-setup'
 
   # Commands used by every disk-setup branch.  The longer apply-only tool list
@@ -961,8 +856,9 @@ EOF
   run_privileged umount "$MOUNT_ROOT"
   MOUNTED_ROOT=0
 
-  # These are the fixed root/home options later expected in fstab.  Named subvolumes,
-  # rather than numeric IDs, keep recovery commands and fstab auditable.
+  # Fixed root/home mount options later written to fstab. Named subvolumes keep
+  # recovery commands auditable; omit ssd/space_cache=v2 (automatic on modern
+  # Btrfs) and avoid global autodefrag/nodatacow/compress-force.
   run_privileged mount -o "subvol=$ROOT_SUBVOL,noatime,compress=zstd:1" "/dev/mapper/$LUKS_NAME" "$MOUNT_ROOT"
   MOUNTED_ROOT=1
   run_privileged mkdir -p "$MOUNT_ROOT/home" "$MOUNT_ROOT/boot"
@@ -1080,60 +976,6 @@ stage3_bootstrap() {
   local command source stage3_filename stage3_size stage3_url
   local latest_manifest latest_verified archive sha256 sha256_verified release_keys
   local manifest_archive manifest_size manifest_extra
-
-  if (( VERBOSE )); then
-    cat <<EOF
-Stage3 bootstrap: verified desktop-systemd base system
-======================================================
-
-The selected stage is Gentoo Release Engineering's AMD64 desktop-systemd
-archive.  The signed latest-stage manifest names the current archive; its
-example filename below is only a concrete follow-along value and will change
-as Gentoo publishes new stage3 releases.
-
-Discover, download, and verify the stage3
------------------------------------------
-
-The installer obtains Gentoo's release-key bundle, then accepts each signed
-manifest only when its signer is Gentoo's pinned automated-release key. Verify
-the latest-stage manifest first, then verify the detached checksum manifest
-before extracting the archive. Do not accept an archive whose signed checksum
-fails.
-
-cd /mnt/gentoo
-curl --fail --location --output gentoo-release.asc.20260125.gz https://dev.gentoo.org/~sam/dist/sec-keys/openpgp-keys-gentoo-release/gentoo-release.asc.20260125.gz
-gzip --decompress --stdout gentoo-release.asc.20260125.gz | gpg --import
-gpg --with-fingerprint --list-keys 13EBBDBEDE7A12775DFDB1BABB572E0E2D182910
-wget https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-desktop-systemd/latest-stage3-amd64-desktop-systemd.txt
-gpg --output latest-stage3-amd64-desktop-systemd.txt.verified --decrypt latest-stage3-amd64-desktop-systemd.txt
-
-wget https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-desktop-systemd/stage3-amd64-desktop-systemd-20260913T163055Z.tar.xz
-wget https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-desktop-systemd/stage3-amd64-desktop-systemd-20260913T163055Z.tar.xz.sha256
-gpg --output stage3-amd64-desktop-systemd-20260913T163055Z.tar.xz.sha256.verified --decrypt stage3-amd64-desktop-systemd-20260913T163055Z.tar.xz.sha256
-sha256sum --check stage3-amd64-desktop-systemd-20260913T163055Z.tar.xz.sha256.verified
-
-Extract the stage and prepare the chroot
-----------------------------------------
-
-Extraction preserves extended attributes and the numeric owners assigned by
-Release Engineering.  The resolver copy and slave bind mounts make the new
-system usable for the next chroot-based configuration phase without allowing
-mount events to propagate back into the live environment.
-
-tar xpf stage3-amd64-desktop-systemd-20260913T163055Z.tar.xz --xattrs-include='*.*' --numeric-owner -C /mnt/gentoo
-cp --dereference /etc/resolv.conf /mnt/gentoo/etc/resolv.conf
-mount --types proc /proc /mnt/gentoo/proc
-mount --rbind /sys /mnt/gentoo/sys
-mount --make-rslave /mnt/gentoo/sys
-mount --rbind /dev /mnt/gentoo/dev
-mount --make-rslave /mnt/gentoo/dev
-mount --bind /run /mnt/gentoo/run
-mount --make-slave /mnt/gentoo/run
-
-The bootstrap phase intentionally stops before entering the chroot or changing
-Portage configuration; those belong to the next semantic phase.
-EOF
-  fi
 
   log 'Phase: stage3-bootstrap'
 
@@ -1424,66 +1266,6 @@ apply_optional_systemd_policy() {
 install_portage_foundation() {
   local command source config_git_dir config_revision signature_status planned_profile esp_uuid
 
-  if (( VERBOSE )); then
-    cat <<'EOF'
-Portage foundation: live configuration and Git synchronization
-================================================================
-
-The configuration repository is a bare Git database whose work tree is the
-installed system itself. Files below /etc and /usr/local are therefore both
-operational configuration and tracked files; no deployment copy or symlink
-farm separates edits from version control. The selected Agentoo host profile
-inherits shared defaults and Gentoo's desktop/systemd baseline. Native make.conf settings remain local overrides.
-
-Install the configuration work tree
------------------------------------
-
-mkdir -p /var/lib/agentoo
-git clone --bare --single-branch --branch main https://github.com/grahamlopez/agentoo.git /var/lib/agentoo/repository.git
-git --git-dir=/var/lib/agentoo/repository.git config core.bare false
-git --git-dir=/var/lib/agentoo/repository.git config core.worktree /
-git --git-dir=/var/lib/agentoo/repository.git config core.sharedRepository 0644
-git --git-dir=/var/lib/agentoo/repository.git config status.showUntrackedFiles no
-git --git-dir=/var/lib/agentoo/repository.git config pull.rebase true
-git --git-dir=/var/lib/agentoo/repository.git config remote.origin.fetch +refs/heads/main:refs/remotes/origin/main
-git --git-dir=/var/lib/agentoo/repository.git config branch.main.remote origin
-git --git-dir=/var/lib/agentoo/repository.git config branch.main.merge refs/heads/main
-printf '%s\n' '/*' '!/README.md' '!/AGENTS.md' | git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ sparse-checkout set --no-cone --stdin
-git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ checkout --force main
-mkdir -p /mnt/gentoo/var/db/repos
-git clone --depth 1 https://github.com/gentoo-mirror/gentoo.git /mnt/gentoo/var/db/repos/gentoo
-GNUPGHOME=/tmp/gentoo-repository-keys
-mkdir -m 700 "$GNUPGHOME"
-gpg --homedir "$GNUPGHOME" --import /mnt/gentoo/usr/share/openpgp-keys/gentoo-release.asc
-GNUPGHOME="$GNUPGHOME" git -C /mnt/gentoo/var/db/repos/gentoo verify-commit HEAD
-rm -rf "$GNUPGHOME"
-
-Configure the target from inside the chroot
--------------------------------------------
-
-chroot /mnt/gentoo /bin/bash
-portageq repos_config /
-eselect --brief --colour=no profile show
-eselect profile set agentoo:hosts/qemu
-ln -snf ../usr/share/zoneinfo/America/New_York /etc/localtime
-printf '%s\n' America/New_York >/etc/timezone
-printf '%s UTF-8\n' en_US.UTF-8 >/etc/locale.gen
-locale-gen
-eselect locale set en_US.utf8
-env-update
-
-The Gentoo stage3 supplies the official AMD64 23.0 x86-64 binhost
-in /etc/portage/binrepos.conf/gentoo.conf, with signature verification.
-It is available for explicit emerge --getbinpkg use but is not enabled by
-ordinary post-install operations. Installation prefers signed binaries by default;
---no-install-binpkgs selects source-only installer package operations.
-
-This phase validates the effective Portage configuration and repository but
-does not update @world. That update belongs after all common and host-specific
-policy is established.
-EOF
-  fi
-
   log 'Phase: portage-foundation'
 
   valid_target_host "$TARGET_HOST" || die "unsupported target host: $TARGET_HOST"
@@ -1732,68 +1514,6 @@ system_update_chroot() {
 install_system_update() {
   local source status=0
   log 'Phase: system-update'
-  if (( VERBOSE )); then
-    cat <<'EOF'
-System update: reconcile the base system with target policy
-==========================================================
-
-Install tools and synchronize repositories
-------------------------------------------
-
-Install target-side Git and CPU detection tools using the selected package
-policy, synchronize repositories, and read Gentoo news before approving the
-initial world update. PACKAGE_OPTIONS enables binary downloads by default
-(--no-install-binpkgs disables them) and requires matching USE flags and
-unchanged dependencies. Packages without suitable binaries build from source.
-Gentoo getuto prepares signing trust before binary-enabled package operations.
-
-emerge --oneshot --noreplace "${PACKAGE_OPTIONS[@]}" dev-vcs/git app-portage/cpuid2cpuflags
-emaint --auto sync
-eselect news read
-emerge --oneshot --update "${PACKAGE_OPTIONS[@]}" sys-apps/portage
-
-Update Portage first so the world update uses the current package manager.
-
-Establish target CPU policy
----------------------------
-
-CPU flags default to the running machine. When preparing another machine,
-provide --cpu-flags with that machine's supported flags. QEMU must expose the
-same features (the runbook uses -cpu host). The detected or supplied flags are
-written to /etc/portage/package.use/00cpu-flags before updating @world.
-Compilation settings are inherited unchanged from the configuration files.
-
-cpuid2cpuflags
-printf '*/* cpu_flags_x86: %s\n' "$flags" >/etc/portage/package.use/00cpu-flags
-
-Review and update the base system
----------------------------------
-
-Show the proposed package changes and ask before proceeding with the update.
-Defer NVIDIA drivers and their kernel dependency until the kernel phase has
-prepared local boot inputs and selected the binary distribution kernel.
-
-emerge --pretend --verbose --update --deep --newuse --exclude x11-drivers/nvidia-drivers "${PACKAGE_OPTIONS[@]}" @world
-emerge --verbose --update --deep --newuse --exclude x11-drivers/nvidia-drivers "${PACKAGE_OPTIONS[@]}" @world
-
-Review configuration and rebuild consumers
-------------------------------------------
-
-When protected configuration updates exist, prepare the archive directory
-specified in /etc/dispatch-conf.conf and review updates with dispatch-conf.
-Unresolved updates stop the phase. --yes does not answer merge choices.
-Then rebuild preserved-library consumers and show tracked configuration changes.
-
-install -d -m 700 "$archive_dir"
-dispatch-conf
-emerge --verbose "${PACKAGE_OPTIONS[@]}" @preserved-rebuild
-git --git-dir=/var/lib/agentoo/repository.git --work-tree=/ --no-pager diff --stat
-agentoo git diff
-
-This phase stops before kernel installation and does not clean dependencies.
-A failed update leaves the target mounted so this phase can be resumed.
-EOF
-  fi
   cat <<EOF
 
 System update plan
@@ -2223,162 +1943,6 @@ install_kernel_foundation() {
   log 'Phase: kernel-foundation'
   resolve_kernel_firmware_policy
   [[ $TARGET_HOST == qemu || -z $QEMU_VARS ]] || die '--qemu-vars is only valid for target qemu'
-  if (( VERBOSE )); then
-    cat <<'NOTES'
-Distribution kernel: a reliable installation and recovery foundation
-====================================================================
-
-Install the prebuilt, unmodified Gentoo distribution kernel. This avoids
-kernel compilation during installation and future world updates. A broad
-Dracut initramfs supports encrypted Btrfs, physical storage, QEMU VirtIO,
-and keyboard input. No host-only pruning or custom kernel configuration is
-used. The binary kernel and its virtual dependency stay on stable AMD64
-keywords to avoid pulling a testing source kernel during later world updates.
-auto microcode follows the installation host; override it when preparing
-another CPU vendor. Host-specific firmware, such as Thinktop's SOF audio DSP
-firmware, comes from the selected native profile's @profile membership.
-Microcode selection is vendor-level: Intel adds intel-microcode, AMD uses
-linux-firmware. Firmware remains broad, with CPU matching performed at boot.
-The none option skips vendor-specific selection and verification; it does not
-remove microcode that the generic initramfs includes from installed firmware.
-
-Establish package and image-generation policy
---------------------------------------------
-Tracked /etc/portage/package.use/kernel supplies dist-kernel,
-installkernel[systemd,dracut] and kernel-bin[initramfs,-generic-uki]. It disables
-boot-manager and EFI registration flags. /etc/kernel/install.conf selects:
-
-layout=efistub
-initrd_generator=dracut
-uki_generator=none
-BOOT_ROOT=/boot
-
-Shared tmpfiles rules establish the custom installkernel configuration link and
-mask sbctl's incompatible BLS/UKI hook. The installer records local custom-kernel
-inputs and activates a reviewed host fragment on supported storage. Only Bequiet
-may enable modules; early-boot drivers must remain built in on every target.
-The binary fallback is installed first; custom compilation remains a later step.
-
-The layout copies an EFI kernel and separate initramfs onto the mounted ESP;
-it does not require USE=efistub (which would add firmware-registration hooks).
-An ESP guard stops distribution updates if the expected FAT partition is not
-mounted at /boot. Final system configuration must arrange this mount in fstab.
-The Dracut configuration keeps hostonly=no, early_microcode=yes, crypt/btrfs
-modules, and storage/keyboard drivers. These settings persist across updates.
-Static policy is tracked in Agentoo; review it through the normal Git workflow. Conflicting saved boot parameters
-or ESP identity also stop the phase. These checks do not open a merge dialog
-or roll back earlier changes in the phase.
-
-Install prerequisites, then firmware and the kernel together
------------------------------------------------------------------
-Example commands inside the target chroot (Intel system):
-
-emerge --pretend --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-kernel/linux-firmware sys-firmware/intel-microcode sys-fs/cryptsetup sys-boot/efibootmgr sys-kernel/gentoo-kernel-bin @profile
-emerge --verbose --update --newuse sys-kernel/installkernel sys-kernel/dracut sys-fs/btrfs-progs sys-fs/cryptsetup sys-boot/efibootmgr
-emerge --verbose --update --newuse sys-kernel/linux-firmware sys-firmware/intel-microcode sys-kernel/gentoo-kernel-bin @profile
-emerge --config =sys-kernel/gentoo-kernel-bin-6.18.54
-
-The first install command provides tools needed by Dracut inside the target.
-Keep kernel-bin explicitly selected in the firmware transaction so its virtual
-dependency cannot choose a source-built provider. The last command regenerates
-the selected installed kernel's initramfs after external modules are built.
-dist-kernel provides ongoing package integration,
-including NVIDIA selected by Bequiet's @profile. Firmware/microcode updates install
-payloads only; explicitly refresh the binary fallback with emerge --config and
-rebuild a custom gentoo-kernel build to replace embedded inputs. The @profile transaction also
-installs hardware packages deferred from the initial world update.
-
-Read the target's host package set
-----------------------------------
-The selected Agentoo profile supplies hardware requirements through @profile,
-independent of the CPU or audio hardware visible on the installation host.
-The initial @world update installs them and later world updates retain them.
-
-eselect --brief --colour=no profile show
-cat /usr/local/share/agentoo/portage/profiles/hosts/thinktop/packages
-
-Inspect actual target boot ingredients
--------------------------------------
-Derive UUIDs from the target devices, never the host's running command line:
-
-blkid -s UUID -o value /dev/mapper/cryptroot
-cryptsetup luksUUID /dev/nbd0p2
-cat /etc/kernel/cmdline
-lsinitrd -m /boot/EFI/Gentoo/initramfs-6.18.54-gentoo-dist-bin.img
-lsinitrd /boot/EFI/Gentoo/initramfs-6.18.54-gentoo-dist-bin.img
-modinfo -k 6.18.54-gentoo-dist-bin btrfs
-modinfo -k 6.18.54-gentoo-dist-bin nvidia
-
-Only inspect NVIDIA if installed. The phase verifies the EFI executable,
-matching kernel/modules, cryptsetup or systemd-cryptsetup, crypt/btrfs modules,
-boot drivers and early microcode. It does not prove hardware behavior or
-successful boot.
-
-Maintenance and the boundary to first boot
------------------------------------------
-emerge --update --deep --newuse @world
-
-Distribution package hooks install versioned kernel/initramfs files beneath
-/boot/EFI/Gentoo. For later physical-system kernel updates, the user registers
-each new version manually with efibootmgr from the running target. Retaining a
-previous kernel and EFI entry known to boot is user maintenance advice, not an
-installer-managed recovery policy. A fresh installation has no previous Gentoo
-kernel to retain. QEMU registration preserves entries already in its variable
-store, but cannot determine whether any entry has been successfully boot-tested.
-Firmware variables belong to the running machine, even inside a chroot. Registration
-from a UEFI live system on the destination physical machine is valid. For a VM,
-use the offline registration below. Do not register VM entries from
-the host-side NBD chroot, which exposes the physical host's firmware variables.
-First-boot configuration follows in first-boot-foundation. Physical
-registration and actual boot tests remain outside this kernel phase. This phase
-does not write physical firmware or prune old EFI files.
-For physical targets, the phase ends by printing copy-ready efibootmgr commands
-for the validated disk, release, initramfs, and root/LUKS parameters. The commands
-use --create-only to leave the persistent BootOrder untouched. After reviewing
-the new Boot number, optionally use --bootnext NUMBER for a single boot test;
-firmware clears BootNext after use. No physical firmware command is executed
-by the installer, including when --yes is used.
-
-Example manual commands on the destination motherboard (replace the UUIDs):
-sudo efibootmgr --verbose
-sudo efibootmgr --create-only --disk /dev/nvme0n1 --part 1 \
-  --label 'Gentoo distribution 6.18.54-gentoo-dist-bin' \
-  --loader '\EFI\Gentoo\kernel-6.18.54-gentoo-dist-bin.efi' \
-  --unicode 'root=UUID=ROOT_UUID rootfstype=btrfs rootflags=subvol=@ rd.luks.uuid=luks-LUKS_UUID rd.luks.name=LUKS_UUID=cryptroot ro initrd=\EFI\Gentoo\initramfs-6.18.54-gentoo-dist-bin.img'
-sudo efibootmgr --verbose
-sudo efibootmgr --bootnext 0007 # Only if the new entry was Boot0007.
-
-The custom gentoo-kernel build is independently built and installed to a distinct
-EFI path and versioned prepared tree. Its native post-install hook selects
-that tree with eselect kernel; binary fallback updates preserve that selection.
-Use native emerge for both kernels. Firmware/microcode updates require explicit
-fallback archive refresh and custom recompilation; do not use an all-kernels
-refresh operation for this mixed setup.
-
-Register QEMU firmware offline (target qemu only)
-------------------------------------------------
-Supply --qemu-vars with the VM's persistent raw OVMF variable-store file. For
-a new store, --qemu-vars-template selects the template matching the VM's OVMF
-CODE image. Existing stores are preserved, not reset from the template.
-The VM must be stopped. The host needs virt-fw-vars and jq.
-
-sudo pacman -S --needed virt-firmware jq
-virt-fw-vars --input /path/to/VM/OVMF_VARS.4m.fd --print
-./usr/local/share/agentoo/installer/gentoo-install.sh --disk /dev/nbd0 --target-host qemu \
-  --phase kernel-foundation --qemu-vars /path/to/VM/OVMF_VARS.4m.fd --verbose
-
-The QEMU-only registration uses virt-fw-vars --append-boot-filepath with the
-EFI path, saved root/LUKS arguments, serial-console arguments and initrd path.
-The CLI constructs the EFI entry; the installer reuses an identical entry on
-retries, puts it first in BootOrder, preserves other variables, validates a
-temporary store, and backs up a changed existing store before replacing it.
-The file-only device path is intended for this single-disk VM, not physical
-firmware or a shared variable store. Physical targets print efibootmgr commands
-for manual execution on the destination machine instead.
-Keep using this same variable-store file in QEMU on every subsequent boot.
-Successful offline registration prepares the VM entry; it does not prove boot.
-NOTES
-  fi
   cat <<PLAN
 
 Distribution kernel plan
@@ -2634,40 +2198,6 @@ Logging: packaged journald defaults
 Time: enable existing systemd-timesyncd (no added time-service packages)
 Storage: UUID mounts and monthly Btrfs scrub (no automatic balance/defrag)
 PLAN
-  if (( VERBOSE )); then
-    cat <<'NOTES'
---hostname selects the target hostname. Without it, a named physical target
-uses --target-host; generic/qemu preserves an existing hostname or prompts.
-An existing root password is preserved; a missing or locked password prompts
-for a new Gentoo root login password, including with --yes.
-
-Use the target's tools through chroot: systemd-firstboot sets the hostname,
-systemd-machine-id-setup initializes machine identity, and systemctl --root=/
-configures offline services. The live host does not need systemd tools or a
-running systemd manager. Apply Gentoo's enable-only presets before explicit
-offline service selection. UTC
-is written to the target adjtime file; the host hardware clock is untouched.
-No live systemctl, timedatectl, hostnamectl, or daemon-reload is used.
-
-Wi-Fi credentials remain local root-only state, excluded from agentoo Git tracking.
-Physical targets use the packaged wpa_supplicant@INTERFACE.service with
-root-only per-interface configuration files and automatically detected
-Wi-Fi interface names from the installation host. No custom Wi-Fi unit or udev startup rule is installed.
-Copy the host's per-interface or common native configuration unchanged when
-present; otherwise prompt for SSID/password or defer Wi-Fi. Referenced external
-credentials/certificates require separate provisioning. Existing target
-credentials are preserved on retries. Only configured packaged supplicant service instances are enabled.
-QEMU uses virtual Ethernet and receives DHCP/DNS from its host-side backend.
-
-dhcpcd owns routes and resolv.conf directly; competing network services are
-disabled. Its built-in supplicant hook is disabled to avoid duplicate instances.
-The scrub runs once monthly for the shared root/home filesystem. No extra
-logging daemon, cron daemon, NTP package, or Btrfs maintenance package is needed.
-Policy files reject unmarked conflicts, including active existing fstab or
-installer policy configuration; reconcile these before retrying. The phase is resumable
-but does not roll back earlier writes or package installation on failure.
-NOTES
-  fi
   [[ $MODE != dry-run ]] || { printf '\nDry run: no configuration, credentials, packages, or services changed.\n'; return; }
   [[ -n $TARGET_DISK ]] || die 'first-boot-foundation requires --disk'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")
@@ -2761,9 +2291,6 @@ Target root: $MOUNT_ROOT
   * leave target mounts and /dev/mapper/$LUKS_NAME open; and
   * print manual cleanup and remaining boot steps.
 PLAN
-  if (( VERBOSE )); then
-    printf '\nHandoff verifies and reports only. Cleanup and destination boot selection are manual.\n'
-  fi
   [[ $MODE != dry-run ]] || { printf '\nDry run: no mounts or encrypted mappings changed.\n'; return; }
   [[ -n $TARGET_DISK ]] || die 'handoff requires --disk'
   TARGET_DISK=$(readlink -f -- "$TARGET_DISK")

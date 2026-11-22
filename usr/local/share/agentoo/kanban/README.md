@@ -43,6 +43,7 @@ git show "$(git log -1 --format=%H --diff-filter=D -- "$path")^:$path"
 - 021 Restructure the Agentoo CLI and establish durable command conventions (`021-cli-restructure-and-conventions.md`)
 - 022 Restore shared clipboard across Neovim, tmux, and Hyprland (`022-shared-desktop-clipboard.md`)
 - 029 Improve agentoo secrets diagnostics and usability (`029-secrets-usability.md`)
+- 030 Make installer source readable as an operating procedure (`030-installer-readable-procedures.md`)
 - 031 Make Python host-selector parsing consistent (`031-host-selector-consistency.md`)
 - 032 Simplify desktop appearance state dependencies (`032-desktop-appearance-dependencies.md`)
 - 033 Base desktop conflict handling on active configuration (`033-desktop-conflict-ownership.md`)
