@@ -1,6 +1,9 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: check https://proton.me/download/pass-cli/versions.json, verify both
+# amd64 and arm64 SHA-256 hashes, inspect ELF dependencies, and regenerate Manifest.
+
 EAPI=8
 
 DESCRIPTION="Proton Pass command-line client (official binary)"

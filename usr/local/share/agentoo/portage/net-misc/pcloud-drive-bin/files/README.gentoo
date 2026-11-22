@@ -1,0 +1,27 @@
+pCloud Drive on Gentoo
+======================
+This packages the official amd64 pCloud Drive AppImage intact at
+/opt/pcloud/pCloud.AppImage (with /usr/bin/pcloud). Portage owns upgrades;
+never run the in-app updater or application as root. Removing this package
+preserves user configuration, credentials, synchronized files, and any
+application-created autostart entries.
+
+Running as a user service
+-------------------------
+Use `agentoo cloud-storage pcloud start|stop|status` (see `--help`) to manage
+pCloud via a transient systemd user service (`agentoo-pcloud.service`)
+independent of your terminal. Disable "Start pCloud Drive on system startup"
+in pCloud's own settings when using service management. Inspect logs with:
+    journalctl --user -u agentoo-pcloud.service -b
+
+Sync and virtual drive notes
+----------------------------
+- FUSE 2 (`/dev/fuse`) is required even when using local-folder Sync only.
+- In 2.3.1, Add Sync cannot select the cloud root (`/`): create an empty local
+  directory outside `~/pCloudDrive` for each top-level cloud folder and add a
+  separate sync pair.
+- The virtual drive always mounts at `~/pCloudDrive` (changing `fsroot` does
+  not persist across restarts). To access it elsewhere, create a local symlink
+  pointing to `~/pCloudDrive` while keeping `~/pCloudDrive` in place.
+- Upstream's vendor launcher passes `--no-sandbox` to Electron; this package
+  preserves that behavior intact.

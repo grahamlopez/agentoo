@@ -1,6 +1,11 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: use versioned client URLs from https://www.amazondcv.com/, verify
+# published SHA-256, inspect ELF/plugin dependencies, recheck the omitted
+# libharfbuzz-icu.so.0 bridge, private libjbig.so.0 alias, and launcher paths,
+# review the EULA, and regenerate Manifest.
+
 EAPI=8
 
 inherit desktop multilib unpacker xdg

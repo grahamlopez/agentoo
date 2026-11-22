@@ -1,6 +1,12 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: check https://rlz.teleport.sh/versions, verify amd64/arm64 .sha256 files,
+# inspect ELF/glibc deps, review LICENSE-community vs Teleport-Community-1.0,
+# regenerate files/tsh.bash and files/_tsh with TELEPORT_TOOLS_VERSION=off and an
+# isolated TELEPORT_HOME (keep only the named tsh block; wrap zsh body under
+# '#compdef tsh'), and regenerate Manifest.
+
 EAPI=8
 
 inherit shell-completion

@@ -1,6 +1,10 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: check https://proton.me/download/drive/cli/version.json, verify both
+# amd64 and arm64 SHA-512 hashes, inspect ELF/CPU requirements (x64 needs AVX2),
+# keep LICENSE.md pinned to an immutable upstream commit, and regenerate Manifest.
+
 EAPI=8
 
 DESCRIPTION="Proton Drive command-line client (official binary)"
@@ -40,7 +44,8 @@ src_install() {
 pkg_postinst() {
 	elog "Run proton-drive auth login as your normal user; sign-in uses your browser."
 	elog "The default credential store needs a running Secret Service provider."
-	elog "For pass/GPG instead: export PROTON_DRIVE_CREDENTIALS_STORE=pass"
+	elog "For local GPG password-store (not Proton Pass pass-cli) instead:"
+	elog "  export PROTON_DRIVE_CREDENTIALS_STORE=pass"
 	elog "Initialize pass first; USE=pass supplies it without changing the default store."
 	if use amd64; then
 		elog "Upstream's standard x64 build requires an AVX2-capable CPU."

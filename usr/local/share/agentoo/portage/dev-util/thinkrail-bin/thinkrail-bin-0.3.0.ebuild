@@ -1,6 +1,11 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: use pinned stable-linux-*-ThinkRail-VERSION.tar.zst from GitHub releases,
+# verify amd64/arm64 against SHA256SUMS, inspect ELF/dlopen deps, recheck launcher,
+# desktop identity, embedded Bun version/license, and disabled update feed in
+# Resources/version.json, then regenerate Manifest.
+
 EAPI=8
 
 inherit desktop unpacker xdg

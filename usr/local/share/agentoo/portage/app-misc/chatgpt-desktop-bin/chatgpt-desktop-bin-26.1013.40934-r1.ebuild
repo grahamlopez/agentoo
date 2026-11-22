@@ -1,6 +1,12 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: compare .deb SHA-256 against deb/dists/stable/main/binary-amd64/Packages,
+# never use a mutable latest URL, inspect control metadata, maintainer scripts,
+# launcher, desktop entries, Qt shims, device prebuilds, and ELF deps (note:
+# app-crypt/tpm2-tss is directly linked even without TPM hardware), and
+# regenerate Manifest.
+
 EAPI=8
 
 inherit desktop optfeature unpacker xdg

@@ -1,6 +1,11 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: check latest-x64-linux.yml under
+# https://antigravity-hub-auto-updater-974169037036.us-central1.run.app/manifest/,
+# verify linux-x64/Antigravity.deb SHA-512, update PV and MY_BUILD, recheck ELF
+# dependencies and app-update.yml, and regenerate Manifest.
+
 EAPI=8
 
 inherit desktop optfeature unpacker xdg

@@ -1,6 +1,13 @@
 # Copyright 2026 agentoo contributors
 # Distributed under the terms of the GNU General Public License v2
 
+# Bump: find the new public-link code via https://www.pcloud.com/release-notes/linux.html
+# (never substitute a rotating latest-download URL), verify the enclosed AppImage
+# SHA-256 against the publisher page, inspect ELF/dlopen deps and launcher
+# (--no-sandbox), recheck SIGTERM/SIGKILL quit handling used by agentoo-cloud-storage,
+# and regenerate Manifest. Note: outside Agentoo's package.use/cloud-storage, enable
+# dev-libs/libdbusmenu[gtk3].
+
 EAPI=8
 
 inherit desktop xdg
@@ -72,13 +79,15 @@ src_install() {
 	# instead of creating a second application-menu item.
 	newmenu "${FILESDIR}/appimagekit-pcloud.desktop" appimagekit-pcloud.desktop
 	newicon squashfs-root/pcloud.png appimagekit-pcloud.png
-	dodoc squashfs-root/LICENSE.electron.txt squashfs-root/LICENSES.chromium.html
+	dodoc "${FILESDIR}/README.gentoo" \
+		squashfs-root/LICENSE.electron.txt squashfs-root/LICENSES.chromium.html
 }
 
 pkg_postinst() {
 	xdg_pkg_postinst
-	elog "Run pcloud as your normal user and configure folders in its GUI."
+	elog "Start pCloud as a user service with: agentoo cloud-storage pcloud start"
+	elog "Disable pCloud's own login autostart when using service management."
 	elog "The upstream AppImage and virtual drive require working FUSE (/dev/fuse)."
 	elog "Update through Portage; the in-app updater cannot replace this system-owned AppImage."
-	elog "Removing this package preserves user settings, sessions, and synchronized files."
+	elog "See README.gentoo for Add Sync, ~/pCloudDrive mount, and service notes."
 }

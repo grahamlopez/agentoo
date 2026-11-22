@@ -3,6 +3,9 @@ separator matcher which changes the unambiguous insertion for package names:
 amazo<Tab> becomes amazon-- for amazon-{dcv-client-bin,ec2-init,ecr-credential-helper}.
 Keep the profile descriptions without adding that matcher.
 
+Rebuild from source (`emerge --ask --oneshot --usepkg=n app-shells/gentoo-zsh-completions::gentoo`)
+so Portage runs src_prepare, then open a new shell. Remove when fixed upstream.
+
 --- a/src/_portage
 +++ b/src/_portage
 @@ -223,4 +223,4 @@

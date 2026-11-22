@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <use>
+    <flag name="sandbox">Supply bubblewrap and socat for optional Linux sandboxing (enable inside Claude Code with /sandbox)</flag>
+  </use>
+</pkgmetadata>
