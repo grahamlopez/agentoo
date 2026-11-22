@@ -20,6 +20,8 @@ Choose "follow system", "system", or "auto" once in applications that offer it.
 Terminal applications may follow their terminal instead. Applications pinned to
 light or dark retain their own choice. The command changes only the preference;
 application theme selection, palette updates, and restarts remain user-controlled.
+See [desktop setup](../../docs/desktop-setup.md#lightdark-mode-portal-and-qt)
+for portal, Kitty, and Qt setup.
 
 ## Color theme integration
 
@@ -62,7 +64,8 @@ not that the application lacks native support.
 ### Kitty
 
 - **Light/dark:** Automatic, live, after assigning a palette to each mode with
-  `kitten themes` and restarting Kitty once. See [Kitty setup](#kitty-setup).
+  `kitten themes` and restarting Kitty once. See
+  [Kitty setup](../../docs/desktop-setup.md#lightdark-mode-portal-and-qt).
 - **Color themes:** Native, manually selected light/dark/no-preference palettes.
   Previous choices were Catppuccin Latte for light and Mocha for dark/no
   preference. Integration with agentoo-wide theme selection is pending.
@@ -153,99 +156,3 @@ imply that changing the terminal palette is sufficient.
 
 - **Light/dark:** Automatic; confirmed working with mode switching.
 - **Color themes:** Assessment and coordinated theme selection are pending.
-
-## Setup and troubleshooting
-
-### System preference and portal
-
-Install the dependencies with `emerge --ask --noreplace @gui-desktop`.
-The set includes dconf and the GTK portal backend, which pulls in
-`sys-apps/xdg-desktop-portal` and `gnome-base/gsettings-desktop-schemas`.
-The native `/etc/xdg/xdg-desktop-portal/hyprland-portals.conf` selects GTK
-for the Settings interface. It exposes the preference as
-`org.freedesktop.appearance color-scheme` and sends native change notifications.
-Personal portal configuration takes precedence; portal files are selected as
-whole files, not merged, so an existing personal file must also select the GTK
-Settings backend. See the upstream [portal configuration reference](https://flatpak.github.io/xdg-desktop-portal/docs/portals.conf.html)
-and [GTK Settings implementation](https://github.com/flatpak/xdg-desktop-portal-gtk/blob/main/src/settings.c).
-
-After first installing the portal or changing its configuration, log out of
-Hyprland and log back in. D-Bus activates the portal services on demand; no
-Agentoo watcher or service enablement is needed. Ordinary mode changes need
-neither a logout nor a compositor reload.
-
-
-The authoritative setting is `org.gnome.desktop.interface color-scheme`, stored
-through native GSettings/dconf. There is no second mode setting in Agentoo's
-appearance state or login restore command. Repeating a setter is harmless.
-The native value `default` is reported as `no-preference`, not guessed to be
-light or dark. Queries report the preference, not application state.
-Successful queries print one value to stdout; setters report to stderr.
-Exit codes are 0 for success, 1 for settings failures, and 2 for invalid arguments.
-
-### Kitty setup
-
-Run `kitten themes`, choose a theme, and on the final screen save it as the light
-scheme. Repeat for dark and no-preference, then restart Kitty. The native files
-are `light-theme.auto.conf`, `dark-theme.auto.conf`, and
-`no-preference-theme.auto.conf` in your Kitty configuration directory.
-Ordinary default colors alone do not enable automatic switching. The automatic
-files override other color settings, including command-line color overrides.
-See [Kitty's automatic switching documentation](https://sw.kovidgoyal.net/kitty/kittens/themes/#change-color-themes-automatically-when-the-os-switches-between-light-and-dark).
-
-### Qt portal integration and palette refresh
-
-The shared Hyprland configuration selects Qt's native `xdgdesktopportal`
-platform theme through `QT_QPA_PLATFORMTHEME`. It reads the existing Settings
-portal preference and listens for changes; no separate palette manager is
-needed. The installed Qt must supply `libqxdgdesktopportal.so` in its
-`platformthemes` plugin directory.
-
-Agentoo supplies a native Portage user patch for all Qt versions under
-`/etc/portage/patches/dev-qt/qtbase/`. Without it, Qt 6.11.3 receives mode
-changes but retains its cached startup palette. Deploying configuration alone
-does not apply source patches. Rebuild the installed version after deployment:
-
-```sh
-sudo emerge --ask --oneshot =dev-qt/qtbase-6.11.3
-```
-
-Then close PCManFM-Qt completely and restart it. Portage applies the patch on
-subsequent Qt builds, including version updates, and stops with an error if it
-cannot apply it. Retest live switching when updating Qt and remove the patch
-once upstream handles palette invalidation.
-
-After deploying this default, log out and back in so terminals and applications
-inherit it. For an immediate check, close PCManFM-Qt completely and launch:
-
-```sh
-QT_QPA_PLATFORMTHEME=xdgdesktopportal pcmanfm-qt
-```
-
-Then run `agentoo theme light` and `agentoo theme dark` from another terminal.
-An already-running PCManFM-Qt process retains its original environment.
-Existing terminals also retain their inherited environment after a Hyprland
-reload. To launch Qt applications normally from such a terminal, first run
-`export QT_QPA_PLATFORMTHEME=xdgdesktopportal`; a fresh login supplies the
-shared default without this manual step.
-Personal `QT_QPA_PLATFORMTHEME`, `QT_STYLE_OVERRIDE`, or application palette
-settings can override this integration.
-See [Qt's portal theme implementation](https://github.com/qt/qtbase/blob/6.11/src/plugins/platformthemes/xdgdesktopportal/qxdgdesktopportaltheme.cpp).
-
-
-### Verify propagation
-
-To inspect the public preference from the running desktop session:
-
-```sh
-gdbus call --session --dest org.freedesktop.portal.Desktop \
-  --object-path /org/freedesktop/portal/desktop \
-  --method org.freedesktop.portal.Settings.Read \
-  org.freedesktop.appearance color-scheme
-```
-
-The returned unsigned value is 0 for no preference, 1 for dark, and 2 for light.
-Switch both directions with applications already open, directly in Kitty and
-inside tmux, then check newly launched applications and persistence after login.
-
-

@@ -83,8 +83,7 @@ for the build and recovery workflow.
 ## Related guides
 
 - [Installation, first boot, and user setup](../../usr/local/share/agentoo/docs/installation.md)
-- [Shell and editor environment](../../usr/local/share/agentoo/docs/shell-editors.md)
-- [Minimal Hyprland base and Kitty host defaults](../../usr/local/share/agentoo/docs/gui-base.md)
+- [Terminal and desktop setup](../../usr/local/share/agentoo/docs/desktop-setup.md)
 - [Firmware ownership and maintenance](../../usr/local/share/agentoo/docs/firmware.md)
 - [Checkpoints and subvolume boundaries](../../usr/local/share/agentoo/docs/checkpoints.md)
 - [Target host checklist](../../usr/local/share/agentoo/docs/host-onboarding.md)

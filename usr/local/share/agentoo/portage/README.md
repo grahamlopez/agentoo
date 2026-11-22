@@ -48,7 +48,7 @@ needed. Unstarred profile `packages` entries belong to `@profile` (part of
 | --- | --- |
 | `sys-kernel/agentoo-initramfs` | Private static BusyBox and embedded early-boot archive generator (`@kernel-dev`, [initramfs guide](../docs/initramfs.md)) |
 | `app-misc/keyd`, `acct-group/keyd` | System-wide key remapping daemon (`@gui-desktop`; shared map in `/etc/keyd/default.conf`) |
-| `app-nvim/softlock` | Live `git-r3` Neovim encryption plugin (`@terminal-env`, [shell-editors guide](../docs/shell-editors.md)) |
+| `app-nvim/softlock` | Live `git-r3` Neovim encryption plugin (`@terminal-env`, [desktop setup](../docs/desktop-setup.md#terminal-and-editor-environment)) |
 | `app-admin/proton-pass-cli-bin` | Official Proton Pass CLI (`pass-cli`) |
 | `net-misc/proton-drive-cli-bin` | Official Proton Drive CLI ([README.gentoo](net-misc/proton-drive-cli-bin/files/README.gentoo)) |
 | `net-misc/pcloud-drive-bin` | Official pCloud Drive AppImage ([README.gentoo](net-misc/pcloud-drive-bin/files/README.gentoo); `agentoo cloud-storage pcloud --help`) |

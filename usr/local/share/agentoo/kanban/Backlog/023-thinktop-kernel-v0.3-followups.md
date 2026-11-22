@@ -103,7 +103,7 @@ kernel failures:
   use actual hardware symptoms and comparison evidence to prioritize further work.
 - PipeWire/WirePlumber and portal RTKit warnings reflect an unavailable optional
   service. Inspect scheduling if audio drops out under load; do not add a service
-  solely to suppress logs. See [audio guidance](../../docs/audio.md).
+  solely to suppress logs. See [audio guidance](../../docs/desktop-setup.md#audio-pipewire-and-wireplumber).
 - The missing `i2c_dev` error is resolved by package-owned built-in indexes and
   passed the rebuilt v0.5 reboot check; do not track it as an open boot failure.
 

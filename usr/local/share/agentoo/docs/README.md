@@ -14,7 +14,6 @@ System
   with [Thinktop](hosts/thinktop.md), [Flattop](hosts/flattop.md),
   [Startop](hosts/startop.md), and [Bequiet](hosts/bequiet.md) hardware baselines
 - [System checkpoints and recovery](checkpoints.md)
-- [Shell and editor environment](shell-editors.md)
 - [Local Portage overlay](../portage/README.md)
 
 Kernel
@@ -29,12 +28,10 @@ User facing tools and configuration
 Use `agentoo --help` (and `agentoo help COMMAND`) for CLI tool usage, options,
 and examples; see [lib/cli.py](../lib/cli.py) for CLI conventions.
 
-- [GUI installation and session setup](gui-base.md)
-- [Audio setup and diagnostics](audio.md)
-- [Displays, HiDPI, and laptop lid behavior](displays.md)
+- [Terminal and desktop setup](desktop-setup.md)
+- [Displays, DDC/CI, and laptop lid policy](displays.md)
 - [Secrets trust model and provisioning](../secrets/README.md)
-- [Theming and light/dark appearance](theming.md)
-- [Font diagnostics and selection](fonts.md)
+- [Font diagnostics](fonts.md)
 
 ## Philosophy and principles
 
@@ -170,7 +167,7 @@ Baseline threat-model assumptions:
   casual walk-away protection, and the following single-user conveniences are
   intentional policy rather than oversights:
   - `tty1` autologin into Hyprland (which leaves the tty1 recovery shell
-    unlocked if the compositor exits; see [screen locking](gui-base.md#screen-locking))
+    unlocked if the compositor exits; see [screen locking](desktop-setup.md#autologin-screen-locking-and-console-recovery))
   - `ACCEPT_LICENSE="*"` in the common Portage profile
   - A root-owned `0600` GitHub token file for `agentoo git push`
 - **Remote access, privileges, and supply chain (hardened):** Defend against

@@ -1,4 +1,4 @@
-# Minimal Wayland base; see /usr/local/share/agentoo/docs/gui-base.md before install.
+# Minimal Wayland base; see /usr/local/share/agentoo/docs/desktop-setup.md before install.
 gui-wm/hyprland::hyproverlay
 gui-apps/hyprlock::hyproverlay
 gui-apps/hypridle::hyproverlay
