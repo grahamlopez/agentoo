@@ -33,7 +33,6 @@ and examples; see [lib/cli.py](../lib/cli.py) for CLI conventions.
 - [Audio setup and diagnostics](audio.md)
 - [Displays, HiDPI, and laptop lid behavior](displays.md)
 - [Secrets trust model and provisioning](../secrets/README.md)
-- [Desktop preferences](desktop.md)
 - [Theming and light/dark appearance](theming.md)
 - [Font diagnostics and selection](fonts.md)
 

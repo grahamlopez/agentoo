@@ -26,7 +26,14 @@ def build_parser():
     parser.set_defaults(action=None, appearance_file=None, window='all')
     commands = parser.add_subparsers(dest='command', prog=parser.prog)
     setter = commands.add_parser('set', help='Apply and remember appearance settings from JSON',
-        description='Apply and remember appearance settings. Omitted settings stay unchanged. Wallpaper is separate.')
+        description='Apply and remember appearance settings. Omitted settings stay unchanged. Wallpaper is separate.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='State file: $XDG_STATE_HOME/agentoo/appearance.json (default: ~/.local/state/agentoo/appearance.json).\n'
+               'Sections: borders, corners, gaps, animations, shadows, dimming, transparency, blur.\n'
+               'Keys match CLI option names with underscores; blur focus values are booleans, other switches are "on"/"off".\n'
+               'Reloads Hyprland once via config-only and rolls back on reload failure.\n\n'
+               'Example JSON:\n'
+               '  {"corners": {"radius": 10, "power": 4}, "transparency": {"all": {"focused": 5, "unfocused": 10}}}')
     setter.set_defaults(command=None, action='set')
     file_option(setter, required=True)
     clear = commands.add_parser('clear', help='Clear all desktop preferences, including wallpaper',

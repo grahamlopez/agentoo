@@ -56,7 +56,7 @@ not that the application lacks native support.
 
 - **Light/dark:** Agentoo does not currently change compositor colors with the mode.
 - **Color themes:** Border and shadow colors can be set through
-  [desktop appearance commands](desktop.md#desktop-appearance). Coordinated
+  `agentoo desktop --help` (`borders`, `shadows`). Coordinated
   mode-specific palettes are pending.
 
 ### Kitty

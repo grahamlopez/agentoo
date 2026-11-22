@@ -369,9 +369,8 @@ No home configuration file, launch wrapper, or generated host include is needed.
 
 The shared configuration also enables dynamic background opacity and loads the
 Agentoo transparency watcher. `agentoo desktop transparency` stores personal
-focused/unfocused choices in XDG state; Kitty text stays opaque. See
-[window transparency](desktop.md#window-transparency)
-for inheritance, reset, conflict handling, and validation.
+focused/unfocused choices in XDG state; Kitty text stays opaque (see
+`agentoo desktop transparency --help`).
 
 ### Laptop brightness
 
@@ -490,7 +489,8 @@ Verify the following on a real target host:
 
 ## Desktop preferences
 
-See [wallpapers, transparency, blur, and desktop appearance](desktop.md).
+Use `agentoo desktop --help` for live wallpaper, transparency, blur, corners,
+gaps, borders, animations, shadows, and dimming preferences.
 
 ## Screen locking
 

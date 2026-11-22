@@ -40,7 +40,8 @@ def add_parser(commands):
                     'It may appear before or after the action.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='Blur does not change transparency. Applications must have transparent content and permit compositor blur.\n'
-               'Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur\n\n'
+               'Hyprland respects ext-background-effect client blur regions; active authored no_blur/opaque/force_rgbx\n'
+               'rules block managed blur changes. Use --diagnose to inspect options, classes, and active conflicts.\n\n'
                'Examples:\n'
                '  agentoo desktop blur --window kitty\n'
                '  agentoo desktop blur set --window kitty --focused on\n'
@@ -206,8 +207,8 @@ def diagnose(path, selected):
     show_section('Configuration errors', config_errors)
     show_section('Open window classes', classes)
     show_section('Active conflicting rules', None if rule_conflicts is None else '\n'.join(rule_conflicts))
-    print('\nClient blur regions and actual rendering are not verified by this API.')
-    print('Troubleshooting: /usr/local/share/agentoo/docs/desktop.md#window-blur')
+    print('\nClient blur regions and actual rendering are not verified by this API (ext-background-effect).')
+    print('State: $XDG_STATE_HOME/agentoo/appearance.json (reload Hyprland after editing authored rules).')
     for error in errors:
         print(f'agentoo desktop: {error}', file=sys.stderr)
     return 1 if errors or config_errors else 0

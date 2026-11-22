@@ -1,4 +1,29 @@
-"""Control the Dell U5226KW through ddcutil; laptop backlights are separate."""
+"""Control the Dell U5226KW through ddcutil; laptop backlights are separate.
+
+Observed Dell U5226KW DDC/CI register behavior (do not assume portability to other models):
+- VCP E9 (layout): 0x00=off, 0x24=50-50, 0x29=25-75, 0x2A=75-25, 0x2D=33-67,
+  0x2E=67-33, 0x21=pip-small, 0x22=pip-large. Avoid 0x01 (uncertain action
+  semantics; normalized to 0x2D). 0x02 advances PiP inset clockwise (TL->TR->BR->BL);
+  inset position is not readable via sampled registers.
+- VCP 60 (main/left input): 0x19=thunderbolt, 0x11=hdmi1, 0x12=hdmi2, 0x0F=dp1, 0x13=dp2.
+- VCP E8 (secondary/right input): 0x6739=thunderbolt, 0x6731=hdmi1, 0x6732=hdmi2,
+  0x672F=dp1, 0x6733=dp2. High bits are not generally decoded; changing VCP 60 does
+  not swap VCP E8 (the same source can appear in both windows).
+- VCP 62 (volume): low 7 bits are 0..100 level; bit 0x80 reports Speaker Off.
+  Writing a flagged value (level|0x80) is ignored, and an ordinary write unmutes,
+  so volume changes immediately re-send VCP 8D=1 in the same ddcutil invocation
+  when speakers were off. Readback max 0xFF64 is not a usable scaling maximum.
+- VCP 8D (mute/speakers): 1=mute on / speakers off, 2=mute off / speakers on.
+- VCP 63 (audio-source): 0xF1=window1 (left), 0xF2=window2 (right).
+- VCP F5 (Audio Switch Auto/Manual): OSD changes F5, but direct writes (F5=0)
+  do not switch Manual to Auto; not exposed as a scalar control.
+- VCP E7 (USB/KVM): current value (e.g. 0x1640) holds OSD port assignments; MH
+  status byte reports active target (1=thunderbolt, 2=dp1, 4=hdmi1 — logical
+  status values, not physical port numbers). Writing 0xFF00 cycles active target.
+- EDID transitions: layout/input changes can briefly interrupt DDC (ENXIO) even
+  when applied. Named setters write once (--noverify) and retry readback only.
+"""
+import argparse
 from pathlib import Path
 import re
 import shutil
@@ -85,10 +110,19 @@ def argument_type(function):
     return parse
 
 def configure_parser(parser):
-    parser.description = __doc__
-    parser.epilog = ('Requires ddcutil, i2c-dev and access to the display I2C device. '
-                     'Selects a connected Dell U5226KW by EDID; no other external model is supported. '
-                     'Use --output or --bus when multiple matching connectors exist.')
+    parser.description = __doc__.splitlines()[0]
+    parser.formatter_class = argparse.RawDescriptionHelpFormatter
+    parser.epilog = (
+        'Requires ddcutil, i2c-dev and access to the display I2C device.\n'
+        'Selects a connected Dell U5226KW by EDID; no other external model is supported.\n'
+        'Use --output or --bus when multiple matching connectors exist.\n'
+        'Layout writes preserve the active USB/KVM target across mapped two-window pairs.\n\n'
+        'Examples:\n'
+        '  agentoo display external brightness up\n'
+        '  agentoo display external layout 50-50 --left thunderbolt --right hdmi1\n'
+        '  agentoo display external layout off --input active_kvm\n'
+        '  agentoo display external usb next'
+    )
     sub = parser.add_subparsers(dest='external_action', required=True)
     sub.add_parser('list', help='Detect monitors and report DDC access; only the U5226KW is supported')
     for name, description in (
