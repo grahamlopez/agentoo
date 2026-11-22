@@ -31,7 +31,6 @@ User facing tools and configuration
 - [Agentoo CLI usage, completion, and conventions](agentoo-cli.md)
 - [GUI installation and session setup](gui-base.md)
 - [Audio setup and diagnostics](audio.md)
-- [Cloud storage installation and setup](cloud-storage.md)
 - [Displays, HiDPI, and laptop lid behavior](displays.md)
 - [Secret profiles and installation](../secrets/README.md)
 - [Desktop preferences](desktop.md)

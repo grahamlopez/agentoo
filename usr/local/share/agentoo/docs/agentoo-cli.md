@@ -38,8 +38,8 @@ for portal setup and validation.
 
 `agentoo cloud-storage pcloud start|stop|status` manages pCloud through an
 on-demand systemd user service, independent of the launching terminal. See
-[cloud storage setup](cloud-storage.md) for
-authentication, service ownership, and upstream synchronization behavior.
+`agentoo cloud-storage pcloud --help` and
+[pcloud-drive-bin README.gentoo](../portage/net-misc/pcloud-drive-bin/files/README.gentoo).
 
 ## Repository and terminal tools
 

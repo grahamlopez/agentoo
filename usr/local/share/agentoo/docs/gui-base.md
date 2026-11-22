@@ -252,7 +252,8 @@ applicable. Plain TTY launch does **not** by itself start a managed
 `hyprland.service` or `graphical-session.target`. This base has no services
 requiring that graphical target; add session management only for an observed need.
 
-The on-demand [pCloud user service](cloud-storage.md#start-stop-and-status)
+The on-demand pCloud user service (`agentoo cloud-storage pcloud --help`; see
+[pcloud-drive-bin README.gentoo](../portage/net-misc/pcloud-drive-bin/files/README.gentoo))
 receives its session environment from `agentoo cloud-storage pcloud start` and
 does not require that target or enable login autostart.
 
