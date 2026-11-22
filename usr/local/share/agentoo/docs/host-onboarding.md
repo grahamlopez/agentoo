@@ -20,11 +20,11 @@ configuration support only; installation and hardware acceptance are separate.
 - [ ] **`usr/local/share/agentoo/tests/test_installer.py`** — extend the accepted
   target list in `test_supported_targets_validate` and add coverage for any new
   installer behavior. The shared native profile adapter needs no new name registry.
-- [ ] **`etc/agentoo/README.md`** and **`usr/local/share/agentoo/docs/README.md`** —
-  update supported selectors and links. Record hardware identity, scoped
-  exceptions, and quirks in `usr/local/share/agentoo/docs/hosts/<host>.md` using
-  the uniform four-section baseline format in
-  [docs/README.md](README.md#documentation).
+- [ ] **`usr/local/share/agentoo/docs/hosts/<host>.md`** and
+  **`usr/local/share/agentoo/docs/README.md`** — record hardware identity,
+  scoped exceptions, and quirks using the uniform four-section baseline format
+  in [docs/README.md](README.md#documentation), and link the new host baseline
+  from the guide index.
 
 ## Required for custom kernel support
 
@@ -118,21 +118,8 @@ from another host into Git.
   and credentials. Secrets profiles are explicitly chosen by file path, not
   selected from the Portage profile. See [secrets](../secrets/README.md).
 
-## Current host coverage
+## Existing host baselines
 
-| Host | Installer and Portage | Custom kernel profile | Installed firmware list | Desktop fragments |
-| --- | --- | --- | --- | --- |
-| Thinktop | Present | Present | Present | Hyprland and Kitty |
-| Flattop | Present | Present | Present | Hyprland; Kitty defaults |
-| Startop | Present; Arrow Lake CPU and Intel graphics | Boot/peripherals accepted | Applied; both kernels accepted | Hyprland; Kitty defaults |
-| Bequiet | Present; Zen 2 CPU and NVIDIA graphics | Secure Boot, USB unlock and both GPUs accepted; packaged console/network recovery accepted | Trimmed selection and both boot paths accepted | Shared defaults |
-
-Startop selects Arrow Lake compiler targets and Intel graphics, with a
-shared-memory build directory and twelve-job build limit. See its
-[hardware baseline](hosts/startop.md). The installer prints its EFI registration
-command with the full device path required by its firmware.
-
-Bequiet's custom kernel uses packaged NVIDIA open modules; its distribution
-kernel provides console/network recovery. Custom Linux, recovery Linux and
-Windows are accepted with Secure Boot enabled. See its
-[hardware baseline and acceptance](hosts/bequiet.md).
+See the per-host hardware baselines for current host coverage and scoped
+exceptions: [Thinktop](hosts/thinktop.md), [Flattop](hosts/flattop.md),
+[Startop](hosts/startop.md), and [Bequiet](hosts/bequiet.md).

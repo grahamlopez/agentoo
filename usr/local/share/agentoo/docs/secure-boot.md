@@ -183,25 +183,19 @@ if that action restores factory keys.
 
 ### Flattop firmware menu
 
-Verified on Flattop, Framework Laptop 13 (13th Gen Intel Core), Insyde BIOS
-03.16, on 2026-11-09:
+Example on Flattop (Framework Laptop 13, 13th Gen Intel Core, Insyde BIOS
+`03.16`):
 
 1. Press **F2** during startup and open **Administer Secure Boot**.
 2. Open **PK Options → Delete PK**, select the existing certificate, and
-   confirm **Delete this signature**. Use Delete, not Enroll: Enroll opens a
-   file chooser and is not needed for this step.
-3. Leave KEK, DB and DBX intact. Do not use **Erase all Secure Boot Settings**
+   confirm **Delete this signature**. Use Delete, not Enroll (Enroll opens a
+   file chooser and is not needed here).
+3. Leave KEK, DB, and DBX intact. Do not use **Erase all Secure Boot Settings**
    or restore factory keys.
 4. Press **F10** to save and exit, then boot the tested signed Agentoo entry.
 
-The resulting `sudo sbctl status` reported **Setup Mode: Enabled** and
-**Secure Boot: Disabled**, with vendor keys `microsoft builtin-db builtin-KEK`.
-sbctl displays a cross beside Setup Mode Enabled; that is the expected state
-for enrollment, not a failure. The two **Add UEFI CA 2023** and
-**Add UEFI CA Option ROM 2023** options had also been enabled; those additions
-alone did not enter Setup Mode. **Select a UEFI file as trusted for execution**
-was not used. This confirms entry into Setup Mode; enrollment and enforced
-Secure Boot acceptance are separate steps below.
+`sudo sbctl status` displays a cross beside **Setup Mode: Enabled**; that is
+the expected state before enrollment, not a failure.
 
 ### Enroll the prepared certificates
 

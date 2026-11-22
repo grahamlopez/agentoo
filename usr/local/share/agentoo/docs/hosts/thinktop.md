@@ -28,9 +28,9 @@
   `linux-firmware` `savedconfig`, and `sys-firmware/sof-firmware` in `@profile`
   for SoundWire/SOF audio.
 - **Custom kernel (`/etc/agentoo/kernel/hosts/thinktop.config`):** Retains
-  shared `CONFIG_MODULES=n`; embeds Meteor Lake graphics, CNVi Wi-Fi, Bluetooth
-  `ibt-0093-0291`, SOF/Cirrus audio payloads, regulatory data, and
-  `intel-ucode/06-c5-02`.
+  shared `CONFIG_MODULES=n`; embeds Meteor Lake graphics, CNVi Wi-Fi, Intel
+  Bluetooth, SOF/Cirrus audio payloads, regulatory data, and Intel Arrow Lake
+  microcode.
 - **Installed firmware (`/etc/agentoo/firmware/thinktop.list`):** Trimmed
   `linux-firmware` selection covering graphics, CNVi Wi-Fi, Bluetooth, Meteor
   Lake NPU, SoundWire/Cirrus DSP payloads, and RTL8156 dock Ethernet.

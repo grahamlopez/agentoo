@@ -50,27 +50,21 @@ target mounts and LUKS open; teardown is manual. QEMU images must be unmounted,
 closed, and detached from NBD before starting the guest. Automatic teardown was
 removed after repeated namespace-holder failures made its complexity excessive.
 
-Kernel policy is tracked in `/etc/portage/package.use/kernel`,
-`/etc/kernel/install.conf`, and `/etc/dracut.conf.d/agentoo-dist.conf`.
-The binary fallback kernel remains independent; the custom gentoo-kernel build
-uses native `emerge` commands after installation-time local setup
-([kernel guide](kernel.md)). The installer activates a supported host fragment
-(modules are allowed only on Bequiet), records its initramfs inputs, and applies
-shared tmpfiles rules for the
-custom installkernel link and sbctl hook mask. The custom package selects its
-prepared tree with native eselect after installation. Firmware updates require
-explicit binary fallback refresh and custom kernel recompilation.
-`/etc/kernel/cmdline` contains local
-boot arguments. `/etc/kernel/gentoo-dist.version` is one-time installer handoff
-data, not a permanently maintained running-kernel requirement.
+At install time, the installer activates the host kernel fragment symlink,
+records local initramfs inputs, and applies shared tmpfiles rules for the
+custom installkernel link and sbctl hook mask; the custom package selects its
+prepared tree via native `eselect` once installed. `/etc/kernel/cmdline` holds
+local boot arguments, and `/etc/kernel/gentoo-dist.version` is one-time
+installer handoff data rather than a permanently maintained running-kernel
+requirement. For ongoing custom kernel builds, binary fallback maintenance, and
+post-firmware refreshes, see the [kernel guide](kernel.md) and
+[firmware guide](firmware.md).
 
-Physical firmware registration remains manual. QEMU installation retains offline
-registration in its explicitly selected VM variable store. Use
-`agentoo kernel gen-efi-cmd` (see the
-[kernel guide](kernel.md#generate-an-efi-registration-command)) for copy/paste
-registration after kernel updates. A small kernel-install
-hook prints the populated command on the booted target; it never runs firmware
-commands or changes BootOrder. Automatic registration during updates is deferred.
+Physical firmware registration remains manual; QEMU installation retains
+offline registration in its explicitly selected VM variable store. A
+`kernel-install` hook prints the populated `agentoo kernel gen-efi-cmd` command
+on the booted target without running firmware commands or changing `BootOrder`.
+Automatic registration during updates is deferred.
 
 Networking uses the packaged dhcpcd service and `/etc/dhcpcd.conf`, with direct
 ownership of `/etc/resolv.conf`. Systemd's resolvconf shim is disabled in package
@@ -110,13 +104,10 @@ checkpoints are never overwritten. The helper is specialized for the installer's
 root/home layout and ordinary `/var/cache/{distfiles,binpkgs,binhost}` caches, not a general
 scheduled application-backup tool.
 
-Snapshots and the manifest live in `gentoo-checkpoints/<name>` at the Btrfs top
-level. The gzip-compressed EFI archive (`efi-files.tar.gz`), boot-entry recovery instructions, and
-checksums live in `/boot/checkpoints/<name>`. Both locations must contain
-`COMPLETE` markers before restoration. Failed attempts are retained for review;
-retry creates a new attempt. Capture is live and sequential across subvolumes.
-Restoration must occur through a controlled reboot/recovery procedure, not by
-replacing the active root. Checkpoints share the disk with the original data.
+Checkpoints share the disk with the original data and must be restored offline
+through a controlled recovery procedure—never by replacing the active root. See
+[checkpoints and offline recovery](checkpoints.md) for storage layout,
+`COMPLETE` markers, and restoration steps.
 
 ## User setup
 
@@ -126,11 +117,11 @@ primary group and supplementary `wheel,portage,video`, and prompts for an accoun
 password when none is usable and an optional SSH public key. Reruns preserve a
 usable password and resume the optional Git identity choice after interruption. Conflicting identities stop setup; existing
 home contents and supplementary groups are preserved. A fresh login is required
-for supplementary group changes to take effect. After account setup succeeds,
-002 creates the local native tty1 autologin drop-in and reloads systemd without
-restarting tty1. Fresh installations use normal password login until then;
-autologin starts on tty1's next start or reboot. The drop-in is excluded from
-Git; reruns preserve matching policy and stop on conflicting custom content.
+for supplementary group changes to take effect. After account setup succeeds, `002` writes the local git-ignored `tty1`
+autologin drop-in and reloads systemd without restarting `tty1` (autologin
+starts on `tty1`'s next start or reboot; reruns preserve matching policy and
+stop on conflicting content—see
+[autologin and console recovery](desktop-setup.md#autologin-screen-locking-and-console-recovery)).
 No skeleton dotfiles are copied.
 After installing packages, setup reapplies Agentoo's file permission policy so
 shared Git configuration remains readable when configuring Graham's identity.

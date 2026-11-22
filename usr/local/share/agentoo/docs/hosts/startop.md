@@ -24,15 +24,15 @@
   `linux-firmware` `savedconfig`. Detected CPU feature flags stay local in
   `/etc/portage/package.use/00cpu-flags`.
 - **Custom kernel (`/etc/agentoo/kernel/hosts/startop.config`):** Retains
-  shared `CONFIG_MODULES=n`; embeds Meteor Lake graphics, AX210 API 89/PNVM,
-  Bluetooth `ibt-0041-0041` (+ DDC companion for cold init), regulatory data,
-  and `intel-ucode/06-c5-02`.
+  shared `CONFIG_MODULES=n`; embeds Meteor Lake graphics, AX210 Wi-Fi/PNVM,
+  Intel Bluetooth (+ DDC companion for cold init), regulatory data, and Intel
+  Arrow Lake microcode.
 - **Installed firmware (`/etc/agentoo/firmware/startop.list`):** Trimmed
   `linux-firmware` selection covering Meteor Lake graphics, AX210, Intel
   Bluetooth, and RTL8156 dock Ethernet.
 - **Dracut early KMS (`/etc/dracut.conf.d/startop.conf`):** Queries
-  `host_selection.py` and forces early `i915` loading in the binary fallback
-  initramfs so DRM initializes before `tty1` autologin launches Hyprland.
+  `host_selection.py` to force early `i915` loading in the binary fallback
+  initramfs (prevents the autologin GPU race below).
 - **EFI registration:** `gentoo-install.sh`, `agentoo kernel gen-efi-cmd`, and
   `99-agentoo-boot-guidance.install` add `--full-dev-path`, required by
   Startop's coreboot/UEFI firmware.

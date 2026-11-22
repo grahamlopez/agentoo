@@ -27,8 +27,8 @@
   permitted to enable loadable modules (`CONFIG_MODULES=y`,
   `CONFIG_MODULE_UNLOAD=y`), paired with mandatory module signing and
   `MODULE_SIG_FORCE=y`. Early-boot drivers remain built in; NVIDIA loads after
-  real-root handoff. Embeds AMD family-17h microcode, AX200 API 77, Bluetooth
-  `ibt-20-1-3`, RTL8125A, and RTL8156B.
+  real-root handoff. Embeds AMD family-17h microcode, AX200 Wi-Fi, Intel
+  Bluetooth, RTL8125, and RTL8156 dock Ethernet firmware.
 - **Installed firmware (`/etc/agentoo/firmware/bequiet.list`):** Trimmed
   `linux-firmware` selection (AMD microcode comes from `linux-firmware`, not
   `intel-microcode`; NVIDIA GSP firmware is owned by `nvidia-drivers`).

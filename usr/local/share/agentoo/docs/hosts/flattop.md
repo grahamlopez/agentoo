@@ -25,7 +25,7 @@
   `app-laptop/framework_tool`.
 - **Custom kernel (`/etc/agentoo/kernel/hosts/flattop.config`):** Retains
   shared `CONFIG_MODULES=n`; embeds ADLP/TGL graphics, AX211 Wi-Fi/PNVM,
-  Bluetooth `ibt-0040-0041`, regulatory data, and `intel-ucode/06-ba-02`.
+  Intel Bluetooth, regulatory data, and Intel Raptor Lake microcode.
   Disables absent AMD KVM/CCP, IT87 GPIO, IBM ACPI PCI hotplug, and
   `CONFIG_CHARGER_CROS_USBPD` while retaining `CROS_EC`.
 - **Installed firmware (`/etc/agentoo/firmware/flattop.list`):** Trimmed
@@ -54,7 +54,7 @@
 
 ## Peripheral and workflow notes
 
-- Retains `rtl_nic/rtl8156b-2.fw` for the shared Dell U5226KW monitor/KVM.
+- Retains RTL8156 Ethernet firmware for the shared Dell U5226KW monitor/KVM.
 - Open Framework EC/peripheral checks live in
   [card 025](../../kanban/Backlog/025-flattop-kernel-v0.3-followups.md);
   native `gentoo-kernel` migration is tracked in
