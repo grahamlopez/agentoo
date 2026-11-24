@@ -5,6 +5,7 @@ let g:skip_defaults_vim = 1
 
 " Vim is the fallback editor; preserve its familiar backslash leader.
 " Agentoo Vim fallback defaults, adapted from dots/.vimrc.
+" Narrow exception: deployed verbatim to non-agentoo Linux hosts via user-dots.sh.
 " -----------------------------------------------------------------------------
 "
 "   vimrc by graham lopez

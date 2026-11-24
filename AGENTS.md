@@ -19,6 +19,9 @@ Configuration design
   weakening shared defaults.
 - Keep one authoritative definition of each setting or policy; reuse it rather
   than maintaining parallel representations.
+- Keep agentoo opinionated; do not generalize for other distros. Only the small
+  terminal-config subset listed in `usr/local/share/agentoo/installer/user-dots.sh`
+  is exported—preserve its portability, and do not extend that pattern elsewhere.
 
 Code design
 

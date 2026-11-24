@@ -25,6 +25,9 @@ Install with `sudo emerge --ask --noreplace @terminal-env`.
 - **Updating `app-nvim/softlock`:** Because it is a live `9999` ebuild, normal
   `@world` updates do not fetch new commits—update explicitly with
   `sudo emerge --ask --oneshot app-nvim/softlock`.
+- **Non-agentoo Linux hosts:** Deploy the portable terminal config (`zsh`,
+  `tmux`, `vim`, `nvim` + `softlock.nvim`, `git`) into `$HOME` via
+  [user-dots.sh](../installer/user-dots.sh) (see `user-dots.sh --help`).
 
 ## Wayland desktop installation
 

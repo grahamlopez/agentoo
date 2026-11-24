@@ -4,6 +4,9 @@
 Preserves the subject line, blank lines, fenced/indented code blocks, quotes,
 tables, Git comments/scissors, and trailers while wrapping prose paragraphs and
 list items cleanly without breaking URLs or hyphenated tokens.
+
+Narrow exception: deployed verbatim to non-agentoo Linux hosts via user-dots.sh
+(keep stdlib-only).
 """
 import argparse
 from pathlib import Path

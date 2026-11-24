@@ -3,6 +3,7 @@
 # Canonical path: usr/local/share/agentoo/lib/paths.py (SYSTEM_GIT_DIR).
 [core]
     sharedRepository = 0644
+    excludesFile = /etc/agentoo/gitignore
 
 [hook "agentoo-permissions-check"]
     event = pre-commit

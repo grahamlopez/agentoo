@@ -1,5 +1,5 @@
-# Global excludes (git core.excludesFile).
-# Guards Git repositories against accidentally committing secrets or local state.
+# System repository excludes (core.excludesFile via /etc/agentoo/gitconfig).
+# User-level excludes stay in /etc/agentoo/gitignore-user for user-dots.sh.
 
 # Generated Python bytecode
 __pycache__/

@@ -1,6 +1,7 @@
 -- Requires Neovim 0.11 or newer and Markdown Tree-sitter parsers.
 -- Undo, caches, and history use writable per-user storage.
 -- Agentoo Neovim defaults, adapted from dots/.config/nvim/init.lua.
+-- Narrow exception: deployed verbatim to non-agentoo Linux hosts via user-dots.sh.
 -- TODO: list {{{
 --  better highlighting/colors for listchars
 --  fuzzy searching: buffer, file, grep, help pages

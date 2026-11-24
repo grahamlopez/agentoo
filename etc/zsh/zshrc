@@ -1,5 +1,7 @@
 # Agentoo interactive defaults, adapted from dots/.zshrc.
 # ~/.zshrc loads afterward for local overrides.
+# Narrow exception: one of the few files deployed verbatim to non-agentoo Linux
+# hosts via usr/local/share/agentoo/installer/user-dots.sh (keep Gentoo-only bits guarded).
 ##############################################################
 #
 # orig .zshrc
@@ -151,30 +153,50 @@ bindkey '^U' kill-whole-line
 
 # Fuzzy history (Ctrl+R), file selection (Ctrl+T), and directory navigation (Ctrl+G/Alt+C).
 # Keep the bindings above when fzf or its shell integration is unavailable.
-if (( $+commands[fzf] )) && [[ -r /usr/share/fzf/key-bindings.zsh ]]; then
-  source /usr/share/fzf/key-bindings.zsh
-  bindkey '^G' fzf-cd-widget
-
-  # Preserve fzf's history handling, including multiline commands. Enter
-  # marks the selection for execution; Alt+Enter leaves it for editing.
-  # A private marker carries the choice out of fzf's subprocess without eval.
-  _agentoo_fzf_history() {
-    local work ret
-    work=$(mktemp -d) || return
-    local FZF_CTRL_R_OPTS="${FZF_CTRL_R_OPTS-} --bind='enter:execute-silent(touch ${(q)work}/execute)+accept,alt-enter:accept'"
-    {
-      zle fzf-history-widget
-      ret=$?
-      if (( ret == 0 )) && [[ -f $work/execute && -n $BUFFER ]]; then
-        zle accept-line
+# Prefer fzf --zsh with Gentoo/Ubuntu path fallbacks (shared via user-dots.sh).
+if (( $+commands[fzf] )); then
+  _agentoo_fzf_init=$(fzf --zsh 2>/dev/null)
+  if [[ -n $_agentoo_fzf_init ]]; then
+    eval "$_agentoo_fzf_init"
+    _agentoo_fzf_loaded=1
+  else
+    _agentoo_fzf_loaded=0
+    for _fzf_kb in /usr/share/fzf/key-bindings.zsh /usr/share/doc/fzf/examples/key-bindings.zsh; do
+      if [[ -r $_fzf_kb ]]; then
+        source "$_fzf_kb"
+        _agentoo_fzf_loaded=1
+        break
       fi
-    } always {
-      rm -rf -- "$work"
+    done
+    unset _fzf_kb
+  fi
+  unset _agentoo_fzf_init
+
+  if (( _agentoo_fzf_loaded )); then
+    bindkey '^G' fzf-cd-widget
+
+    # Preserve fzf's history handling, including multiline commands. Enter
+    # marks the selection for execution; Alt+Enter leaves it for editing.
+    # A private marker carries the choice out of fzf's subprocess without eval.
+    _agentoo_fzf_history() {
+      local work ret
+      work=$(mktemp -d) || return
+      local FZF_CTRL_R_OPTS="${FZF_CTRL_R_OPTS-} --bind='enter:execute-silent(touch ${(q)work}/execute)+accept,alt-enter:accept'"
+      {
+        zle fzf-history-widget
+        ret=$?
+        if (( ret == 0 )) && [[ -f $work/execute && -n $BUFFER ]]; then
+          zle accept-line
+        fi
+      } always {
+        rm -rf -- "$work"
+      }
+      return $ret
     }
-    return $ret
-  }
-  zle -N _agentoo_fzf_history
-  bindkey '^R' _agentoo_fzf_history
+    zle -N _agentoo_fzf_history
+    bindkey '^R' _agentoo_fzf_history
+  fi
+  unset _agentoo_fzf_loaded
 fi
 
 # general commands defaults
@@ -182,9 +204,11 @@ alias ls="ls --color=auto -F"
 alias grep="grep --color=auto"
 # The trailing space also expands aliases in the command following sudo.
 alias sudo='sudo '
-# Prefer compatible local/remote binaries, falling back to source as in the installer.
-alias bemerge='emerge --usepkg=y --getbinpkg=y --binpkg-respect-use=y --binpkg-changed-deps=y'
-compdef bemerge=emerge
+if (( $+commands[emerge] )); then
+  # Guarded for user-dots.sh; prefer compatible binaries, falling back to source.
+  alias bemerge='emerge --usepkg=y --getbinpkg=y --binpkg-respect-use=y --binpkg-changed-deps=y'
+  compdef bemerge=emerge
+fi
 # $+commands[x] is zsh's own lookup: no subprocess, no quoting hazard
 (( $+commands[nvim] )) && alias vim="nvim"
 (( $+commands[nvim] )) && alias vimall="nvim **/*(.)"
@@ -302,8 +326,14 @@ zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
   ACYAN=$'\e[0;36m'
   APURPLE=$'\e[0;35m'
 
-# Gentoo's Git package supplies the prompt helper with its own updates.
-[[ -r /usr/share/git/git-prompt.sh ]] && source /usr/share/git/git-prompt.sh
+# Check Gentoo and Debian/Ubuntu paths (shared via user-dots.sh).
+for _git_prompt in /usr/share/git/git-prompt.sh /usr/lib/git-core/git-sh-prompt; do
+  if [[ -r $_git_prompt ]]; then
+    source "$_git_prompt"
+    break
+  fi
+done
+unset _git_prompt
 setopt prompt_subst
 
 export GIT_PS1_SHOWDIRTYSTATE=true

@@ -1,3 +1,4 @@
+-- Narrow exception: deployed verbatim to non-agentoo Linux hosts via user-dots.sh.
 -- Global settings in init.lua (like vim.opt.tabstop = 2) get overridden by
 -- built-in filetype-specific indent scripts that load after your config during
 -- filetype detection.

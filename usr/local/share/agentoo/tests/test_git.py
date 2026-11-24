@@ -136,6 +136,8 @@ class GitTests(unittest.TestCase):
     def test_system_repo_config_hooks_activate_only_for_system_gitdir(self):
         repo_root = Path(__file__).resolve().parents[5]
         system_cfg = repo_root / 'etc/agentoo/gitconfig'
+        user_cfg = repo_root / 'etc/agentoo/gitconfig-user'
+        user_ignore = repo_root / 'etc/agentoo/gitignore-user'
         global_template = (repo_root / 'etc/gitconfig').read_text()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -145,7 +147,11 @@ class GitTests(unittest.TestCase):
                 global_template.replace(
                     '/var/lib/agentoo/repository.git', str(repository)
                 ).replace(
-                    '/etc/agentoo/gitconfig', str(system_cfg)
+                    'path = /etc/agentoo/gitconfig\n', f'path = {system_cfg}\n'
+                ).replace(
+                    '/etc/agentoo/gitconfig-user', str(user_cfg)
+                ).replace(
+                    '/etc/agentoo/gitignore-user', str(user_ignore)
                 )
             )
             env = {**env, 'GIT_CONFIG_GLOBAL': str(cfg)}
@@ -153,6 +159,12 @@ class GitTests(unittest.TestCase):
             shared = subprocess.run([*base, 'config', '--get', 'core.sharedRepository'],
                                     check=True, env=env, text=True, capture_output=True).stdout.strip()
             self.assertEqual(shared, '0644')
+            sys_excludes = subprocess.run([*base, 'config', '--get', 'core.excludesFile'],
+                                          check=True, env=env, text=True, capture_output=True).stdout.strip()
+            self.assertEqual(sys_excludes, '/etc/agentoo/gitignore')
+            alias_st = subprocess.run([*base, 'config', '--get', 'alias.st'],
+                                      check=True, env=env, text=True, capture_output=True).stdout.strip()
+            self.assertEqual(alias_st, 'status')
             for event, expected in [
                 ('pre-commit', 'agentoo-permissions-check'),
                 ('post-checkout', 'agentoo-permissions-fix'),
